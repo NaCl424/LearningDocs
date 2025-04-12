@@ -1,0 +1,1410 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>25 | 协程池：如何实现协程池降低 CPU 消耗？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>25 | 协程池：如何实现协程池降低 CPU 消耗？</h1><p data-nodeid="17555">前面我和你介绍了连接池的实现方法，它解决的是频繁建立连接时的网络延迟问题。而这一讲介绍的协程池，主要是为了降低 CPU 消耗。</p>
+<p data-nodeid="17556">为什么协程池能降低 CPU 消耗呢？如果直接用协程而不用协程池，将会有哪些开销呢？</p>
+<p data-nodeid="17557">根据 Go 语言调度器原理，从协程的创建和销毁过程来分析，协程的开销主要有这几个方面：</p>
+<ol data-nodeid="17558">
+<li data-nodeid="17559">
+<p data-nodeid="17560">协程在创建时分配内存，造成的 CPU 和内存开销；</p>
+</li>
+<li data-nodeid="17561">
+<p data-nodeid="17562">协程在调度时，涉及协程上下文切换的 CPU 开销；</p>
+</li>
+<li data-nodeid="17563">
+<p data-nodeid="17564">协程在结束时涉及资源回收的 CPU 开销。</p>
+</li>
+</ol>
+<p data-nodeid="17565">使用协程与不使用协程具体有多大的性能差异呢？我们可以先通过性能测试来对比下。</p>
+<h3 data-nodeid="17566">协程性能测试</h3>
+<p data-nodeid="17567">为了方便性能测试，我定义了一个 testTask 结构体，并实现了一个 Do 方法，以及一个创建 testTask 的函数 newTestTask。其中，我们在 testTask 中使用了 sync.WaitGroup 来同步任务状态。为了实现内存性能测试，我还实现了一个 newMemTask 函数来创建用于内存测试的任务。具体代码如下：</p>
+<pre class="lang-go hljs" data-nodeid="17568"><code data-language="go"><span class="hljs-keyword">type</span> testTask <span class="hljs-keyword">struct</span> {
+   wg *sync.WaitGroup
+   ch <span class="hljs-keyword">chan</span> <span class="hljs-keyword">struct</span>{}
+   m  <span class="hljs-keyword">bool</span>
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(t *testTask)</span> <span class="hljs-title">Do</span><span class="hljs-params">()</span></span> {
+   <span class="hljs-keyword">if</span> t.m {
+      &lt;-t.ch
+   }
+   t.wg.Done()
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">newTestTask</span><span class="hljs-params">(wg *sync.WaitGroup)</span> *<span class="hljs-title">testTask</span></span> {
+   <span class="hljs-keyword">return</span> &amp;testTask{
+      wg: wg,
+   }
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">newMemTask</span><span class="hljs-params">(ch <span class="hljs-keyword">chan</span> <span class="hljs-keyword">struct</span>{}, wg *sync.WaitGroup)</span> *<span class="hljs-title">testTask</span></span> {
+   <span class="hljs-keyword">return</span> &amp;testTask{
+      wg: wg,
+      ch: ch,
+      m:  <span class="hljs-literal">true</span>,
+   }
+}
+</code></pre>
+<p data-nodeid="17569">为了方便编写测试代码，我实现了一个 runTest 函数，用于不同方案之间复用测试代码。代码如下：</p>
+<pre class="lang-go hljs" data-nodeid="17570"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">runTest</span><span class="hljs-params">(b *testing.B, f <span class="hljs-keyword">func</span>(i <span class="hljs-keyword">int</span>, wg *sync.WaitGroup)</span>) *<span class="hljs-title">sync</span>.<span class="hljs-title">WaitGroup</span></span> {
+   <span class="hljs-comment">//初始化</span>
+   runtime.GC()
+   b.ReportAllocs()
+   b.ResetTimer()
+   wg := &amp;sync.WaitGroup{}
+   wg.Add(b.N)
+   <span class="hljs-comment">//执行测试</span>
+   <span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt; b.N; i++ {
+      f(i, wg)
+   }
+   <span class="hljs-comment">//输出内存信息</span>
+   <span class="hljs-keyword">var</span> memStats runtime.MemStats
+   runtime.ReadMemStats(&amp;memStats)
+   b.ReportMetric(<span class="hljs-keyword">float64</span>(memStats.HeapInuse)/(<span class="hljs-number">1024</span>*<span class="hljs-number">1024</span>), <span class="hljs-string">"heap(MB)"</span>)
+   b.ReportMetric(<span class="hljs-keyword">float64</span>(memStats.StackInuse)/(<span class="hljs-number">1024</span>*<span class="hljs-number">1024</span>), <span class="hljs-string">"stack(MB)"</span>)
+   b.ReportMetric(<span class="hljs-keyword">float64</span>(memStats.StackInuse+memStats.HeapInuse)/(<span class="hljs-number">1024</span>*<span class="hljs-number">1024</span>), <span class="hljs-string">"total(MB)"</span>)
+   <span class="hljs-keyword">return</span> wg
+}
+</code></pre>
+<p data-nodeid="17571">runTest 函数大致分为三部分：</p>
+<p data-nodeid="17572">第一是初始化部分，主要是回收内存、性能测试参数以及 sync.WaitGroup；</p>
+<p data-nodeid="17573">第二是执行测试部分，主要是执行从函数参数传入的任务函数，不同方案的执行函数不同；</p>
+<p data-nodeid="17574">第三是结果输出部分，主要是输出堆内存、栈内存、总内存的使用信息。</p>
+<p data-nodeid="17575">接下来我们实现使用协程和不使用协程时的性能测试函数：BenchmarkGoroutineMem、BenchmarkGoroutineCPU 和 BenchmarkNoGoroutine 。在 BenchmarkGoroutineMem 和 BenchmarkGoroutineCPU 中我们通过协程来执行任务。代码如下：</p>
+<pre class="lang-go hljs" data-nodeid="17576"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">BenchmarkNoGoroutine</span><span class="hljs-params">(b *testing.B)</span></span> {
+   wg := runTest(b, <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(i <span class="hljs-keyword">int</span>, wg *sync.WaitGroup)</span></span> {
+      t := newTestTask(wg)
+      t.Do()
+   })
+   wg.Wait()
+   b.StopTimer()
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">BenchmarkGoroutineCPU</span><span class="hljs-params">(b *testing.B)</span></span> {
+   wg := runTest(b, <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(i <span class="hljs-keyword">int</span>, wg *sync.WaitGroup)</span></span> {
+      <span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> {
+         t := newTestTask(wg)
+         t.Do()
+      }()
+   })
+   wg.Wait()
+   b.StopTimer()
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">BenchmarkGoroutineMem</span><span class="hljs-params">(b *testing.B)</span></span> {
+   ch := <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> <span class="hljs-keyword">struct</span>{})
+   wg := runTest(b, <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(i <span class="hljs-keyword">int</span>, wg *sync.WaitGroup)</span></span> {
+      <span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> {
+         t := newMemTask(ch, wg)
+         t.Do()
+      }()
+   })
+   <span class="hljs-built_in">close</span>(ch)
+   wg.Wait()
+   b.StopTimer()
+}
+</code></pre>
+<p data-nodeid="17577">以上代码都在 infrastructure/pool/worker_test.go 中。我们执行 go test -bench 命令，输出结果如下所示：</p>
+<p data-nodeid="18388" class=""><img src="https://s0.lgstatic.com/i/image6/M00/00/82/CioPOWAaQNeAFMmoAAGyOlI-7Rk714.png" alt="Drawing 0.png" data-nodeid="18391"></p>
+
+<p data-nodeid="17579">从结果我们可以看到，无论是 CPU 还是内存，使用协程比不使用协程都高不少。</p>
+<p data-nodeid="17580">因此，在高并发场景下，为了追求极致性能，我们有必要用协程池来处理任务，而不是每个任务都创建一个协程来处理。</p>
+<p data-nodeid="17581">协程池的实现方法大致有<strong data-nodeid="17653">抢占式</strong>和<strong data-nodeid="17654">调度式</strong>这两种，接下来我给你详细介绍下。</p>
+<h3 data-nodeid="17582">抢占式协程池</h3>
+<p data-nodeid="17583">抢占式协程池的主要原理是：多个协程共享一个任务池，所有任务都放到共享任务池中，每个协程自己去任务池中抢任务并执行。</p>
+<p data-nodeid="17584">由于协程池的主要工作是执行任务，为了实现协程池，我们需要先定义好任务的类型。比如这里我定义了一个 Task 接口类，它主要包含一个用于执行任务的 Do 方法。然后我定义了一个 Worker 接口类，它包含一个用于往任务池中推送任务的 Push 方法，以及一个用于关闭协程池的 Close 方法。代码如下所示：</p>
+<pre class="lang-go hljs" data-nodeid="17585"><code data-language="go"><span class="hljs-keyword">type</span> Worker <span class="hljs-keyword">interface</span> {
+   Push(t Task) <span class="hljs-keyword">bool</span>
+   Close() error
+}
+<span class="hljs-keyword">type</span> Task <span class="hljs-keyword">interface</span> {
+   Do()
+}
+</code></pre>
+<p data-nodeid="17586">接下来，我定义了 worker 结构体，它主要包含这几个字段：协程数 number、任务池大小 size、关闭状态 closed、任务池 taskPool 以及用于状态同步的 wg。并且，我实现了一个 NewWorker 函数来创建 worker 对象。在 NewWorker 函数中，主要是初始化 worker 的任务池以及各个协程，并调用 worker 的私有方法 run 让协程处于接收任务的状态。代码如下：</p>
+<pre class="lang-go hljs" data-nodeid="17587"><code data-language="go"><span class="hljs-keyword">type</span> worker <span class="hljs-keyword">struct</span> {
+   number   <span class="hljs-keyword">int</span>
+   size     <span class="hljs-keyword">int</span>
+   closed   <span class="hljs-keyword">int32</span>
+   taskPool <span class="hljs-keyword">chan</span> Task 
+   wg       sync.WaitGroup
+}
+<span class="hljs-keyword">const</span> (
+   minBufferSize = <span class="hljs-number">10</span>
+   minNumber     = <span class="hljs-number">2</span>
+)
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">NewWorker</span><span class="hljs-params">(number <span class="hljs-keyword">int</span>, size <span class="hljs-keyword">int</span>)</span> <span class="hljs-title">Worker</span></span> {
+   <span class="hljs-keyword">if</span> number &lt; minNumber {
+      number = minNumber
+   }
+   <span class="hljs-keyword">if</span> size &lt; minBufferSize {
+      size = minNumber
+   }
+   w := &amp;worker{
+      number:   number,
+      size:     size,
+      taskPool: <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> Task, size),
+   }
+   w.wg.Add(number)
+   <span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt; number; i++ {
+      <span class="hljs-keyword">go</span> w.run()
+   }
+   <span class="hljs-keyword">return</span> w
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(w *worker)</span> <span class="hljs-title">run</span><span class="hljs-params">()</span></span> {
+   <span class="hljs-keyword">defer</span> w.wg.Done()
+   <span class="hljs-keyword">for</span> task := <span class="hljs-keyword">range</span> w.taskPool {
+      w.process(task)
+   }
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(w *worker)</span> <span class="hljs-title">process</span><span class="hljs-params">(t Task)</span></span> {
+   <span class="hljs-keyword">defer</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> {
+      <span class="hljs-keyword">if</span> err := <span class="hljs-built_in">recover</span>(); err != <span class="hljs-literal">nil</span> {
+         logrus.Error(err)
+      }
+   }()
+   t.Do()
+}
+</code></pre>
+<p data-nodeid="18728" class="">然后，我实现了它的 Push 方法和 Close 方法。在 Push 方法里先判断协程池是否已关闭，如果已关闭直接返回失败；没关闭就将任务推入任务池中，并返回成功。在 Close 方法中，先判断协程池是否已关闭，如果没有关闭就将状态变为已关闭，并关闭任务池，等待所有任务处理完；如果已关闭，则直接返回。<strong data-nodeid="18734">注意，在判断和变更状态的时候使用原子操作，避免并发访问时状态不一致的问题。</strong> 代码如下：</p>
+
+<pre class="lang-go hljs" data-nodeid="17589"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(w *worker)</span> <span class="hljs-title">Push</span><span class="hljs-params">(t Task)</span> <span class="hljs-title">bool</span></span> {
+   <span class="hljs-keyword">if</span> w.isClosed() {
+      <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>
+   }
+   w.taskPool &lt;- t
+   <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(w *worker)</span> <span class="hljs-title">Close</span><span class="hljs-params">()</span> <span class="hljs-title">error</span></span> {
+   <span class="hljs-keyword">if</span> !w.isClosed() &amp;&amp; atomic.CompareAndSwapInt32(&amp;w.closed, <span class="hljs-number">0</span>, <span class="hljs-number">1</span>) {
+      <span class="hljs-built_in">close</span>(w.taskPool)
+      w.wg.Wait()
+   }
+   <span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(w *worker)</span> <span class="hljs-title">isClosed</span><span class="hljs-params">()</span> <span class="hljs-title">bool</span></span> {
+   <span class="hljs-keyword">return</span> atomic.LoadInt32(&amp;w.closed) == <span class="hljs-number">1</span>
+}
+</code></pre>
+<p data-nodeid="17590">以上便是抢占式协程池的实现，它的代码很简洁。</p>
+<h3 data-nodeid="17591">调度式协程池</h3>
+<p data-nodeid="17592">调度式协程池的原理又是什么呢？当我们的程序中存在多种任务时，任务之间会有优先级之分。比如慢速任务和快速任务对延迟要求不同，它们的优先级也不同，就需要按它们的优先级来调度协程。</p>
+<p data-nodeid="17593">因此，我们需要在协程池中能获取任务的优先级，并按照优先级来将任务分配到对应的协程上。这里我定义了一个 PriorityTask 接口类，它比 Task 类多了一个 Priority 方法用于获取优先级。需要注意的是：<strong data-nodeid="17672">优先级越高，表示优先级的数值越小</strong>。</p>
+<p data-nodeid="17594">然后，我定义了一个 priorityWorker 结构体，用于实现调度式协程池。它主要包含这几个字段：优先级数量 priorities、每个优先级的协程数量 number、每个优先级的任务池大小 size、各优先级的 worker。像抢占式任务池那样，我也实现了一个函数 NewPriorityWorker 来创建调度式协程池。具体代码如下：</p>
+<pre class="lang-go hljs" data-nodeid="17595"><code data-language="go"><span class="hljs-keyword">type</span> PriorityTask <span class="hljs-keyword">interface</span> {
+   Priority() <span class="hljs-keyword">int</span>
+   Do()
+}
+<span class="hljs-keyword">type</span> priorityWorker <span class="hljs-keyword">struct</span> {
+   priorities <span class="hljs-keyword">int</span>
+   number     <span class="hljs-keyword">int</span>
+   size       <span class="hljs-keyword">int</span>
+   closed     <span class="hljs-keyword">int32</span>
+   workers    []Worker
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">NewPriorityWorker</span><span class="hljs-params">(number, size, priorities <span class="hljs-keyword">int</span>)</span> <span class="hljs-title">Worker</span></span> {
+   <span class="hljs-keyword">if</span> priorities &lt; minNumber {
+      priorities = minNumber
+   }
+   number = (number + priorities) / priorities
+   <span class="hljs-keyword">if</span> number &lt; minNumber {
+      number = minNumber
+   }
+   size = (size + priorities) / priorities
+   <span class="hljs-keyword">if</span> size &lt; minBufferSize {
+      size = minBufferSize
+   }
+   w := &amp;priorityWorker{
+      priorities: priorities,
+      number:     number,
+      size:       size,
+      closed:     <span class="hljs-number">0</span>,
+      workers:    <span class="hljs-built_in">make</span>([]Worker, priorities),
+   }
+   <span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt; priorities; i++ {
+      w.workers[i] = NewWorker(number, size)
+   }
+   <span class="hljs-keyword">return</span> w
+}
+</code></pre>
+<p data-nodeid="17596">与抢占式协程池不同的是，调度式协程池底层是可以基于抢占式协程池来实现的，仅仅是在上层做了优先级调度策略。因此，它用一个数组 workers 来保存创建好的底层抢占式协程池。</p>
+<p data-nodeid="17597">接下来，我实现了抢占式协程池的 Push 方法和 Close 方法。其中 Push 方法差别比较大，它需要从任务中取出优先级，并按照优先级从 workers 中找到相应优先级的 worker。而在 Close 方法中，主要是将状态标记为已关闭，并关闭所有 worker。代码如下：</p>
+<pre class="lang-go hljs" data-nodeid="17598"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(pw *priorityWorker)</span> <span class="hljs-title">Push</span><span class="hljs-params">(t Task)</span> <span class="hljs-title">bool</span></span> {
+   <span class="hljs-keyword">if</span> pw.isClosed() {
+      <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>
+   }
+   <span class="hljs-keyword">if</span> pt, ok := t.(PriorityTask); !ok {
+      <span class="hljs-keyword">return</span> pw.workers[pw.priorities<span class="hljs-number">-1</span>].Push(t)
+   } <span class="hljs-keyword">else</span> {
+      p := pt.Priority()
+      <span class="hljs-keyword">if</span> p &lt; <span class="hljs-number">0</span> {
+         p = <span class="hljs-number">0</span>
+      } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> p &gt;= pw.priorities {
+         p = pw.priorities - <span class="hljs-number">1</span>
+      }
+      <span class="hljs-keyword">return</span> pw.workers[p].Push(t)
+   }
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(pw *priorityWorker)</span> <span class="hljs-title">Close</span><span class="hljs-params">()</span> <span class="hljs-title">error</span></span> {
+   <span class="hljs-keyword">if</span> !pw.isClosed() &amp;&amp; atomic.CompareAndSwapInt32(&amp;pw.closed, <span class="hljs-number">0</span>, <span class="hljs-number">1</span>) {
+      <span class="hljs-keyword">for</span> _, w := <span class="hljs-keyword">range</span> pw.workers {
+         w.Close()
+      }
+      <span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>
+   }
+   <span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(pw *priorityWorker)</span> <span class="hljs-title">isClosed</span><span class="hljs-params">()</span> <span class="hljs-title">bool</span></span> {
+   <span class="hljs-keyword">return</span> atomic.LoadInt32(&amp;pw.closed) == <span class="hljs-number">1</span>
+}
+</code></pre>
+<p data-nodeid="17599">需要注意的是，Push 方法中需要判断传入的任务是否为优先级任务。如果不是优先级任务，则按照最低优先级处理。</p>
+<h3 data-nodeid="17600">协程池性能测试</h3>
+<p data-nodeid="17601">接下来，我们需要对抢占式协程池和调度式协程池做性能测试。</p>
+<p data-nodeid="17602">首先，我们需要对之前测试协程性能时的 testTask 做改造，以便支持测试调度式协程池。我们新增 Priority 方法，以及创建优先级任务的函数 newPriorityTask。代码如下：</p>
+<pre class="lang-go hljs" data-nodeid="17603"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(t *testTask)</span> <span class="hljs-title">Priority</span><span class="hljs-params">()</span> <span class="hljs-title">int</span></span> {
+   <span class="hljs-keyword">return</span> t.p
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">newPriorityTask</span><span class="hljs-params">(wg *sync.WaitGroup, p <span class="hljs-keyword">int</span>)</span> *<span class="hljs-title">testTask</span></span> {
+   <span class="hljs-keyword">return</span> &amp;testTask{
+      wg: wg,
+      p:  p,
+   }
+}
+</code></pre>
+<p data-nodeid="17604">接下来，我们实现抢占式协程池和调度式协程池的性能测试函数 BenchmarkWorker 和 BenchmarkPriorityWorker。代码如下：</p>
+<pre class="lang-go hljs" data-nodeid="17605"><code data-language="go"><span class="hljs-keyword">const</span> (
+   priority = <span class="hljs-number">2</span>
+   number   = <span class="hljs-number">2</span> * priority
+)
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">BenchmarkWorker</span><span class="hljs-params">(b *testing.B)</span></span> {
+   w := pool.NewWorker(number, b.N)
+   wg := runTest(b, <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(i <span class="hljs-keyword">int</span>, wg *sync.WaitGroup)</span></span> {
+      w.Push(newTestTask(wg))
+   })
+   w.Close()
+   wg.Wait()
+   b.StopTimer()
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">BenchmarkPriorityWorker</span><span class="hljs-params">(b *testing.B)</span></span> {
+   w := pool.NewPriorityWorker(number, b.N, priority)
+   wg := runTest(b, <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(i <span class="hljs-keyword">int</span>, wg *sync.WaitGroup)</span></span> {
+      w.Push(newPriorityTask(i%priority, wg))
+   })
+   w.Close()
+   wg.Wait()
+   b.StopTimer()
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">BenchmarkWorkerMem</span><span class="hljs-params">(b *testing.B)</span></span> {
+   w := pool.NewWorker(number, b.N)
+   ch := <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> <span class="hljs-keyword">struct</span>{})
+   wg := runTest(b, <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(i <span class="hljs-keyword">int</span>, wg *sync.WaitGroup)</span></span> {
+      w.Push(newMemTask(ch, wg))
+   })
+   <span class="hljs-built_in">close</span>(ch)
+   w.Close()
+   wg.Wait()
+   b.StopTimer()
+}
+</code></pre>
+<p data-nodeid="17606">抢占式协程池的测试比较简单，就是创建协程池并调用 runTest 函数，使用 testTask 进行测试。而在调度式协程池中，使用了参数 i 为任务生成优先级。最终我们的测试结果如下：</p>
+<p data-nodeid="19073" class=""><img src="https://s0.lgstatic.com/i/image6/M00/00/82/CioPOWAaQOyAKSz7AAJbOpHEfaI322.png" alt="Drawing 1.png" data-nodeid="19076"></p>
+
+<p data-nodeid="19415" class="">我电脑的 CPU 是 4 个物理核 8 线程，在测试代码中，我将协程池的协程数设置为 4。<strong data-nodeid="19421">从结果中可以看到，在协程池协程数设置为与 CPU 核数接近时，协程池的 CPU 性能要比纯协程的高不少。</strong> 其中，抢占式协程池的 CPU 性能比纯协程高 20%；调度式协程池由于使用了多个 worker，避免了共享任务池的抢锁问题，性能比纯协程高 35%。</p>
+
+<p data-nodeid="17609">在内存测试中，协程池无论是在 CPU 和内存上，都比纯协程好太多。具体来说， CPU 性能是纯协程的 4 倍，内存是纯协程的 1/12。</p>
+<p data-nodeid="19762" class=""><img src="https://s0.lgstatic.com/i/image6/M00/00/82/CioPOWAaQPWAdo92AAUJr_3tOHo954.png" alt="Drawing 2.png" data-nodeid="19765"></p>
+
+<h3 data-nodeid="17611">小结</h3>
+<p data-nodeid="17612">这一讲我介绍了协程池的实现原理，以及它们与纯协程的性能对比分析。</p>
+<p data-nodeid="20106" class="te-preview-highlight">需要注意的是，协程池的协程数要根据业务特点合理设置，以便让它的性能达到最优。不合理的设置将会降低协程池的性能。<strong data-nodeid="20112">除了协程数，缓冲区大小也很关键，太小则可能容易阻塞推任务的协程，太大则可能占用较多的内存。</strong> 当你的服务器内存足够的时候，可以考虑使用大的缓冲区来换取 CPU 性能，也就是“空间换时间”。</p>
+
+<p data-nodeid="17614">思考题：</p>
+<p data-nodeid="17615">我在实现 Push 方法的时候，用的是阻塞模式，你也可以想想如何用非阻塞的方式实现。期待你在留言区给出自己的答案。</p>
+<p data-nodeid="17616">好了，这一讲就到这里了，下一讲我将给你介绍“如何实现用户认证和反黄牛过滤无效请求”。到时见！</p>
+<p data-nodeid="17617">源码地址：<a href="https://github.com/lagoueduCol/MiaoSha-Yiletian/tree/main/infrastructure/pool" data-nodeid="17707">https://github.com/lagoueduCol/MiaoSha-Yiletian/tree/main/infrastructure/pool</a></p>
+<hr data-nodeid="17618">
+
+<p data-nodeid="17500"><a href="https://shenceyun.lagou.com/t/Mka" data-nodeid="17507"><img src="https://s0.lgstatic.com/i/image/M00/6D/3E/CgqCHl-s60-AC0B_AAhXSgFweBY762.png" alt="1.png" data-nodeid="17506"></a></p>
+<p data-nodeid="17501"><strong data-nodeid="17511">《Java 工程师高薪训练营》</strong></p>
+<p data-nodeid="17502" class="">实战训练+面试模拟+大厂内推，想要提升技术能力，进大厂拿高薪，<a href="https://shenceyun.lagou.com/t/Mka" data-nodeid="17515">点击链接，提升自己</a>！</p></div>
+
+</body></html>

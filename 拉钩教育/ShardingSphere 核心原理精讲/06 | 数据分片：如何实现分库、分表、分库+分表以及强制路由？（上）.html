@@ -1,0 +1,936 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>06 | 数据分片：如何实现分库、分表、分库+分表以及强制路由？（上）</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>06 | 数据分片：如何实现分库、分表、分库+分表以及强制路由？（上）</h1><p data-nodeid="1" class="">通过前面几个课时的介绍，相信你对 ShardingSphere 已经有了初步了解。从今天开始，我将带领你通过案例分析逐步掌握 ShardingSphere 的各项核心功能，首当其冲的就是分库分表机制。</p>
+<h3 data-nodeid="2">单库单表系统</h3>
+<p data-nodeid="3">我们先从单库单表系统说起。在整个课程中，如果没有特殊强调，我们将默认使用 Spring Boot 集成和 ShardingSphere 框架，同时基于 Mybatis 实现对数据库的访问。</p>
+<h4 data-nodeid="4">导入开发框架</h4>
+<p data-nodeid="5">系统开发的第一步是导入所需的开发框架。在下面这段代码中，我们新建了一个 Spring Boot 代码工程，在 pom 文件中需要添加对 sharding-jdbc-spring-boot-starter 和 mybatis-spring-boot-starter 这两个 starter 的引用：</p>
+<pre class="lang-xml" data-nodeid="6"><code data-language="xml"><span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+&nbsp;&nbsp;&nbsp;<span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.apache.shardingsphere<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+&nbsp;&nbsp;&nbsp;<span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>sharding-jdbc-spring-boot-starter<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+&nbsp;
+<span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.mybatis.spring.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>mybatis-spring-boot-starter<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+</code></pre>
+<p data-nodeid="7">开发环境初始化要做的工作也就是这些，下面我们来介绍案例的业务场景。</p>
+<h4 data-nodeid="8">梳理业务场景</h4>
+<p data-nodeid="9">我们考虑一个在医疗健康领域中比较常见的业务场景。在这类场景中，每个用户（User）都有一份健康记录（HealthRecord），存储着代表用户当前健康状况的健康等级（HealthLevel），以及一系列健康任务（HealthTask）。通常，医生通过用户当前的健康记录创建不同的健康任务，然后用户可以通过完成医生所指定的任务来获取一定的健康积分，而这个积分决定了用户的健康等级，并最终影响到整个健康记录。健康任务做得越多，健康等级就越高，用户的健康记录也就越完善，反过来健康任务也就可以越做越少，从而形成一个正向的业务闭环。这里，<strong data-nodeid="85">我们无意对整个业务闭环做过多的阐述，而是关注这一业务场景下几个核心业务对象的存储和访问方式。</strong></p>
+<p data-nodeid="10">在这个场景下，我们关注 User、HealthRecord、HealthLevel 和 HealthTask 这四个业务对象。在下面这张图中，对每个业务对象给出最基础的字段定义，以及这四个对象之间的关联关系：</p>
+<p data-nodeid="11"><img src="https://s0.lgstatic.com/i/image/M00/2B/30/Ciqc1F79xmuAcgDXAABZ98dOvow631.png" alt="Drawing 0.png" data-nodeid="89"></p>
+<h4 data-nodeid="12">完成基础功能</h4>
+<p data-nodeid="13">既然采用 Mybatis 作为 ORM 框架，那么就需要遵循 Mybatis 的开发流程。首先，我们需要完成各个业务实体的定义：</p>
+<p data-nodeid="14"><img src="https://s0.lgstatic.com/i/image/M00/2B/30/Ciqc1F79xn2AZ5AlAAANShGk9Ss532.png" alt="Drawing 2.png" data-nodeid="94"><br>
+业务实体的类定义</p>
+<p data-nodeid="15">基于这些业务实体，我们需要完成对应的 Mapper 文件编写，我把这些 Mapper 文件放在代码工程的 resources 目录下：</p>
+<p data-nodeid="16"><img src="https://s0.lgstatic.com/i/image/M00/2B/3B/CgqCHl79xouAFJaOAAAN0iT9QRU187.png" alt="Drawing 3.png" data-nodeid="100"><br>
+Mybatis Mapper 文件定义</p>
+<p data-nodeid="17">下一步是数据源信息的配置，我们把这些信息放在一个单独的 application-traditional.properties 配置文件中。</p>
+<pre class="lang-java" data-nodeid="18"><code data-language="java">spring.datasource.driverClassName = com.mysql.jdbc.Driver
+spring.datasource.url = jdbc:mysql:<span class="hljs-comment">//localhost:3306/ds</span>
+spring.datasource.username = root
+spring.datasource.password = root
+</code></pre>
+<p data-nodeid="19">按照 Spring Boot 的配置约定，我们在 application.properties 配置文件中把上述配置文件设置为启动 profile。通过使用不同的 profile，我们可以完成不同配置体系之间的切换。</p>
+<pre class="lang-java" data-nodeid="20"><code data-language="java">spring.profiles.active=traditional
+</code></pre>
+<p data-nodeid="21">接下来要做的事情就是创建 Repository 层组件：</p>
+<p data-nodeid="22"><img src="https://s0.lgstatic.com/i/image/M00/2B/30/Ciqc1F79xqWAWcuSAAAQHxH2EJw496.png" alt="Drawing 4.png" data-nodeid="108"><br>
+Repository 层接口定义</p>
+<p data-nodeid="23">最后，我们设计并实现了相关的三个服务类，分别是 UserService、HealthLevelService 和 HealthRecordService。</p>
+<p data-nodeid="24"><img src="https://s0.lgstatic.com/i/image/M00/2B/3B/CgqCHl79xruAfTx6AAAXfz-iHSU716.png" alt="Drawing 5.png" data-nodeid="114"><br>
+Service 层接口和实现类定义</p>
+<p data-nodeid="25">通过 UserService，我们会插入一批用户数据用于完成用户信息的初始化。然后，我们有一个 HealthLevelService，专门用来初始化健康等级信息。<strong data-nodeid="122">请注意，与其他业务对象不同，健康等级信息是系统中的一种典型字典信息</strong>，我们假定系统中存在 5 种健康等级。</p>
+<p data-nodeid="26">第三个，也是最重要的服务就是 HealthRecordService，我们用它来完成 HealthRecord 以及 HealthTask 数据的存储和访问。这里以 HealthRecordService 服务为例，下面这段代码给出了它的实现过程：</p>
+<pre class="lang-java" data-nodeid="27"><code data-language="java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">HealthRecordServiceImpl</span> <span class="hljs-keyword">implements</span> <span class="hljs-title">HealthRecordService</span> </span>{ 
+&nbsp;
+&nbsp;&nbsp;&nbsp; <span class="hljs-meta">@Autowired</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">private</span> HealthRecordRepository healthRecordRepository;
+&nbsp;
+&nbsp;&nbsp;&nbsp; <span class="hljs-meta">@Autowired</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">private</span> HealthTaskRepository healthTaskRepository;
+&nbsp;
+&nbsp;&nbsp;&nbsp; <span class="hljs-meta">@Override</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">processHealthRecords</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> SQLException</span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; insertHealthRecords();
+&nbsp;&nbsp;&nbsp; }
+
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">private</span> List&lt;Integer&gt; <span class="hljs-title">insertHealthRecords</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> SQLException </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; List&lt;Integer&gt; result = <span class="hljs-keyword">new</span> ArrayList&lt;&gt;(<span class="hljs-number">10</span>);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">for</span> (<span class="hljs-keyword">int</span> i = <span class="hljs-number">1</span>; i &lt;= <span class="hljs-number">10</span>; i++) {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  HealthRecord healthRecord = insertHealthRecord(i);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; insertHealthTask(i, healthRecord);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; result.add(healthRecord.getRecordId());
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; }
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> result;
+&nbsp;&nbsp;&nbsp; }
+
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">private</span> HealthRecord <span class="hljs-title">insertHealthRecord</span><span class="hljs-params">(<span class="hljs-keyword">final</span> <span class="hljs-keyword">int</span> i)</span> <span class="hljs-keyword">throws</span> SQLException </span>{
+&nbsp;&nbsp;&nbsp;  HealthRecord healthRecord = <span class="hljs-keyword">new</span> HealthRecord();
+&nbsp;&nbsp;&nbsp;  healthRecord.setUserId(i);
+&nbsp;&nbsp;&nbsp;  healthRecord.setLevelId(i % <span class="hljs-number">5</span>);
+&nbsp;&nbsp;&nbsp;  healthRecord.setRemark(<span class="hljs-string">"Remark"</span> + i);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; healthRecordRepository.addEntity(healthRecord);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> healthRecord;
+&nbsp;&nbsp;&nbsp; }
+
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title">insertHealthTask</span><span class="hljs-params">(<span class="hljs-keyword">final</span> <span class="hljs-keyword">int</span> i, <span class="hljs-keyword">final</span> HealthRecord healthRecord)</span> <span class="hljs-keyword">throws</span> SQLException </span>{
+&nbsp;&nbsp;&nbsp;  HealthTask healthTask = <span class="hljs-keyword">new</span> HealthTask();
+&nbsp;&nbsp;&nbsp;  healthTask.setRecordId(healthRecord.getRecordId());
+&nbsp;&nbsp;&nbsp;  healthTask.setUserId(i);
+&nbsp;&nbsp;&nbsp;  healthTask.setTaskName(<span class="hljs-string">"TaskName"</span> + i);
+&nbsp;&nbsp;&nbsp;  healthTaskRepository.addEntity(healthTask);
+&nbsp;&nbsp;&nbsp; }
+}
+</code></pre>
+<p data-nodeid="28">现在，我们已经从零开始实现了一个完整业务场景所需要的 DAO 层和 Service 层组件。这些组件在业务逻辑上都非常简单，而在技术上也是完全采用了 Mybatis 的经典开发过程。最后，我们可以通过一组简单的单元测试来验证这些组件是否能够正常运行。下面这段代码以 UserServiceTest 类为例给出它的实现，涉及 @RunWith、@SpringBootTest 等常见单元测试注解的使用：</p>
+<pre class="lang-java" data-nodeid="29"><code data-language="java"><span class="hljs-meta">@RunWith(SpringRunner.class)</span>
+<span class="hljs-meta">@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">UserServiceTest</span> </span>{
+&nbsp;
+&nbsp;&nbsp;&nbsp; <span class="hljs-meta">@Autowired</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">private</span> UserService userService;
+
+&nbsp;&nbsp;&nbsp; <span class="hljs-meta">@Test</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">testProcessUsers</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> Exception </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; userService.processUsers();
+&nbsp;&nbsp;&nbsp; }
+}
+</code></pre>
+<p data-nodeid="30">运行这个单元测试，我们可以看到测试通过，并且在数据库的 User 表中也看到了插入的数据。至此，一个单库单表的系统已经构建完成。接下来，我们将对这个系统做分库分表改造。</p>
+<p data-nodeid="31">在传统单库单表的数据架构上进行分库分表的改造，开发人员只需要做一件事情，那就是基于上一课时介绍的 ShardingSphere 配置体系完成针对具体场景的配置工作即可，所有已经存在的业务代码都不需要做任何的变动，这就是 ShardingSphere 的强大之处。让我们一起开始吧。</p>
+<h3 data-nodeid="32">系统改造：如何实现分库？</h3>
+<p data-nodeid="33">作为系统改造的第一步，我们首先来看看如何基于配置体系实现数据的分库访问。</p>
+<h4 data-nodeid="34">初始化数据源</h4>
+<p data-nodeid="35">针对分库场景，我们设计了两个数据库，分别叫 ds0 和 ds1。显然，针对两个数据源，我们就需要初始化两个 DataSource 对象，这两个 DataSource 对象将组成一个 Map 并传递给 ShardingDataSourceFactory 工厂类：</p>
+<pre class="lang-java" data-nodeid="36"><code data-language="java">spring.shardingsphere.datasource.names=ds0,ds1
+&nbsp;
+spring.shardingsphere.datasource.ds0.type=com.alibaba.druid.pool.DruidDataSource
+spring.shardingsphere.datasource.ds0.driver-<span class="hljs-class"><span class="hljs-keyword">class</span>-<span class="hljs-title">name</span></span>=com.mysql.jdbc.Driver
+spring.shardingsphere.datasource.ds0.url=jdbc:mysql:<span class="hljs-comment">//localhost:3306/ds0</span>
+spring.shardingsphere.datasource.ds0.username=root
+spring.shardingsphere.datasource.ds0.password=root
+&nbsp;
+spring.shardingsphere.datasource.ds1.type=com.alibaba.druid.pool.DruidDataSource
+spring.shardingsphere.datasource.ds1.driver-<span class="hljs-class"><span class="hljs-keyword">class</span>-<span class="hljs-title">name</span></span>=com.mysql.jdbc.Driver
+spring.shardingsphere.datasource.ds1.url=jdbc:mysql:<span class="hljs-comment">//localhost:3306/ds1</span>
+spring.shardingsphere.datasource.ds1.username=root
+spring.shardingsphere.datasource.ds1.password=root
+</code></pre>
+<h4 data-nodeid="37">设置分片策略</h4>
+<p data-nodeid="38">明确了数据源之后，我们需要设置针对分库的分片策略：</p>
+<pre class="lang-java" data-nodeid="39"><code data-language="java">spring.shardingsphere.sharding.<span class="hljs-keyword">default</span>-database-strategy.inline.sharding-column=user_id
+spring.shardingsphere.sharding.<span class="hljs-keyword">default</span>-database-strategy.inline.algorithm-expression=ds$-&gt;{user_id % <span class="hljs-number">2</span>}
+</code></pre>
+<p data-nodeid="40">我们知道，在 ShardingSphere 中存在一组 ShardingStrategyConfiguration，这里使用的是基于行表达式的 InlineShardingStrategyConfiguration。<br>
+InlineShardingStrategyConfiguration 包含两个需要设置的参数，一个是指定分片列名称的 shardingColumn，另一个是指定分片算法行表达式的 algorithmExpression。在我们的配置方案中，将基于 user_id 列对 2 的取模值来确定数据应该存储在哪一个数据库中。同时，注意到这里配置的是“default-database-strategy”项。结合上一课时的内容，设置这个配置项相当于是在 ShardingRuleConfiguration 中指定了默认的分库 ShardingStrategy。</p>
+<h4 data-nodeid="41">设置绑定表和广播表</h4>
+<p data-nodeid="42">接下来我们需要设置绑定表。绑定表（BindingTable）是 ShardingSphere 中提出的一个新概念，我来给你解释一下。</p>
+<p data-nodeid="43">所谓绑定表，是指与分片规则一致的一组主表和子表。例如，在我们的业务场景中，health_record 表和 health_task 表中都存在一个 record_id 字段。如果我们在应用过程中按照这个 record_id 字段进行分片，那么这两张表就可以构成互为绑定表关系。</p>
+<p data-nodeid="44">引入绑定表概念的根本原因在于，互为绑定表关系的多表关联查询不会出现笛卡尔积，因此关联查询效率将大大提升。举例说明，如果所执行的为下面这条 SQL：</p>
+<pre class="lang-java" data-nodeid="45"><code data-language="java">SELECT record.remark_name FROM health_record record JOIN health_task task ON record.record_id=task.record_id WHERE record.<span class="hljs-function">record_id <span class="hljs-title">in</span> <span class="hljs-params">(<span class="hljs-number">1</span>, <span class="hljs-number">2</span>)</span></span>;
+</code></pre>
+<p data-nodeid="46">如果我们不显式配置绑定表关系，假设分片键 record_id 将值 1 路由至第 1 片，将数值 2 路由至第 0 片，那么路由后的 SQL 应该为 4 条，它们呈现为笛卡尔积：</p>
+<pre class="lang-java" data-nodeid="47"><code data-language="java">SELECT record.remark_name FROM health_record0 record JOIN health_task0 task ON record.record_id=task.record_id WHERE record.<span class="hljs-function">record_id <span class="hljs-title">in</span> <span class="hljs-params">(<span class="hljs-number">1</span>, <span class="hljs-number">2</span>)</span></span>;
+&nbsp;
+SELECT record.remark_name FROM health_record0 record JOIN health_task1 task ON record.record_id=task.record_id WHERE record.<span class="hljs-function">record_id <span class="hljs-title">in</span> <span class="hljs-params">(<span class="hljs-number">1</span>, <span class="hljs-number">2</span>)</span></span>;
+&nbsp;
+SELECT record.remark_name FROM health_record1 record JOIN health_task0 task ON record.record_id=task.record_id WHERE record.<span class="hljs-function">record_id <span class="hljs-title">in</span> <span class="hljs-params">(<span class="hljs-number">1</span>, <span class="hljs-number">2</span>)</span></span>;
+&nbsp;
+SELECT record.remark_name FROM health_record1 record JOIN health_task1 task ON record.record_id=task.record_id WHERE record.<span class="hljs-function">record_id <span class="hljs-title">in</span> <span class="hljs-params">(<span class="hljs-number">1</span>, <span class="hljs-number">2</span>)</span></span>;
+</code></pre>
+<p data-nodeid="48">然后，在配置绑定表关系后，路由的 SQL 就会减少到 2 条：</p>
+<pre class="lang-java" data-nodeid="49"><code data-language="java">SELECT record.remark_name FROM health_record0 record JOIN health_task0 task ON record.record_id=task.record_id WHERE record.<span class="hljs-function">record_id <span class="hljs-title">in</span> <span class="hljs-params">(<span class="hljs-number">1</span>, <span class="hljs-number">2</span>)</span></span>;
+&nbsp;
+SELECT record.remark_name FROM health_record1 record JOIN health_task1 task ON record.record_id=task.record_id WHERE record.<span class="hljs-function">record_id <span class="hljs-title">in</span> <span class="hljs-params">(<span class="hljs-number">1</span>, <span class="hljs-number">2</span>)</span></span>;
+</code></pre>
+<p data-nodeid="50"><strong data-nodeid="160">请注意，如果想要达到这种效果，互为绑定表的各个表的分片键要完全相同</strong>。在上面的这些 SQL 语句中，我们不难看出，这个需要完全相同的分片键就是 record_id。</p>
+<p data-nodeid="51">让我们回到案例中的场景，显然，health_record 和 health_task 应该互为绑定表关系。所以，我们可以在配置文件中添加对这种关系的配置：</p>
+<pre class="lang-java" data-nodeid="52"><code data-language="java">spring.shardingsphere.sharding.binding-tables=health_record, health_task
+</code></pre>
+<p data-nodeid="53">介绍完绑定表，再来看广播表的概念。<strong data-nodeid="171">所谓广播表（BroadCastTable），是指所有分片数据源中都存在的表，也就是说，这种表的表结构和表中的数据在每个数据库中都是完全一样的</strong>。广播表的适用场景比较明确，通常针对数据量不大且需要与海量数据表进行关联查询的应用场景，典型的例子就是每个分片数据库中都应该存在的字典表。</p>
+<p data-nodeid="54">同样回到我们的场景，对于 health_level 表而言，由于它保存着有限的健康等级信息，可以认为它就是这样的一种字典表。所以，我们也在配置文件中添加了对广播表的定义，在下面这段代码中你可以看到：</p>
+<pre class="lang-java" data-nodeid="55"><code data-language="java">spring.shardingsphere.sharding.broadcast-tables=health_level
+</code></pre>
+<h4 data-nodeid="56">设置表分片规则</h4>
+<p data-nodeid="57">通过前面的这些配置项，我们根据需求完成了 ShardingRuleConfiguration 中与分库操作相关的配置信息设置。我们知道 ShardingRuleConfiguration 中的 TableRuleConfiguration 是必填项。所以，我们来看一下这个场景下应该如何对表分片进行设置。</p>
+<p data-nodeid="58">TableRuleConfiguration 是表分片规则配置，包含了用于设置真实数据节点的 actualDataNodes；用于设置分库策略的 databaseShardingStrategyConfig；以及用于设置分布式环境下的自增列生成器的 keyGeneratorConfig。前面已经在 ShardingRuleConfiguration 中设置了默认的 databaseShardingStrategyConfig，现在我们需要完成剩下的 actualDataNodes 和 keyGeneratorConfig 的设置。</p>
+<p data-nodeid="59">对于 health_record 表而言，由于存在两个数据源，所以，它所属于的 actual-data-nodes 可以用行表达式 ds$-&gt;{0..1}.health_record 来进行表示，代表在 ds0 和 ds1 中都存在表 health_record。而对于 keyGeneratorConfig 而言，通常建议你使用雪花算法。明确了这些信息之后，health_record 表对应的 TableRuleConfiguration 配置也就顺理成章了：</p>
+<pre class="lang-java" data-nodeid="929"><code data-language="java">spring.shardingsphere.sharding.tables.health_record.actual-data-nodes=ds$-&gt;{<span class="hljs-number">0.</span>.<span class="hljs-number">1</span>}.health_record
+spring.shardingsphere.sharding.tables.health_record.key-generator.column=record_id
+spring.shardingsphere.sharding.tables.health_record.key-generator.type=SNOWFLAKE
+spring.shardingsphere.sharding.tables.health_record.key-generator.props.worker.id=<span class="hljs-number">33</span>
+</code></pre>
+
+<p data-nodeid="61">同样的，health_task 表的配置也完全类似，这里需要根据实际情况调整 key-generator.column 的具体数据列：</p>
+<pre class="lang-java te-preview-highlight" data-nodeid="1394"><code data-language="java">spring.shardingsphere.sharding.tables.health_task.actual-data-nodes=ds$-&gt;{<span class="hljs-number">0.</span>.<span class="hljs-number">1</span>}.health_task
+spring.shardingsphere.sharding.tables.health_task.key-generator.column=task_id
+spring.shardingsphere.sharding.tables.health_task.key-generator.type=SNOWFLAKE
+spring.shardingsphere.sharding.tables.health_task.key-generator.props.worker.id=<span class="hljs-number">33</span>
+</code></pre>
+
+<p data-nodeid="63">让我们重新执行 HealthRecordTest 单元测试，并检查数据库中的数据。下面这张图是 ds0 中的 health_record 和 health_task 表：</p>
+<p data-nodeid="64"><img src="https://s0.lgstatic.com/i/image/M00/2B/30/Ciqc1F79x0uAMmoLAAAni5nGp94973.png" alt="Drawing 6.png" data-nodeid="197"><br>
+ds0 中 health_record 表数据</p>
+<p data-nodeid="65"><img src="https://s0.lgstatic.com/i/image/M00/2B/30/Ciqc1F79xzCAJRa1AAAsmwNVR2c289.png" alt="Drawing 7.png" data-nodeid="204"><br>
+ds0 中 health_task 表数据</p>
+<p data-nodeid="66">而这张图是 ds1 中的 health_record 和 health_task 表：</p>
+<p data-nodeid="67"><img src="https://s0.lgstatic.com/i/image/M00/2B/30/Ciqc1F79x1aAcKcKAAAnnGtKSYI997.png" alt="Drawing 8.png" data-nodeid="216"><br>
+ds1 中 health_record 表数据</p>
+<p data-nodeid="68"><img src="https://s0.lgstatic.com/i/image/M00/2B/30/Ciqc1F79x12ACkcOAAAugYxPEXc765.png" alt="Drawing 9.png" data-nodeid="223"><br>
+ds1 中 health_task 表数据</p>
+<p data-nodeid="69">显然，这两张表的数据已经正确进行了分库。</p>
+<h3 data-nodeid="70">小结</h3>
+<p data-nodeid="71">从本课时开始，我们正式进入到 ShardingSphere 核心功能的讲解。为了介绍这些功能特性，我们将从单库单表架构讲起，基于一个典型的业务场景梳理数据操作的需求，并给出整个代码工程的框架，以及基于测试用例验证数据操作结果的实现过程。今天的内容关注于如何实现分库操作，我们通过引入 ShardingSphere 中强大的配置体系实现了分库效果。</p>
+<p data-nodeid="72">这里给你留一道思考题：如何理解绑定表和广播表的含义和作用？</p>
+<p data-nodeid="73">分库是 ShardingSphere 中分片引擎的核心功能之一，也可以说是最简单的功能之一。在下一课时中，我们将继续介绍分表、分库+分表以及强制路由等分片机制。</p></div>
+
+</body></html>

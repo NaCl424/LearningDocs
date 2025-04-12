@@ -1,0 +1,1146 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>16 | 漏斗模型：如何将并发流量过滤和串行化？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>16 | 漏斗模型：如何将并发流量过滤和串行化？</h1><p data-nodeid="497" class="">在前几讲中，我提到了秒杀单机并发能力需要达到 10 万 QPS 以上。你有没有想过：这 10 万请求是否都需要读写 Redis ？秒杀系统又是如何判断哪些请求应该读写 Redis？</p>
+<p data-nodeid="498">我之所以提这个问题，是因为真实业务场景下，不可能让所有请求都读写 Redis。一来，整个集群每秒上千万请求都直接读写 Redis，这得需要多少 Redis 实例，得花多少钱呢；二来，每秒千万个请求中并不是每个请求都是合法的，如果这些请求都读写 Redis，很难保证 Redis 中的数据不乱套。</p>
+<p data-nodeid="499">事实上，千万流量的秒杀系统中，至少有 80% 的流量是不需要读写 Redis 的。非法请求会在进入系统时被过滤掉，正常请求一部分使用多级缓存读写数据，剩下的才需要读写 Redis。</p>
+<p data-nodeid="500">那么，我们该如何处理流量，让它们安稳地请求到 Redis 呢？这就需要用到漏斗模型了，它主要包括两部分内容：<strong data-nodeid="554">流量过滤和串行化</strong>。接下来，我给你分别介绍下。</p>
+<h3 data-nodeid="501">如何设计流量拦截器？</h3>
+<p data-nodeid="502">不知道你有没有见过做蛋糕？在做蛋糕的时候，糕点师会用筛子把粗颗粒的面粉过滤掉，只留下细腻的面粉，这样做出来的蛋糕口感细腻。</p>
+<p data-nodeid="503">秒杀系统也是如此，由于秒杀活动的流量会远超平常，一般在流量入口，系统就要把那些非法的、无资格的、优先级低的流量过滤掉，减轻系统的并发压力。为了实现这个过滤功能，就需要我们设计<strong data-nodeid="562">流量拦截器</strong>。</p>
+<p data-nodeid="504">什么是流量拦截器呢？通常，流量拦截器有多层，就像一个漏斗或者倒金字塔。在容量上，你可以联想到缓存金字塔，流量拦截器跟它正好相反。比如，位于上层的流量拦截器可能会负责过滤掉 40% 的流量，位于中间层的可能过滤掉 30% 的流量，而位于底层的则可能过滤掉 20% 的流量。</p>
+<p data-nodeid="505">那么，流量拦截器的最上层是什么样子的呢？最上层流量入口是网关和 WAF（Web Application Firewall，Web 应用防火墙），它们会拦截大部分非法请求，比如一些恶意攻击的请求，一些用秒杀器疯狂刷接口的请求。</p>
+<p data-nodeid="506">在设计上，这一层通常采用封禁攻击者来源 IP、拒绝带有非法参数的请求、按来源 IP 限流、按用户 ID 限流等方法，在顶层入口处就拦截掉这些请求。这样获得的收益也是最大的，能为下游业务系统节省大量资源。</p>
+<p data-nodeid="507">经过上层拦截器处理后，还是会有一些漏网之鱼，比如“黄牛”。于是就有了中间层拦截器，它主要是为了识别出不具备抢购资格的用户，并拦截他们的流量。</p>
+<p data-nodeid="508">以黄牛为例，早期的黄牛主要通过秒杀器来刷走商品，后来秒杀器被封禁后，他们改为采用多个账号同时参与秒杀活动。“黄牛”的这种行为无疑严重违反了秒杀活动的公平性，也损害了正常用户的利益，为此，我们就需要把这类流量拦截掉。</p>
+<p data-nodeid="509">具体如何反黄牛呢？反黄牛的前提是需要先识别出谁是黄牛，这就需要一份黄牛名单了。那么，这份黄牛名单是如何产生的呢？通常它会由数据分析系统根据大量订单信息和用户信息生成，然后提供给秒杀接口服务使用。</p>
+<p data-nodeid="510">像多个账号每次都在一个 IP 下参与秒杀，每次抢到的商品都不是给自己账号用，或者通过自制秒杀工具抢到商品后快速支付，等等。虽然对于后端服务来说有些行为看着像正常用户，但是，在大数据分析下，还是能抓到一些蛛丝马迹。</p>
+<p data-nodeid="511">一般数据分析系统会定期生成黄牛名单，比如每天凌晨 3 点钟。然后秒杀接口服务会将黄牛名单更新到内存中。在秒杀活动进行时，秒杀接口服务会从请求中拿到账号信息后进行匹配。如果匹配到了，说明该账号是黄牛账号，需要拦截掉。</p>
+<p data-nodeid="512">除了黄牛外，还有两部分不具备资格的流量需要拦截掉：</p>
+<ul data-nodeid="513">
+<li data-nodeid="514">
+<p data-nodeid="515">由未登录或者登录态过期的用户产生的流量，当他们点击秒杀购买时，我们可以让这些用户跳转到登录页进行登录；</p>
+</li>
+<li data-nodeid="516">
+<p data-nodeid="517">如果用户购买数量已经达到该场次商品数量限制，此时需要提醒用户已经参与过该场次，请勿重复参与。</p>
+</li>
+</ul>
+<p data-nodeid="518">那位于下层的拦截器负责做什么呢？我们知道，秒杀活动中库存数量远低于参与秒杀的用户数，于是如何快速判断哪些用户抢不到库存，就是个非常关键的问题。而这，正是下层拦截器的核心工作。虽然前面两层拦截器已经拦截了大量请求，但下层拦截器面临的流量还是很大，单节点 QPS 至少上万。因此，下游拦截器判断库存的时候，对性能要求非常高。</p>
+<p data-nodeid="519">需要怎么做呢？通常是由秒杀服务将库存数据在本地内存中缓存一份，用于初步判断库存资格。在 Go 语言中，我们可以用 map 来缓存库存数据，利用锁来控制并发扣减库存。由于完全是在本地内存中操作，性能要比访问 Redis 好很多。</p>
+<p data-nodeid="520">要注意的是，本地内存缓存中的库存数据是比较粗略的，时间长了也容易出现误差，不能作为最终的扣减依据。所以通常需要有个定时任务，从 Redis 中定时拉取最新的库存数据，并更新到本地内存缓存中。</p>
+<p data-nodeid="521">这个更新速度不能太快，也不能太慢。太快的话，可能导致内存中已扣减的库存还原成 Redis 中未扣减的库存；如果太慢，因超时关单归还的库存会无法及时同步到内存缓存中。我们可以根据流量大小设定一个合理的值，比如 100 毫秒同步一次。</p>
+<p data-nodeid="522">另外，内存缓存中的库存大小也需要注意按比例缩小。如果总共有 1000 个库存、50 个秒杀节点，平均分摊的话每个节点分到 20 个库存。实际上，每个节点需要略微高于平均值，以确保足够多的请求漏下去，将 Redis 中的库存扣减完，达到最大的活动效果。</p>
+<p data-nodeid="523">由于内存中的库存数据不是十分准确，拿到库存资格的用户可能比实际库存要大，最终还是要通过从 Redis 中扣减库存来判断用户是否抢购成功。那么，如何保障 Redis 的并发压力不会超过它的承载能力呢？那就是下面要介绍的串行化。</p>
+<h3 data-nodeid="524">如何将流量串行化？</h3>
+<p data-nodeid="525">所谓串行化，是指通过排队的方式将无序的并发流量整理成有序的串行流量。</p>
+<p data-nodeid="526">在 Redis 集群模式出现以前，大多数 Redis 都是采用一主多从的模式，写操作由主节点执行。由于一主多从模式下主节点只有一个节点，因此 Redis 的写操作并发能力远低于读操作并发能力。</p>
+<p data-nodeid="527">在千万级并发流量下，虽然前面我们通过流量拦截器将大部分流量过滤掉了，但剩下的流量也不小。比如虽然过滤了 990 万，也就是 99% 的流量，但还剩下 10 万流量。如果这些流量都去扣减库存，会对 Redis 主节点产生巨大压力。怎么办呢？这就需要流量串行化。具体要怎么做呢？</p>
+<p data-nodeid="528">总的来说，秒杀中的串行化主要是通过<strong data-nodeid="589">队列和分布式事务</strong>来实现的，具体分三步。</p>
+<p data-nodeid="529">第一步，秒杀服务在扣减内存缓存中的库存成功后，将流量转入到它的内存队列中，进行初步排序，为写 MQ 做准备。</p>
+<p data-nodeid="530">这里注意的是，要控制好内存队列缓冲区大小，太小可能会导致并发写入的时候大量请求被阻塞，可以将大小设置为消费端速度的两倍。比如消费端速度是 1000 QPS，则缓冲区可以设定为可以缓存 2000 个请求。</p>
+<p data-nodeid="531">第二步，使用一个线程或者协程以固定速度从内存队列中消费流量，将流量写入到像 RabbitMQ 这种 MQ 中。</p>
+<p data-nodeid="532">这一步主要是为了减轻 MQ 的并发压力，需要根据 MQ 的承载能力计算好速度。比如 MQ 的并发承载能力为 5 万 QPS，秒杀有 50 个节点，则每个节点的速度应当低于 1000 QPS。保留 20% 余量的话，每个节点的速度可以设定为 800 QPS。</p>
+<p data-nodeid="533">第三步，使用另一个线程或协程，以低于第二步中的固定速度从 MQ 中消费流量，然后利用 Redis 事务从 Redis 中扣减库存，避免超售。最终，根据扣减库存的结果，给用户返回对应的提示信息。</p>
+<p data-nodeid="534">需要注意的是，秒杀服务有多个节点，不同节点需要用不同的队列，但单个节点的内部，必须用同一个队列。这么做是因为多个节点间是不能共享客户端连接的，只有在节点内部消费自己的流量，才能给用户返回处理结果。</p>
+<p data-nodeid="885">看到上面这三步，不知道你有没有联想到之前学到的限流器。没错，第二步和第三步中的固定速度就是用限流器来实现。可以说，<strong data-nodeid="891">串行化的核心思路就是：使用队列将请求进行排队、限流，使用分布式锁对资源进行原子操作。</strong></p>
+<p data-nodeid="886" class="te-preview-highlight"><img src="https://s0.lgstatic.com/i/image/M00/8C/87/Ciqc1F_wPKeAOExKAAs4u6NfigY330.png" alt="图片1.png" data-nodeid="894"></p>
+
+<h3 data-nodeid="754">小结</h3>
+
+
+
+
+<p data-nodeid="537">这一讲主要介绍了秒杀系统中处理大流量的撒手锏——漏斗模型，其中两大技术流量拦截器和串行化是实现漏斗模型的关键技术，你是否掌握了呢？</p>
+<p data-nodeid="538">单节点中实现漏斗模型比较容易，但在一个分布式系统，如秒杀系统中，需要考虑诸多因素。比如在计算队列消费速度参数的时候，需要将下游系统的承载能力平均分摊到每个秒杀节点上。由于秒杀节点数可能随时调整，秒杀服务需要做到动态计算队列消费速度。</p>
+<p data-nodeid="539">理想的方法是将这种元数据作为配置存放到 KV 存储，比如 ETCD 中，然后每个秒杀节点都实时监听配置变更，并重新计算各自的队列消费速度参数。这样可以避免因秒杀节点数增加而导致下游系统请求量增加被压垮。</p>
+<p data-nodeid="540">接下来，给你出个思考题：在从秒杀的内存队列消费流量的时候，应该用哪种限流算法来控制消费速度呢？你可以把答案写在留言区哦！</p>
+<p data-nodeid="541">这一讲就到这里了，下一讲我将给你介绍：在技术选型的时候，如何选择满足“三高”要求的技术。到时见！</p>
+<hr data-nodeid="542">
+<p data-nodeid="543"><a href="https://shenceyun.lagou.com/t/Mka" data-nodeid="611"><img src="https://s0.lgstatic.com/i/image/M00/80/32/CgqCHl_QgX2AHJo_ACRP1TPc6yM423.png" alt="Drawing 15.png" data-nodeid="610"></a></p>
+<p data-nodeid="544"><strong data-nodeid="615">《Java 工程师高薪训练营》</strong></p>
+<p data-nodeid="545" class="">实战训练+面试模拟+大厂内推，想要提升技术能力，进大厂拿高薪，<a href="https://shenceyun.lagou.com/t/Mka" data-nodeid="619">点击链接，提升自己</a>！</p></div>
+
+</body></html>

@@ -1,0 +1,978 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>24 | 调度引擎：Kubernetes 如何高效调度 Pod？</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>24 | 调度引擎：Kubernetes 如何高效调度 Pod？</h1><p data-nodeid="922">我们已经学会如何部署业务，发布 Pod。但是 Pod 创建好以后，Kubernetes 又如何调度这些 Pod 呢？如果我们希望把一个 Pod 跑在我们期望的节点上，该如何操作呢？如果我们希望把某些关联性强的 Pod 跑在特定的节点上，或者同一个节点上，又该怎么操作呢？</p>
+
+
+
+<p data-nodeid="4">今天我们就来揭晓。</p>
+<h3 data-nodeid="5">Kubernetes 调度器工作原理简介</h3>
+<p data-nodeid="6">kube-scheduler 作为 Kubernetes 的调度器，它的主要任务就是给新创建的 Pod 或者是未被调度的 Pod 挑选一个合适的节点供 Pod 运行，满足 Pod 对资源等的要求。这样对应节点上的 Kubelet 就可以监听到该 Pod，并将其创建、运行。</p>
+<p data-nodeid="7">整个调度过程听起来很简单，但是要考虑到的问题其实有很多，比如优先级、资源高效利用、高性能等。</p>
+<ul data-nodeid="8">
+<li data-nodeid="9">
+<p data-nodeid="10"><strong data-nodeid="152">优先级</strong>。高优先级的 Pod 肯定要优先被调度，这个我在《<a href="https://kaiwu.lagou.com/course/courseInfo.htm?courseId=447#/detail/pc?id=4538" data-nodeid="150">21 | 优先级调度：你必须掌握的 Pod 抢占式资源调度</a>》中有详细的案例和说明。</p>
+</li>
+<li data-nodeid="11">
+<p data-nodeid="12"><strong data-nodeid="157">资源高效利用</strong>。比如我们要避免 Pod 都被调度到一个或某几个节点上，造成节点负载太大；或是避免同一个工作负载（如  Deployment）的几个副本，跑在同一个节点上，以免这个节点宕机对整个业务造成影响。</p>
+</li>
+<li data-nodeid="13">
+<p data-nodeid="14"><strong data-nodeid="162">高性能</strong>。我们需要支持快速地完成大规模 Pod 的调度工作，这样才能够支撑大规模的集群。</p>
+</li>
+<li data-nodeid="15">
+<p data-nodeid="16"><strong data-nodeid="171">可扩展性强</strong>。方便用户自己增加调度逻辑，可以参考<a href="https://kubernetes.io/zh/docs/concepts/scheduling-eviction/scheduling-framework/" data-nodeid="169">官方文档</a>中的内容。</p>
+</li>
+<li data-nodeid="17">
+<p data-nodeid="18">……</p>
+</li>
+</ul>
+<p data-nodeid="19">总的来说，调度的过程主要分为两个大步骤。</p>
+<ol data-nodeid="20">
+<li data-nodeid="21">
+<p data-nodeid="22"><strong data-nodeid="178">过滤一些不满足条件的节点</strong>，这个过程也称为 Predict。</p>
+</li>
+<li data-nodeid="23">
+<p data-nodeid="24"><strong data-nodeid="183">调度器会对这些合适的节点进行打分排序，从中选择一个最优的节点</strong>，这个过程也称为 Priority。</p>
+</li>
+</ol>
+<p data-nodeid="25">这里面其实包含了很多的调度策略，在此不一一说明，你可以阅读这份<a href="https://kubernetes.io/zh/docs/reference/scheduling/policies/" data-nodeid="187">调度策略列表</a>，了解各个策略对应的含义。</p>
+<p data-nodeid="26">在实际使用的过程中，你可以直接使用调度器的默认配置，不需要对其做过多的定制化。当然，如果你有特殊的需求，也可以构建自己的调度器，具体可以参考<a href="https://kubernetes.io/zh/docs/reference/scheduling/config/" data-nodeid="192">这份文档</a>来更改默认调度器的调度策略、调度插件以及调度行为。</p>
+<p data-nodeid="27">下面我们主要来认识一下调度器都有哪些高级特性。</p>
+<h3 data-nodeid="28">调度器的高级特性</h3>
+<p data-nodeid="29">调度器的高级特性有 NodeName 和 NodeSelector、亲和性和反亲性、污点和容忍，我们依次来了解一下。</p>
+<h4 data-nodeid="30">NodeName 和 NodeSelector</h4>
+<p data-nodeid="31">首先是 NodeName 和 NodeSelector。</p>
+<p data-nodeid="32">我们可以通过 spec.nodeName 强制约束在某个指定的 Node 上运行 Pod，如下所示：</p>
+<pre class="lang-java" data-nodeid="33"><code data-language="java">apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-with-nodename
+  namespace: demo
+spec:
+  nodeName: node1 #指定调度节点 node1 上
+  containers:
+  - name: nginx-demo
+    image: nginx:1.19.4
+</code></pre>
+<p data-nodeid="34">上面这个 Pod 就被约束在 node1 上。通过这种方式指定节点，会跳过 kube-scheduler 的调度逻辑，即<strong data-nodeid="205">不需要经过调度</strong>。</p>
+<p data-nodeid="35">除了这种强制指定节点的方式，我们还可以通过 NodeSelector 的方式来选择节点。调度器的调度策略 MatchNodeSelector 会匹配 Node 的 label，从而达到节点筛选的目的。比如下面这个例子：</p>
+<pre class="lang-shell" data-nodeid="36"><code data-language="shell"><span class="hljs-meta">#</span><span class="bash"> 我们先对节点进行打标</span>
+<span class="hljs-meta">$</span><span class="bash"> kubectl label nodes node1 abc.com/role=dev</span>
+<span class="hljs-meta">#</span><span class="bash"> 通过如下命令可以查看该节点目前的所有 label</span>
+<span class="hljs-meta">$</span><span class="bash"> kubectl get node node1 --show-labels</span>
+NAME&nbsp;&nbsp;&nbsp;&nbsp;STATUS&nbsp;&nbsp; ROLES&nbsp;&nbsp;&nbsp; AGE&nbsp;&nbsp; VERSION&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; LABELS
+node1&nbsp;&nbsp; Ready&nbsp;&nbsp;&nbsp; master&nbsp;&nbsp; 75d&nbsp;&nbsp; v1.16.6-beta.0&nbsp;&nbsp; abc.com/role=dev,beta.kubernetes.io/arch=amd64,beta.kubernetes.io/os=linux,kubernetes.io/arch=amd64,kubernetes.io/hostname=docker-desktop,kubernetes.io/os=linux,node-role.kubernetes.io/master=
+</code></pre>
+<p data-nodeid="37">对节点打好标以后，就可以通过 spec.nodeSelector 来将 Pod 调度到带有指定 label 标记的节点上。</p>
+<pre class="lang-yaml" data-nodeid="38"><code data-language="yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">v1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">Pod</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">pod-with-nodename</span>
+  <span class="hljs-attr">namespace:</span> <span class="hljs-string">demo</span>
+<span class="hljs-attr">spec:</span>
+  <span class="hljs-attr">nodeSelector:</span>
+    <span class="hljs-attr">abc.com/role:</span> <span class="hljs-string">dev</span> <span class="hljs-comment">#指定调度到带有 abc.com/role=dev 这种 label 标记的节点上</span>
+  <span class="hljs-attr">containers:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">nginx-demo</span>
+    <span class="hljs-attr">image:</span> <span class="hljs-string">nginx:1.19.4</span>
+</code></pre>
+<p data-nodeid="39">nodeSelector 提供了一种非常简单的方法，方便我们将 Pod 约束到带有特定 label 的节点上。</p>
+<p data-nodeid="40">除此之外，kube-scheduler 还提供了更加动态的方式，即亲和性和反亲和性，可以帮助我们完成更高级的 Pod 调度，比如将某些 Pod 都调度到某个节点上。</p>
+<p data-nodeid="41">下面我们就来认识一下亲和性和反亲和性。</p>
+<h4 data-nodeid="42">亲和性和反亲和性</h4>
+<p data-nodeid="43">Kubernetes 提供了如下 3 种类型：</p>
+<ul data-nodeid="44">
+<li data-nodeid="45">
+<p data-nodeid="46">nodeAffinity（节点亲和性）；</p>
+</li>
+<li data-nodeid="47">
+<p data-nodeid="48">podAffinity（Pod 亲和性）；</p>
+</li>
+<li data-nodeid="49">
+<p data-nodeid="50">podAntiAffinity（Pod 反亲和性）。</p>
+</li>
+</ul>
+<p data-nodeid="1980">这 3 种亲和性和反亲和性策略支持更广泛的操作符，差异如下表所示：</p>
+<p data-nodeid="1981" class=""><img src="https://s0.lgstatic.com/i/image/M00/6F/1C/Ciqc1F-0wO2AaNBNAAB8jlKE3Qo120.png" alt="image (1).png" data-nodeid="1989"></p>
+
+
+
+<p data-nodeid="92">对于上述的亲和性和反亲和性功能，每种都有 3 种规则可以设置。</p>
+<ul data-nodeid="93">
+<li data-nodeid="94">
+<p data-nodeid="95">RequiredDuringSchedulingRequiredDuringExecution：在 Pod 调度期间要求满足亲和性或者反亲和性的规则要求。如果不能满足这些指定的规则，那该 Pod 不能被调度到对应的主机上。而且在之后的运行过程中，如果因为某些原因（比如 label 被修改了）导致规则不再满足了，系统就会尝试把该 Pod 从主机上驱逐掉。</p>
+</li>
+<li data-nodeid="96">
+<p data-nodeid="97">RequiredDuringSchedulingIgnoredDuringExecution：在 Pod 调度期间要求满足亲和性或者反亲和性规则。如果不能满足的话，那么该 Pod 不能被调度到对应的主机上。在之后的运行过程中，系统也不会再去检查这些规则是否还继续满足。</p>
+</li>
+<li data-nodeid="98">
+<p data-nodeid="99">PreferredDuringSchedulingIgnoredDuringExecution：在 Pod 调度期间要尽量地指定的亲和性和反亲和性规则。即使不能满足，Pod 也有可能被调度到对应的主机上。在之后的运行过程中，系统也不会再去检查这些规则是否继续满足。</p>
+</li>
+</ul>
+<p data-nodeid="100">我们这里来说说具体的使用场景。</p>
+<p data-nodeid="101"><strong data-nodeid="264">对于 nodeAffinity</strong>，主要有两个使用场景：</p>
+<ul data-nodeid="102">
+<li data-nodeid="103">
+<p data-nodeid="104">帮助我们将一个工作负载的所有 Pod 部署到指定的 label 的主机上，这点和 nodeSelector 是类似的；帮助我们将 Pod 部署到不带有特定 label 的主机上，即 Notin，比如不在 Master 节点上部署该 Pod。</p>
+</li>
+</ul>
+<p data-nodeid="105">下面是一个<a href="https://kubernetes.io/zh/docs/concepts/scheduling-eviction/assign-pod-node/" data-nodeid="269">官方</a>使用的 nodeAffinity 的例子：</p>
+<pre class="lang-yaml" data-nodeid="106"><code data-language="yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">v1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">Pod</span>
+<span class="hljs-attr">metadata:</span>
+&nbsp; <span class="hljs-attr">name:</span> <span class="hljs-string">with-node-affinity</span>
+<span class="hljs-attr">spec:</span>
+&nbsp; <span class="hljs-attr">affinity:</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-attr">nodeAffinity:</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-attr">requiredDuringSchedulingIgnoredDuringExecution:</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-attr">nodeSelectorTerms:</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-bullet">-</span> <span class="hljs-attr">matchExpressions:</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-bullet">-</span> <span class="hljs-attr">key:</span> <span class="hljs-string">kubernetes.io/e2e-az-name</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-attr">operator:</span> <span class="hljs-string">In</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-attr">values:</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-bullet">-</span> <span class="hljs-string">e2e-az1</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-bullet">-</span> <span class="hljs-string">e2e-az2</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-attr">preferredDuringSchedulingIgnoredDuringExecution:</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-bullet">-</span> <span class="hljs-attr">weight:</span> <span class="hljs-number">1</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-attr">preference:</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-attr">matchExpressions:</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-bullet">-</span> <span class="hljs-attr">key:</span> <span class="hljs-string">another-node-label-key</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-attr">operator:</span> <span class="hljs-string">In</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-attr">values:</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-bullet">-</span> <span class="hljs-string">another-node-label-value</span>
+&nbsp; <span class="hljs-attr">containers:</span>
+&nbsp; <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">with-node-affinity</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-attr">image:</span> <span class="hljs-string">k8s.gcr.io/pause:2.0</span>
+</code></pre>
+<p data-nodeid="107">这个 Pod 指定必须运行在 label 带有 kubernetes.io/e2e-az-name=e2e-az1 或 kubernetes.io/e2e-az-name=e2e-az2 的节点上。如果没有任何一个节点有这些 label，则该 Pod 不会被调度。同时这些节点上最好还带有 another-node-label-key=another-node-label-vale 的标签。</p>
+<p data-nodeid="108"><strong data-nodeid="276">对于 podAffinity 和 podAntiAffinity</strong>，你可以基于已经在节点上运行的 Pod 的标签来约束新 Pod 可以调度到的节点，而不是基于节点上的标签。</p>
+<p data-nodeid="109">如下是一个<a href="https://kubernetes.io/zh/docs/concepts/scheduling-eviction/assign-pod-node/" data-nodeid="280">官方</a>使用的 podAffinity 和 podAntiAffinity 的例子：</p>
+<pre class="lang-yaml" data-nodeid="110"><code data-language="yaml"><span class="hljs-attr">a piVersion:</span> <span class="hljs-string">v1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">Pod</span>
+<span class="hljs-attr">metadata:</span>
+&nbsp; <span class="hljs-attr">name:</span> <span class="hljs-string">with-pod-affinity</span>
+<span class="hljs-attr">spec:</span>
+&nbsp; <span class="hljs-attr">affinity:</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-attr">podAffinity:</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-attr">requiredDuringSchedulingIgnoredDuringExecution:</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-bullet">-</span> <span class="hljs-attr">labelSelector:</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-attr">matchExpressions:</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-bullet">-</span> <span class="hljs-attr">key:</span> <span class="hljs-string">security</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-attr">operator:</span> <span class="hljs-string">In</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-attr">values:</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-bullet">-</span> <span class="hljs-string">S1</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-attr">topologyKey:</span> <span class="hljs-string">topology.kubernetes.io/zone</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-attr">podAntiAffinity:</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-attr">preferredDuringSchedulingIgnoredDuringExecution:</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-bullet">-</span> <span class="hljs-attr">weight:</span> <span class="hljs-number">100</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-attr">podAffinityTerm:</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-attr">labelSelector:</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-attr">matchExpressions:</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-bullet">-</span> <span class="hljs-attr">key:</span> <span class="hljs-string">security</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-attr">operator:</span> <span class="hljs-string">In</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-attr">values:</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-bullet">-</span> <span class="hljs-string">S2</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-attr">topologyKey:</span> <span class="hljs-string">topology.kubernetes.io/zone</span>
+&nbsp; <span class="hljs-attr">containers:</span>
+&nbsp; <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">with-pod-affinity</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-attr">image:</span> <span class="hljs-string">k8s.gcr.io/pause:2.0</span>
+</code></pre>
+<p data-nodeid="111">上述这个例子中使用了 podAffinity 和  podAntiAffinity。其中亲和性这块的规则表示该 Pod 必须部署在一个节点上，这个节点上至少有一个处于正在运行状态的带有 security=s1 标签的 Pod，并且要求部署的节点同正在运行的 Pod 所在节点都在相同的云服务区域中，也就是 topologyKey:topology.kubernetes.io/zone。</p>
+<p data-nodeid="112">换言之，一旦某个区域出了问题，我们希望这些 Pod 能够再次迁移到同一个区域。当然， topologyKey 可以是任何合法的标签键，比如 kubernetes.io/hostname，你可以参考<a href="https://kubernetes.io/zh/docs/concepts/scheduling-eviction/assign-pod-node/#pod-%E4%BD%BF%E7%94%A8-pod-%E4%BA%B2%E5%92%8C-%E7%9A%84%E7%A4%BA%E4%BE%8B" data-nodeid="286">官方文档</a>，看看这个值在使用上的限制。</p>
+<p data-nodeid="113">对于例子中 Pod 反亲和性规则，表示该 Pod 不希望部署在一个运行着带有 label 为 security=s2 的 Pod 的节点上。</p>
+<p data-nodeid="114">除了在 Pod 层面进行限制外，我们还可以对 Node 进行操作，可以禁止某些 Pod 调度上来。</p>
+<h4 data-nodeid="3857" class="te-preview-highlight">污点和容忍（Taints and Tolerations）</h4>
+
+
+
+
+<p data-nodeid="116">最后我们来看污点和容忍（Taints and Tolerations）。</p>
+<p data-nodeid="117">我们可以给节点设置污点，通过这个污点就可以避免 Pod 调度上来，除非在 Pod 上设置了污点容忍。</p>
+<p data-nodeid="118">每个污点的组成如下：</p>
+<pre class="lang-java" data-nodeid="119"><code data-language="java">key=value:effect
+</code></pre>
+<p data-nodeid="120">每个污点规则都有一个 key 和 value，其中 value 可以为空，effect 描述污点的作用。当前 taint effect 支持如下 3 个选项：</p>
+<ul data-nodeid="121">
+<li data-nodeid="122">
+<p data-nodeid="123">NoSchedule 表示不会将 Pod 调度到带该污点的 Node 上；</p>
+</li>
+<li data-nodeid="124">
+<p data-nodeid="125">PreferNoSchedule 表示尽量避免将 Pod 调度到带该污点的 Node 上；</p>
+</li>
+<li data-nodeid="126">
+<p data-nodeid="127">NoExecute 表示不会将 Pod 调度到带有该污点的 Node 上，同时会将 Node 上已经运行中的 Pod 驱逐出去。</p>
+</li>
+</ul>
+<p data-nodeid="128">我们使用 kubectl 命令就可以快速地设置和去除污点，命令如下：</p>
+<pre class="lang-java" data-nodeid="129"><code data-language="java"># 设置污点
+kubectl taint nodes node1 key1=value1:NoSchedule
+# 去除污点
+kubectl taint nodes node1 key1:NoSchedule-
+</code></pre>
+<p data-nodeid="130">我们可以在 Pod 上设置容忍（Toleration），这样就可以将 Pod 调度到存在污点的 Node 上。在 Pod 的 spec 中设置 tolerations 字段可以给 Pod 设置上容忍点 Toleration，如下所示：</p>
+<pre class="lang-java" data-nodeid="131"><code data-language="java">tolerations:
+- key: <span class="hljs-string">"key1"</span>
+  operator: <span class="hljs-string">"Equal"</span>
+  value: <span class="hljs-string">"value1"</span>
+  effect: <span class="hljs-string">"NoSchedule"</span>
+  tolerationSeconds: <span class="hljs-number">3600</span>
+- key: <span class="hljs-string">"key1"</span>
+  operator: <span class="hljs-string">"Equal"</span>
+  value: <span class="hljs-string">"value1"</span>
+  effect: <span class="hljs-string">"NoExecute"</span>
+- key: <span class="hljs-string">"key2"</span>
+  operator: <span class="hljs-string">"Exists"</span>
+  effect: <span class="hljs-string">"NoSchedule"</span>
+  
+</code></pre>
+<p data-nodeid="132">其中 key、vaule、effect 要与 Node 上设置的 taint 保持一致；operator 的值为 Exists 将会忽略 value 值；tolerationSeconds 用于描述当 Pod 需要被驱逐时可以在 Pod 上继续保留运行的时间。</p>
+<h3 data-nodeid="133">写在最后</h3>
+<p data-nodeid="134">这一讲我带你了解了 Kubernetes 调度器的工作原理以及调度器的一些高级特性，也介绍了&nbsp;Kubernetes&nbsp;是如何高效调度 Pod 的。你可以在实际使用中慢慢体会调度器的这些高级特性。</p>
+<p data-nodeid="135">那么，学完这些，你对于调度 Pod 还有什么疑问吗？欢迎在留言区留言。</p>
+<p data-nodeid="136">下一讲，我将带你剖析容器运行时以及 CRI 原理。</p></div>
+
+</body></html>

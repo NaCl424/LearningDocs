@@ -1,0 +1,907 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第10讲：深入理解 AQS 和 CAS 原理</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>第10讲：深入理解 AQS 和 CAS 原理</h1><p>AQS 全称是 Abstract Queued Synchronizer，一般翻译为同步器。它是一套实现多线程同步功能的框架，由大名鼎鼎的 Doug Lea 操刀设计并开发实现的。AQS 在源码中被广泛使用，尤其是在 JUC（Java Util Concurrent）中，比如 ReentrantLock、Semaphore、CountDownLatch、ThreadPoolExecutor。理解 AQS 对我们理解 JUC 中其他组件至关重要，并且在实际开发中也可以通过自定义 AQS 来实现各种需求场景。</p>
+<blockquote>
+<p>注意：理解 AQS 需要一定的数据结构基础，尤其是双端队列，并对 Unsafe 有一定的了解。</p>
+</blockquote>
+<h3>ReentrantLock 和 AQS 的关系</h3>
+<p>本课时我们主要通过 ReentrantLock 来理解 AQS 内部的工作机制。首先从 ReentrantLock 的 lock() 方法开始：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/14/50/Ciqah16hNzeAGmpiAAFQGv9Fgr8055.png" alt="安卓1.png"><br>
+代码很简单，只是调用了一个 Sync 的 lock() 方法，这个 Sync 是什么呢？</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/14/50/Ciqah16hN0CAUaRQAAGpSG_ngyM130.png" alt="安卓2.png"><br>
+可以看出，Sync 是 ReentrantLock 中的一个内部类。ReentrantLock 并没有直接继承 AQS，而是通过内部类 Sync 来扩展 AQS 的功能，然后 ReentrantLock 中存有 Sync 的全局变量引用。</p>
+<p>Sync 在 ReentrantLock 有两种实现：NonfairSync 和 FairSync，分别对应非公平锁和公平锁。以非公平锁为例，实现源码如下：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/14/50/Ciqah16hN1SAJgt_AAFXxMZAJfA696.png" alt="安卓3.png"><br>
+可以看出在非公平锁中的 lock() 方法中，主要做了如下操作：</p>
+<ul>
+<li>如果通过 CAS 设置变量 State（同步状态）成功，表示当前线程获取锁成功，则将当前线程设置为独占线程。</li>
+<li>如果通过 CAS 设置变量 State（同步状态）失败，表示当前锁正在被其他线程持有，则进入 Acquire 方法进行后续处理。</li>
+</ul>
+<p>acruire() 方法定义在 AQS 中，具体如下：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/14/50/Ciqah16hN26AQVzmAACP7w8ZKD8422.png" alt="安卓4.png"><br>
+acquire() 方法是一个比较重要的方法，可以将其拆解为 3 个主要步骤：</p>
+<ol>
+<li>tryAcquire() 方法主要目的是尝试获取锁；</li>
+<li>addWaiter() 如果 tryAcquire() 尝试获取锁失败则调用 addWaiter 将当前线程添加到一个等待队列中；</li>
+<li>acquireQueued 处理加入到队列中的节点，通过自旋去尝试获取锁，根据情况将线程挂起或者取消。</li>
+</ol>
+<p>以上 3 个方法都被定义在 AQS 中，但其中 tryAcquire() 有点特殊，其实现如下：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/07/21/CgoCgV6hN3eAU2WmAAB3xJkEMNE965.png" alt="安卓5.png"><br>
+默认情况下直接抛异常，因此它需要在子类中复写，也就是说<strong>真正的获取锁的逻辑由子类同步器自己实现</strong>。</p>
+<p>ReentrantLock 中 tryAcquire 的实现（非公平锁）如下：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/14/50/Ciqah16hN3-AC68pAANyZwCuYXA396.png" alt="安卓6.png"><br>
+解释说明：</p>
+<ul>
+<li>获取当前线程，判断当前的锁的状态；</li>
+<li>如果 state=0 表示当前是无锁状态，通过 cas 更新 state 状态的值，返回 true；</li>
+<li>如果当前线程属于重入，则增加重入次数，返回 true；</li>
+<li>上述情况都不满足，则获取锁失败返回 false。</li>
+</ul>
+<p>最后用一张图表示 ReentrantLock.lock() 过程：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/14/50/Ciqah16hN4qAAZadAADaSkC9FmM625.png" alt="安卓7.png"><br>
+从图中我们可以看出，在 ReentrantLock 执行 lock() 的过程中，大部分同步机制的核心逻辑都已经在 AQS 中实现，ReentrantLock 自身只要实现某些特定步骤下的方法即可，这种设计模式叫作<strong>模板模式</strong>。如果你做过 Android 开发对这一模式应该非常熟悉。Activity 的生命周期的执行流程都已经在 framework 中定义好了，子类 Activity 只要在相应的 onCreate、onPause 等生命周期方法中提供相应的实现即可。</p>
+<blockquote>
+<p>注意：不只 ReentrantLock，JUC 包中其他组件例如 CountDownLatch、Semaphor 等都是通过一个内部类 Sync 来继承 AQS，然后在内部中通过操作 Sync 来实现同步。这种做法的好处是将线程控制的逻辑控制在 Sync 内部，而对外面向用户提供的接口是自定义锁，这种聚合关系能够很好的解耦两者所关注的逻辑。</p>
+</blockquote>
+<h3>AQS 核心功能原理分析</h3>
+<p>首先看下 AQS 中几个关键的属性，如下所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/07/22/CgoCgV6hN5SAetbZAACffASkCF4632.png" alt="安卓8.png"><br>
+代码中展示了 AQS 中两个比较重要的属性 <strong>Node</strong> 和 <strong>state</strong>。</p>
+<h4>state 锁状态</h4>
+<p>state 表示当前锁状态。当 state = 0 时表示无锁状态；当 state&gt;0 时，表示已经有线程获得了锁，也就是 state=1，如果同一个线程多次获得同步锁的时候，state 会递增，比如重入 5 次，那么 state=5。 而在释放锁的时候，同样需要释放 5 次直到 state=0，其他线程才有资格获得锁。</p>
+<p>state 还有一个功能是实现锁的独占模式或者共享模式。</p>
+<ul>
+<li>独占模式：只有一个线程能够持有同步锁。</li>
+</ul>
+<p>比如在独占模式下，我们可以把 state 的初始值设置成 0，当某个线程申请锁对象时，需要判断 state 的值是不是 0，如果不是 0 的话意味着其他线程已经持有该锁，则本线程需要阻塞等待。</p>
+<ul>
+<li>共享模式：可以有多个线程持有同步锁。</li>
+</ul>
+<p>在共享模式下的道理也差不多，比如说某项操作我们允许 10 个线程同时进行，超过这个数量的线程就需要阻塞等待。那么只需要在线程申请对象时判断 state 的值是否小于 10。如果小于 10，就将 state 加 1 后继续同步语句的执行；如果等于 10，说明已经有 10 个线程在同时执行该操作，本线程需要阻塞等待。</p>
+<h4>Node 双端队列节点</h4>
+<p>Node 是一个先进先出的双端队列，并且是等待队列，当多线程争用资源被阻塞时会进入此队列。这个队列是 AQS 实现多线程同步的核心。</p>
+<p>从之前 ReentrantLock 图中可以看到，在 AQS 中有两个 Node 的指针，分别指向队列的 head 和 tail。</p>
+<p>Node 的主要结构如下：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/07/22/CgoCgV6hN56AWeUQAAI8w2N7emE340.png" alt="安卓9.png"><br>
+默认情况下，AQS 中的链表结构如下图所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/14/51/Ciqah16hN6eAaiC5AAAjUQaQ1Js892.png" alt="安卓10.png"></p>
+<h4>获取锁失败后续流程分析</h4>
+<p>锁的意义就是使竞争到锁对象的线程执行同步代码，多个线程竞争锁时，竞争失败的线程需要被阻塞等待后续唤醒。那么 ReentrantLock 是如何实现让线程等待并唤醒的呢？</p>
+<p>前面中我们提到在 ReentrantLock.lock() 阶段，在 acquire() 方法中会先后调用 tryAcquire、addWaiter、acquireQueued 这 3 个方法来处理。tryAcquire 在 ReentrantLock 中被复写并实现，如果返回 true 说明成功获取锁，就继续执行同步代码语句。可是如果 tryAcquire 返回 false，也就是当前锁对象被其他线程所持有，那么当前线程会被 AQS 如何处理呢？</p>
+<p><strong>addWaiter</strong><br>
+首先当前获取锁失败的线程会被添加到一个等待队列的末端，具体源码如下：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/14/51/Ciqah16hN7CAKiQAAARQFTwNKQg227.png" alt="安卓11.png"><br>
+有两种情况会致使插入队列失败：</p>
+<ol>
+<li>tail 为空：说明队列从未初始化，因此需要调用 enq 方法在队列中插入一个<strong>空的 Node</strong>；</li>
+<li>compareAndSetTail 失败：说明插入过程中有线程修改了此队列，因此需要调用 enq 将当前 node 重新插入到队列末端。</li>
+</ol>
+<p>经过 addWaiter 方法之后，此时线程以 Node 的方式被加入到队列的末端，但是线程还没有被执行阻塞操作，真正的阻塞操作是在下面的 acquireQueued 方法中判断执行。</p>
+<p><strong>acquireQueued</strong><br>
+在 acquireQueued 方法中并不会立即挂起该节点中的线程，因此在插入节点的过程中，之前持有锁的线程可能已经执行完毕并释放锁，所以这里使用自旋再次去尝试获取锁（不放过任何优化细节）。如果自旋操作还是没有获取到锁！那么就将该线程挂起（阻塞），该方法的源码如下：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/07/22/CgoCgV6hN7qAXkEXAAQrReei3G0475.png" alt="安卓12.png"><br>
+可以看出在 shouldParkAfterFailedAcquire 方法中会判读当前线程是否应该被挂起，其代码如下：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/14/51/Ciqah16hN8OAIK5GAAOTQNP0ki8128.png" alt="安卓13.png"><br>
+首先获取前驱节点的 waitStatus 值，Node 中的 waitStatus 一共有 5 种取值，分别代表的意义如下：</p>
+<table>
+<thead>
+<tr>
+<th>waitStatue值</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CANCELLED (1)</td>
+<td>当前线程因为超时或者中断被取消。这是一个终结态，也就是状态到此为止</td>
+</tr>
+<tr>
+<td>SIGNAL (-1)</td>
+<td>当前线程的后继线程被阻塞或者即将被阻塞，当前线程释放锁或者取消后需要唤醒后继线程。这个状态一般都是后继线程来设置前驱节点的</td>
+</tr>
+<tr>
+<td>CONDITION (-2)</td>
+<td>当前线程在 condition 队列中</td>
+</tr>
+<tr>
+<td>PROPAGATE (-3)</td>
+<td>用于将唤醒后继线程传递下去，这个状态的引入是为了完善和增强共享锁的唤醒机制。在一个节点成为头节点之前，是不会跃迁为此状态的</td>
+</tr>
+<tr>
+<td>0</td>
+<td>表示无锁状态</td>
+</tr>
+</tbody>
+</table>
+<p>接下来根据 waitStatus 不同的值进行不同的操作，主要有以下几种情况：</p>
+<ul>
+<li>如果 waitStatus 等于 SIGNAL，返回 true 将当前线程挂起，等待后续唤醒操作即可。</li>
+<li>如果 waitStatus 大于 0 也就是 CANCLE 状态，会将此前驱节点从队列中删除，并在循环中逐步寻找下一个不是“CANCEL”状态的节点作为当前节点的前驱节点。</li>
+<li>如果 waitStatus 既不是 SIGNAL 也不是 CANCEL，则将当前节点的前驱节点状态设置为 SIGNAL，这样做的好处是下一次执行 shouldParkAfterFailedAcquire 时可以直接返回 true，挂起线程。</li>
+</ul>
+<p>代码再回到 acquireQueued 中，如果 shouldParkAfterFailedAcquire 返回 true 表示线程需要被挂起，那么会继续调用 parkAndCheckInterrupt 方法执行真正的阻塞线程代码，具体如下：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/14/51/Ciqah16hN86AVsTxAAFr5n_07eo859.png" alt="安卓14.png"><br>
+这个方法比较简单，只是调用了 LockSupport 中的 park 方法。在 LockSupport.park() 方法中调用了 Unsafe API 来执行底层 native 方法将线程挂起，代码到这已经到了操作系统的层面，没有必要再深入分析。</p>
+<p>至此，获取锁的大体流程已经分析完毕，总结一下整个过程如下：</p>
+<ul>
+<li>AQS 的模板方法 acquire 通过调用子类自定义实现的 tryAcquire 获取锁；</li>
+<li>如果获取锁失败，通过 addWaiter 方法将线程构造成 Node 节点插入到同步队列队尾；</li>
+<li>在 acquirQueued 方法中以自旋的方法尝试获取锁，如果失败则判断是否需要将当前线程阻塞，如果需要阻塞则最终执行 LockSupport(Unsafe) 中的 native API 来实现线程阻塞。</li>
+</ul>
+<h4>释放锁流程分析</h4>
+<p>在上面加锁阶段被阻塞的线程需要被唤醒过后才可以重新执行。那具体 AQS 是何时尝试唤醒等待队列中被阻塞的线程呢？</p>
+<p>同加锁过程一样，释放锁需要从 ReentrantLock.unlock() 方法开始：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/14/51/Ciqah16hN9mAdr9LAAFZOXdF9Gs514.png" alt="安卓15.png"><br>
+可以看出，首先调用 tryRelease 方法尝试释放锁，如果成功最终会调用 AQS 中的  unparkSuccessor 方法来实现释放锁的操作。unparkSuccessor 的具体实现如下：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/07/22/CgoCgV6hN-GAFxFeAALtBh7FKak896.png" alt="安卓16.png"><br>
+解释说明：</p>
+<p>首先获取当前节点（实际上传入的是 head 节点）的状态，如果 head 节点的下一个节点是 null，或者下一个节点的状态为 CANCEL，则从等待队列的尾部开始遍历，直到寻找第一个 waitStatus 小于 0 的节点。</p>
+<p>如果最终遍历到的节点不为 null，再调用 LockSupport.unpark 方法，调用底层方法唤醒线程。 至此，线程被唤醒的时机也分析完毕。</p>
+<h4>不得不说的 CAS</h4>
+<p>不管是在加锁还是释放锁阶段，多次提到了一种通用的操作：compareAndSetXXX。这种操作最终会调用 Unsafe 中的 API 进行 CAS 操作。</p>
+<p>CAS 全称是 Compare And Swap，译为比较和替换，是一种通过硬件实现并发安全的常用技术，底层通过利用 CPU 的 CAS 指令对缓存加锁或总线加锁的方式来实现多处理器之间的原子操作。</p>
+<p>它的实现过程主要有 3 个操作数：内存值 V，旧的预期值 E，要修改的新值 U，当且仅当预期值 E和内存值 V 相同时，才将内存值 V 修改为 U，否则什么都不做。</p>
+<p>CAS 底层会根据操作系统和处理器的不同来选择对应的调用代码，以 Windows 和 X86 处理器为例，如果是多处理器，通过带 lock 前缀的 cmpxchg 指令对缓存加锁或总线加锁的方式来实现多处理器之间的原子操作；如果是单处理器，通过 cmpxchg 指令完成原子操作。</p>
+<h3>自定义 AQS</h3>
+<p>理解了 AQS 的设计思路，接下来我们就可以通过自定义 AQS 来实现自己的同步实现机制。</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/14/51/Ciqah16hN-6AKAxBAAKlvS870jk917.png" alt="安卓17.png"><br>
+代码中的 MyLock 就是一个最简单的独占锁，通过使用 MyLock 也能实现同 synchronized 和 ReentrantLock 相同的功能。比如如下代码：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/14/51/Ciqah16hN_iAfYSJAAMCMZKMFfk271.png" alt="安卓18.png"><br>
+最终打印的 count 值为 20000，说明两个线程之间是线程安全的同步操作。</p>
+<h4>总结</h4>
+<p>总体来说，AQS 是一套框架，在框架内部已经封装好了大部分同步需要的逻辑，在 AQS 内部维护了一个状态指示器 state 和一个等待队列 Node，而通过 state 的操作又分为两种：独占式和共享式，这就导致 AQS 有两种不同的实现：独占锁（ReentrantLock 等）和分享锁（CountDownLatch、读写锁等）。本课时主要从独占锁的角度深入分析了 AQS 的加锁和释放锁的流程。</p>
+<p>理解 AQS 的原理对理解 JUC 包中其他组件实现的基础有帮助，并且理解其原理才能更好的扩展其功能。上层开发人员可以基于此框架基础上进行扩展实现适合不同场景、不同功能的锁。其中几个有可能需要子类同步器实现的方法如下。</p>
+<ul>
+<li>lock()。</li>
+<li>tryAcquire(int)：独占方式。尝试获取资源，成功则返回 true，失败则返回 false。</li>
+<li>tryRelease(int)：独占方式。尝试释放资源，成功则返回 true，失败则返回 false。</li>
+<li>tryAcquireShared(int)：共享方式。尝试获取资源。负数表示失败；0 表示成功，但没有剩余可用资源；正数表示成功，且有剩余资源。</li>
+<li>tryReleaseShared(int)：共享方式。尝试释放资源，如果释放后允许唤醒后续等待结点返回 true，否则返回 false。</li>
+</ul></div>
+
+</body></html>

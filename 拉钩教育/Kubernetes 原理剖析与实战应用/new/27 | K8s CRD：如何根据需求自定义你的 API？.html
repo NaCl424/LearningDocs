@@ -1,0 +1,1267 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>27 | K8s CRD：如何根据需求自定义你的 API？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>27 | K8s CRD：如何根据需求自定义你的 API？</h1><p data-nodeid="2948">你好，我是正范。</p>
+
+
+<p data-nodeid="2587">随着使用的深入，你会发现 Kubernetes 中内置的对象定义，比如 Deployment、StatefulSet、Configmap，可能已经不能满足你的需求了。你很希望在 Kubernetes 定义一些自己的对象，一来可以通过 kube-apiserver 提供统一的访问入口，二来可以像其他内置对象一样，通过 kubectl 命令管理这些自定义的对象。</p>
+<p data-nodeid="2588">Kubernetes 中提供了两种自定义对象的方式，一种是聚合 API，另一种是 CRD。</p>
+<p data-nodeid="2589">我们今天就来看看。</p>
+<h3 data-nodeid="2590">聚合 API</h3>
+<p data-nodeid="2591">聚合 API（Aggregation API，AA）是自 Kubernetes v1.7 版本就引入的功能，主要目的是方便用户将自己定义的 API 注册到 kube-apiserver 中，并且可以像使用其他内置的 API 一样，通过 APIServer 的 URL 就可以访问和操作。</p>
+<p data-nodeid="2592">在使用 API 聚合之前，我们还需要通过一些参数在 kube-apiserver 中启用这个功能：</p>
+<pre class="lang-shell hljs" data-nodeid="2593"><code data-language="shell">--requestheader-client-ca-file=&lt;path to aggregator CA cert&gt;
+--requestheader-allowed-names=front-proxy-client
+--requestheader-extra-headers-prefix=X-Remote-Extra-
+--requestheader-group-headers=X-Remote-Group
+--requestheader-username-headers=X-Remote-User
+--proxy-client-cert-file=&lt;path to aggregator proxy cert&gt;
+--proxy-client-key-file=&lt;path to aggregator proxy key&gt;
+</code></pre>
+<p data-nodeid="2594">Kubernetes 在 kube-apiserver 中引入了一个 API 聚合层（API Aggregation Layer），可以将访问请求转发到后端用户自己的扩展 APIServer 中。你可以参考这个<a href="https://kubernetes.io/zh/docs/tasks/extend-kubernetes/setup-extension-api-server/" data-nodeid="2643">文档</a>学习如何安装一个扩展的 APIServer。当然，扩展的 APIServer 需要你自己修改并实现相关的代码逻辑。</p>
+<ul data-nodeid="2595">
+<li data-nodeid="2596">
+<p data-nodeid="2597">Kubernetes apiserver 会判断 --requestheader-client-ca-file 指定的 CA 证书中的 CN 是否是 --requestheader-allowed-names 提供的列表名称之一。如果不是，则该请求被拒绝。如果名称允许，则请求会被转发。</p>
+</li>
+<li data-nodeid="2598">
+<p data-nodeid="2599">接着 Kubernetes apiserver 将使用由 --proxy-client-*-file 指定的文件来访问用户的扩展 APIServer。</p>
+</li>
+</ul>
+<p data-nodeid="3420">下图就是用户发起请求后一个完整的身份认证流程，你可以阅读<a href="https://kubernetes.io/zh/docs/tasks/extend-kubernetes/configure-aggregation-layer/#%E8%BA%AB%E4%BB%BD%E8%AE%A4%E8%AF%81%E6%B5%81%E7%A8%8B" data-nodeid="3425">官方文档</a>来详细了解步骤 。</p>
+<p data-nodeid="3670"><img src="https://s0.lgstatic.com/i/image/M00/71/C8/CgqCHl-_cp6AR0muAAIPqi0uDMk927.png" alt="Drawing 0.png" data-nodeid="3674"></p>
+<div data-nodeid="3671" class=""><p style="text-align:center">图 1：一个完整的身份认证流程</p></div>
+
+
+
+
+
+<p data-nodeid="2603">配置好了上述参数后， 为了让 kube-apiserver 知道我们自定义的 API，我们需要创建一个 APIService 的对象，比如：</p>
+<pre class="lang-yaml hljs" data-nodeid="2604"><code data-language="yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">apiregistration.k8s.io/v1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">APIService</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">v1alpha1.wardle.example.com</span> <span class="hljs-comment"># 对象名称</span>
+<span class="hljs-attr">spec:</span>
+  <span class="hljs-attr">insecureSkipTLSVerify:</span> <span class="hljs-literal">true</span>
+  <span class="hljs-attr">group:</span> <span class="hljs-string">wardle.example.com</span> <span class="hljs-comment"># 扩展 Apiserver 的 API group 名称</span>
+  <span class="hljs-attr">groupPriorityMinimum:</span> <span class="hljs-number">1000</span> <span class="hljs-comment"># APIService 对对应 group 的优先级</span>
+  <span class="hljs-attr">versionPriority:</span> <span class="hljs-number">15</span> <span class="hljs-comment"># 优先考虑 version 在 group 中的排序</span>
+  <span class="hljs-attr">service:</span>
+    <span class="hljs-attr">name:</span> <span class="hljs-string">myapi</span> <span class="hljs-comment"># 扩展 Apiserver 服务的 name</span>
+    <span class="hljs-attr">namespace:</span> <span class="hljs-string">wardle</span> <span class="hljs-comment"># 扩展 Apiserver 服务的 namespace </span>
+  <span class="hljs-attr">version:</span> <span class="hljs-string">v1alpha1</span> <span class="hljs-comment"># 扩展 Apiserver 的 API version</span>
+</code></pre>
+<p data-nodeid="2605">通过上述 YAML 文件，我们就在 kube-apiserver 中创建一个 API 对象组，其对应的组（Group）为 wardle.example.com，版本号为 v1alpha1。创建成功后，我们就可以通过 /apis/wardle.example.com/v1alpha1 这个路径访问了。至于这个对象组里提供了哪些对象，就需要我们在扩展的 APIServer 中声明出来了。</p>
+<p data-nodeid="2606">那 kube-apiserver 又是怎么知道将 /apis/wardle.example.com/v1alpha1 这个路径的所有请求转发到后端的扩展 APIServer 中的呢？我们注意到上面的 APIService 定义中，还有一个 spec.service 字段，就是在这里，我们指定了扩展 APIServer 的服务名，也就是说 kube-apiserver 会将 /apis/wardle.example.com/v1alpha1 这个路径的所有访问通过 API 聚合层转发到后端的服务 myapi.wardle.svc 上。</p>
+<p data-nodeid="2607">扩展 APIServer 的具体代码设计及逻辑，你可以参考<a href="https://github.com/kubernetes/sample-apiserver" data-nodeid="2664">sample-apiserver</a>或者使用<a href="https://github.com/kubernetes-incubator/apiserver-builder" data-nodeid="2668">apiserver-builder</a>。</p>
+<p data-nodeid="2608">这种聚合 API 的方式对代码要求很高，但支持对 API 行为进行完全的掌控，比如你可以自己定义数据如何存储、API 各个版本的切换、各个对象的逻辑控制。</p>
+<p data-nodeid="2609">如果你只想简简单单地在 Kubernetes 中定义个对象，可以直接通过下面要介绍的 CRD 定义。</p>
+<h3 data-nodeid="2610">CRD</h3>
+<p data-nodeid="2611">CRD（CustomResourceDefinitions）在 v1.7 刚引入进来的时候，其实是 ThirdPartyResources（TPR）的升级版本，而 TPR 在 v1.8 的版本被剔除了。CRD 目前使用非常广泛，各个周边项目都在使用它，比如 Ingress、Rancher。</p>
+<p data-nodeid="2612">我们来看一下官方的一个例子，通过如下的 YAML 文件，我们可以创建一个 API：</p>
+<pre class="lang-yaml hljs" data-nodeid="2613"><code data-language="yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">apiextensions.k8s.io/v1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">CustomResourceDefinition</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-comment"># 名字必须与下面的 spec 字段匹配，并且格式为 '&lt;名称的复数形式&gt;.&lt;组名&gt;'</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">crontabs.stable.example.com</span>
+<span class="hljs-attr">spec:</span>
+  <span class="hljs-comment"># 组名称，用于 REST API: /apis/&lt;组&gt;/&lt;版本&gt;</span>
+  <span class="hljs-attr">group:</span> <span class="hljs-string">stable.example.com</span>
+  <span class="hljs-comment"># 列举此 CustomResourceDefinition 所支持的版本</span>
+  <span class="hljs-attr">versions:</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">v1</span>
+      <span class="hljs-comment"># 每个版本都可以通过 served 标志来独立启用或禁止</span>
+      <span class="hljs-attr">served:</span> <span class="hljs-literal">true</span>
+      <span class="hljs-comment"># 其中一个且只有一个版本必需被标记为存储版本</span>
+      <span class="hljs-attr">storage:</span> <span class="hljs-literal">true</span>
+      <span class="hljs-attr">schema:</span>
+        <span class="hljs-attr">openAPIV3Schema:</span>
+          <span class="hljs-attr">type:</span> <span class="hljs-string">object</span>
+          <span class="hljs-attr">properties:</span>
+            <span class="hljs-attr">spec:</span>
+              <span class="hljs-attr">type:</span> <span class="hljs-string">object</span>
+              <span class="hljs-attr">properties:</span>
+                <span class="hljs-attr">cronSpec:</span>
+                  <span class="hljs-attr">type:</span> <span class="hljs-string">string</span>
+                <span class="hljs-attr">image:</span>
+                  <span class="hljs-attr">type:</span> <span class="hljs-string">string</span>
+                <span class="hljs-attr">replicas:</span>
+                  <span class="hljs-attr">type:</span> <span class="hljs-string">integer</span>
+  <span class="hljs-comment"># 可以是 Namespaced 或 Cluster</span>
+  <span class="hljs-attr">scope:</span> <span class="hljs-string">Namespaced</span>
+  <span class="hljs-attr">names:</span>
+    <span class="hljs-comment"># 名称的复数形式，用于 URL：/apis/&lt;组&gt;/&lt;版本&gt;/&lt;名称的复数形式&gt;</span>
+    <span class="hljs-attr">plural:</span> <span class="hljs-string">crontabs</span>
+    <span class="hljs-comment"># 名称的单数形式，作为命令行使用时和显示时的别名</span>
+    <span class="hljs-attr">singular:</span> <span class="hljs-string">crontab</span>
+    <span class="hljs-comment"># kind 通常是单数形式的驼峰编码（CamelCased）形式。你的资源清单会使用这一形式。</span>
+    <span class="hljs-attr">kind:</span> <span class="hljs-string">CronTab</span>
+    <span class="hljs-comment"># shortNames 允许你在命令行使用较短的字符串来匹配资源</span>
+    <span class="hljs-attr">shortNames:</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-string">ct</span>
+</code></pre>
+<p data-nodeid="2614">我们可以像创建其他对象一样，通过 kubectl create 命令创建。创建好了以后，一个类型为 CronTab 的对象就在 kube-apiserver 中注册好了，你可以通过如下的 REST 接口访问，比如 LIST 命名空间 ns1 下的 CronTab 对象，可以通过这个 URL“/apis/stable.example.com/v1/namespaces/ns1/crontabs/”访问。这种接口跟 Kubernetes 内置的其他对象的接口风格是一模一样的。</p>
+<p data-nodeid="2615">声明好了 CronTab，下面我们就来看看如何创建一个 CronTab 类型的对象。我们来看看官方给的一个例子：</p>
+<pre class="lang-yaml hljs" data-nodeid="2616"><code data-language="yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">"stable.example.com/v1"</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">CronTab</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">my-new-cron-object</span>
+<span class="hljs-attr">spec:</span>
+  <span class="hljs-attr">cronSpec:</span> <span class="hljs-string">"* * * * */5"</span>
+  <span class="hljs-attr">image:</span> <span class="hljs-string">my-awesome-cron-image</span>
+</code></pre>
+<p data-nodeid="2617">通过 kubectl create 创建 my-new-cron-object 后，就可以通过 kubectl get 查看，并使用 kubectl 管理你的 CronTab 对象了。例如：</p>
+<pre class="lang-java te-preview-highlight hljs" data-nodeid="4622"><code data-language="java">kubectl get crontab
+NAME                 AGE
+my-<span class="hljs-keyword">new</span>-cron-object   <span class="hljs-number">6</span>s
+</code></pre>
+
+
+
+
+<p data-nodeid="2619">这里的资源名是大小写不敏感的，我们在这里可以使用缩写 kubectl get ct，也可以使用 kubectl get crontabs。</p>
+<p data-nodeid="2620">同时原生内置的 API 对象一样，这些 CRD 不仅可以通过 kubectl 来创建、查看、修改，删除等操作，还可以给其配置 RBAC 规则。</p>
+<p data-nodeid="2621">我们还能开发自定义的控制器，来感知和操作这些自定义的 API。这一部分我会在下一讲中介绍。</p>
+<p data-nodeid="2622">我们在创建 CRD 的时候，还可以一起定义 /status 和 /scale 子资源，如下所示：</p>
+<pre class="lang-yaml hljs" data-nodeid="2623"><code data-language="yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">apiextensions.k8s.io/v1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">CustomResourceDefinition</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">crontabs.stable.example.com</span>
+<span class="hljs-attr">spec:</span>
+  <span class="hljs-attr">group:</span> <span class="hljs-string">stable.example.com</span>
+  <span class="hljs-attr">versions:</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">v1</span>
+      <span class="hljs-attr">served:</span> <span class="hljs-literal">true</span>
+      <span class="hljs-attr">storage:</span> <span class="hljs-literal">true</span>
+      <span class="hljs-attr">schema:</span>
+        <span class="hljs-attr">openAPIV3Schema:</span>
+          <span class="hljs-attr">type:</span> <span class="hljs-string">object</span>
+          <span class="hljs-attr">properties:</span>
+            <span class="hljs-attr">spec:</span>
+              <span class="hljs-attr">type:</span> <span class="hljs-string">object</span>
+              <span class="hljs-attr">properties:</span>
+                <span class="hljs-attr">cronSpec:</span>
+                  <span class="hljs-attr">type:</span> <span class="hljs-string">string</span>
+                <span class="hljs-attr">image:</span>
+                  <span class="hljs-attr">type:</span> <span class="hljs-string">string</span>
+                <span class="hljs-attr">replicas:</span>
+                  <span class="hljs-attr">type:</span> <span class="hljs-string">integer</span>
+            <span class="hljs-attr">status:</span>
+              <span class="hljs-attr">type:</span> <span class="hljs-string">object</span>
+              <span class="hljs-attr">properties:</span>
+                <span class="hljs-attr">replicas:</span>
+                  <span class="hljs-attr">type:</span> <span class="hljs-string">integer</span>
+                <span class="hljs-attr">labelSelector:</span>
+                  <span class="hljs-attr">type:</span> <span class="hljs-string">string</span>
+      <span class="hljs-comment"># subresources 描述定制资源的子资源</span>
+      <span class="hljs-attr">subresources:</span>
+        <span class="hljs-comment"># status 启用 status 子资源</span>
+        <span class="hljs-attr">status:</span> <span class="hljs-string">{}</span>
+        <span class="hljs-comment"># scale 启用 scale 子资源</span>
+        <span class="hljs-attr">scale:</span>
+          <span class="hljs-comment"># specReplicasPath 定义定制资源中对应 scale.spec.replicas 的 JSON 路径</span>
+          <span class="hljs-attr">specReplicasPath:</span> <span class="hljs-string">.spec.replicas</span>
+          <span class="hljs-comment"># statusReplicasPath 定义定制资源中对应 scale.status.replicas 的 JSON 路径 </span>
+          <span class="hljs-attr">statusReplicasPath:</span> <span class="hljs-string">.status.replicas</span>
+          <span class="hljs-comment"># labelSelectorPath  定义定制资源中对应 scale.status.selector 的 JSON 路径 </span>
+          <span class="hljs-attr">labelSelectorPath:</span> <span class="hljs-string">.status.labelSelector</span>
+  <span class="hljs-attr">scope:</span> <span class="hljs-string">Namespaced</span>
+  <span class="hljs-attr">names:</span>
+    <span class="hljs-attr">plural:</span> <span class="hljs-string">crontabs</span>
+    <span class="hljs-attr">singular:</span> <span class="hljs-string">crontab</span>
+    <span class="hljs-attr">kind:</span> <span class="hljs-string">CronTab</span>
+    <span class="hljs-attr">shortNames:</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-string">ct</span>
+</code></pre>
+<p data-nodeid="2624">这些子资源的定义，可以帮助我们在更新对象的时候，只更改期望的部分，比如只更新 status 部分，避免误更新 spec 部分。</p>
+<p data-nodeid="2625">同时 CRD 定义的时候还支持<a href="https://kubernetes.io/zh/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/#validation" data-nodeid="2686">合法性检查</a>、<a href="https://kubernetes.io/zh/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/#efaulting" data-nodeid="2690">设置默认值</a>等操作，你可以参照文档来实践。</p>
+<h3 data-nodeid="2626">写在最后</h3>
+<p data-nodeid="2627">当然，你也可以选择在其他地方定义新的 API，你可以参考这份<a href="https://kubernetes.io/zh/docs/concepts/extend-kubernetes/api-extension/custom-resources/#%E6%88%91%E6%98%AF%E5%90%A6%E5%BA%94%E8%AF%A5%E5%90%91%E6%88%91%E7%9A%84-kubernetes-%E9%9B%86%E7%BE%A4%E6%B7%BB%E5%8A%A0%E5%AE%9A%E5%88%B6%E8%B5%84%E6%BA%90" data-nodeid="2696">文档</a>确定是否需要在 Kubernetes 中定义 API，还是让你的 API 独立运行。</p>
+<p data-nodeid="2628">你可以通过这个<a href="https://kubernetes.io/zh/docs/concepts/extend-kubernetes/api-extension/custom-resources/#advanced-features-and-flexibility" data-nodeid="2701">网址</a>中的内容来比较 CRD 和 聚合 API 的功能差异。简单来说，CRD 更为易用，而聚合 API 更为灵活。</p>
+<p data-nodeid="2629">Kubernetes 提供这两种选项以满足不同用户的需求，这样就既不会牺牲易用性也不会牺牲灵活性。</p>
+<p data-nodeid="2630">对于聚合 API 和 CRD，你还有什么问题的话，欢迎在留言区留言。</p>
+<p data-nodeid="2631">下一讲，我将介绍如何通过 Operator 扩展 Kubernetes API。</p></div>
+
+</body></html>

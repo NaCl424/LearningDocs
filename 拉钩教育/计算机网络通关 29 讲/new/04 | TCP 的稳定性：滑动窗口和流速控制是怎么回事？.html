@@ -1,0 +1,1156 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>04 | TCP 的稳定性：滑动窗口和流速控制是怎么回事？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>04 | TCP 的稳定性：滑动窗口和流速控制是怎么回事？</h1><p data-nodeid="26040" class="">上一讲我们提到，TCP 利用发送字节数和接收字节数，这个二元组的唯一性保证顺序。今天我们继续“03 | TCP 的封包格式：TCP 为什么要粘包和拆包？”的话题，讨论下保证顺序的具体算法，以及如何在保证顺序的基础上，同时追求更高的吞吐量。我认为，这部分知识也是 TCP 协议中最有趣的部分——TCP 的滑动窗口算法。</p>
+<p data-nodeid="26041"><strong data-nodeid="26110">TCP 作为一个传输层协议，最核心的能力是传输。传输需要保证可靠性，还需要控制流速，这两个核心能力均由滑动窗口提供</strong>。而滑动窗口中解决的问题，是你在今后的工作中可以长期使用的，比如设计一个分布式的 RPC 框架、实现一个消息队列或者分布式的文件系统等。</p>
+<p data-nodeid="26042">所以请你带着今天的问题“<strong data-nodeid="26116">滑动窗口和流速控制是怎么回事？</strong>”开始今天的学习吧！</p>
+<h3 data-nodeid="26043">请求/响应模型</h3>
+<p data-nodeid="26044">TCP 中每个发送的请求都需要响应。如果一个请求没有收到响应，发送方就会认为这次发送出现了故障，会触发重发。</p>
+<p data-nodeid="26045">大体的模型，和下图很像。但是如果完全和下图一样，每一个请求收到响应之后，再发送下一个请求，吞吐量会很低。因为这样的设计，会产生网络的空闲时间，说白了，就是浪费带宽。带宽没有用满，意味着可以同时发送更多的请求，接收更多的响应。</p>
+<p data-nodeid="26046"><img src="https://s0.lgstatic.com/i/image6/M00/3A/FA/CioPOWCCKu-AJ2NHAACe0M3wDME839.png" alt="image (1).png" data-nodeid="26122"></p>
+<div data-nodeid="26047"><p style="text-align:center">TCP 请求/响应模型（吞吐量低）</p></div>
+<p data-nodeid="26048">一种改进的方式，就是让发送方有请求就发送出去，而不是等待响应。通过这样的处理方式，发送的数据连在了一起，响应的数据也连在了一起，吞吐量就提升了。</p>
+<p data-nodeid="26049"><img src="https://s0.lgstatic.com/i/image6/M00/3A/F2/Cgp9HWCCKvWAKGcEAACep0GQbI0182.png" alt="image (2).png" data-nodeid="26126"></p>
+<p data-nodeid="26050">但是如果可以同时发送的数据真的非常多呢？比如成百上千个 TCP 段都需要发送，这个时候带宽可能会不足。像下图这样，很多个数据封包都需要发送，该如何处理呢？</p>
+<p data-nodeid="26051"><img src="https://s0.lgstatic.com/i/image6/M01/3A/67/CioPOWB_iSGAJrYTAAA1X0Gw-4U285.png" alt="Drawing 2.png" data-nodeid="26130"></p>
+<h4 data-nodeid="26052">排队（Queuing）</h4>
+<p data-nodeid="26053">在这种情况下，通常我们会考虑<strong data-nodeid="26137">排队（Queuing）机制</strong>。</p>
+<p data-nodeid="26054"><img src="https://s0.lgstatic.com/i/image6/M00/3A/FA/CioPOWCCKwuAfBn5AABKdgtX54w997.png" alt="image (3).png" data-nodeid="26140"></p>
+<p data-nodeid="26055">考虑这样一个模型，如上图所示，在 TCP 层实现一个队列。新元素从队列的一端（左侧）排队，作为一个未发送的数据封包。开始发送的数据封包，从队列的右侧离开。你可以思考一下，这个模型有什么问题吗？</p>
+<p data-nodeid="26056">这样做就需要多个队列，我们要将未发送的数据从队列中取出，加入发送中的队列。然后再将发送中的数据，收到 ACK 的部分取出，放入已接收的队列。而发送中的封包，何时收到 ACK 是一件不确定的事情，这样使用队列似乎也有一定的问题。</p>
+<h3 data-nodeid="26057">滑动窗口（Sliding Window）</h3>
+<p data-nodeid="26058">在上面的模型当中，我们之所以觉得算法不好设计，是因为用错了数据结构。有个说法叫作如果程序写复杂了，那就是写错了。这里其实应该用一种叫作<strong data-nodeid="26149">滑动窗口的数据结构</strong>去实现。</p>
+<p data-nodeid="26059"><img src="https://s0.lgstatic.com/i/image6/M00/3A/F2/Cgp9HWCCKxSAROSpAAA_zThgiBA669.png" alt="image (4).png" data-nodeid="26152"></p>
+<p data-nodeid="26060">如上图所示：</p>
+<ul data-nodeid="26061">
+<li data-nodeid="26062">
+<p data-nodeid="26063">深绿色代表已经收到 ACK 的段</p>
+</li>
+<li data-nodeid="26064">
+<p data-nodeid="26065">浅绿色代表发送了，但是没有收到 ACK 的段</p>
+</li>
+<li data-nodeid="26066">
+<p data-nodeid="26067">白色代表没有发送的段</p>
+</li>
+<li data-nodeid="26068">
+<p data-nodeid="26069">紫色代表暂时不能发送的段</p>
+</li>
+</ul>
+<p data-nodeid="26070">下面我们重新设计一下不同类型封包的顺序，将已发送的数据放到最左边，发送中的数据放到中间，未发送的数据放到右边。假设我们最多同时发送 5 个封包，也就是窗口大小 = 5。窗口中的数据被同时发送出去，然后等待 ACK。如果一个封包 ACK 到达，我们就将它标记为已接收（深绿色）。</p>
+<p data-nodeid="26071">如下图所示，有两个封包的 ACK 到达，因此标记为绿色。</p>
+<p data-nodeid="26072"><img src="https://s0.lgstatic.com/i/image6/M00/3A/F2/Cgp9HWCCKxuAeVUyAAA_sW29BSM139.png" alt="image (5).png" data-nodeid="26162"></p>
+<p data-nodeid="26073">这个时候滑动窗口可以向右滑动，如下图所示：</p>
+<p data-nodeid="26074"><img src="https://s0.lgstatic.com/i/image6/M00/3A/FA/CioPOWCCKyCAMaA7AAA_zxqi_ig808.png" alt="image (6).png" data-nodeid="26166"></p>
+<h4 data-nodeid="26075">重传</h4>
+<p data-nodeid="26076">如果发送过程中，部分数据没能收到 ACK 会怎样呢？这就可能发生重传。</p>
+<p data-nodeid="26077">如果发生下图这样的情况，段 4 迟迟没有收到 ACK。</p>
+<p data-nodeid="26078"><img src="https://s0.lgstatic.com/i/image6/M00/3A/F2/Cgp9HWCCKyaAcZwMAABGuK2lrZY271.png" alt="image (7).png" data-nodeid="26172"></p>
+<p data-nodeid="26079">这个时候滑动窗口只能右移一个位置，如下图所示：</p>
+<p data-nodeid="26080"><img src="https://s0.lgstatic.com/i/image6/M00/3A/FA/CioPOWCCKyuADL6mAABGoEBZ_2Y287.png" alt="image (8).png" data-nodeid="26176"></p>
+<p data-nodeid="26081">在这个过程中，如果后来段 4 重传成功（接收到 ACK），那么窗口就会继续右移。如果段 4 发送失败，还是没能收到 ACK，那么接收方也会抛弃段 5、段 6、段 7。这样从段 4 开始之后的数据都需要重发。</p>
+<h4 data-nodeid="26082">快速重传</h4>
+<p data-nodeid="26083">在 TCP 协议中，如果接收方想丢弃某个段，可以选择不发 ACK。发送端超时后，会重发这个 TCP 段。而有时候，接收方希望催促发送方尽快补发某个 TCP 段，这个时候可以使用<strong data-nodeid="26184">快速重传</strong>能力。</p>
+<p data-nodeid="26084">例如段 1、段 2、段 4 到了，但是段 3 没有到。 接收方可以发送多次段 3 的 ACK。如果发送方收到多个段 3 的 ACK，就会重发段 3。这个机制称为<strong data-nodeid="26190">快速重传</strong>。这和超时重发不同，是一种催促的机制。</p>
+<p data-nodeid="26085">为了不让发送方误以为段 3 已经收到了，在快速重传的情况下，接收方即便收到发来的段 4，依然会发段 3 的 ACK（不发段 4 的 ACK），直到发送方把段 3 重传。</p>
+<h4 data-nodeid="26086">思考：窗口大小的单位是？</h4>
+<p data-nodeid="26087">请你思考另一个问题，窗口大小的单位是多少呢？在上面所有的图片中，窗口大小是 TCP 段的数量。<strong data-nodeid="26198">实际操作中，每个 TCP 段的大小不同，限制数量会让接收方的缓冲区不好操作，因此实际操作中窗口大小单位是字节数</strong>。</p>
+<h3 data-nodeid="26088">流速控制</h3>
+<p data-nodeid="26089"><strong data-nodeid="26204">发送、接收窗口的大小可以用来控制 TCP 协议的流速</strong>。窗口越大，同时可以发送、接收的数据就越多，支持的吞吐量也就越大。当然，窗口越大，如果数据发生错误，损失也就越大，因为需要重传越多的数据。</p>
+<p data-nodeid="26090">举个例子：我们用 RTT 表示 Round Trip Time，就是消息一去一回的时间。</p>
+<p data-nodeid="26091">假设 RTT = 1ms，带宽是 1mb/s。如果窗口大小为 1kb，那么 1ms 可以发送一个 1kb 的数据（含 TCP 头），1s 就可以发送 1mb 的数据，刚好可以将带宽用满。如果 RTT 再慢一些，比如 RTT = 10ms，那么这样的设计就只能用完 1/10 的带宽。 当然你可以提高窗口大小提高吞吐量，但是实际的模型会比这个复杂，因为还存在重传、快速重传、丢包等因素。</p>
+<p data-nodeid="26092">而实际操作中，也不可以真的把带宽用完，所以最终我们会使用折中的方案，在延迟、丢包率、吞吐量中进行选择，毕竟鱼和熊掌不可兼得。</p>
+<h3 data-nodeid="26093">总结</h3>
+<p data-nodeid="26094">为了提高传输速率，TCP 协议选择将多个段同时发送，为了让这些段不至于被接收方拒绝服务，在发送前，双方要协商好发送的速率。但是我们不可能完全确定网速，所以协商的方式，就变成确定窗口大小。</p>
+<p data-nodeid="26095">有了窗口，发送方利用滑动窗口算法发送消息；接收方构造缓冲区接收消息，并给发送方 ACK。滑动窗口的实现只需要数组和少量的指针即可，是一个非常高效的算法。像这种算法，简单又实用，比如求一个数组中最大的连续 k 项和，就可以使用滑动窗口算法。如果你对这个问题感兴趣，不妨用你最熟悉的语言尝试解决一下。</p>
+<p data-nodeid="26096">那么，现在你可以尝试来回答本讲关联的面试题目：<strong data-nodeid="26216">滑动窗口和流速控制是怎么回事</strong>？</p>
+<p data-nodeid="26097">【<strong data-nodeid="26226">解析</strong>】<strong data-nodeid="26227">滑动窗口是 TCP 协议控制可靠性的核心</strong>。发送方将数据拆包，变成多个分组。然后将数据放入一个拥有滑动窗口的数组，依次发出，仍然遵循先入先出（FIFO）的顺序，但是窗口中的分组会一次性发送。窗口中序号最小的分组如果收到 ACK，窗口就会发生滑动；如果最小序号的分组长时间没有收到 ACK，就会触发整个窗口的数据重新发送。</p>
+<p data-nodeid="26098">另一方面，在多次传输中，网络的平均延迟往往是相对固定的，这样 TCP 协议可以通过双方协商窗口大小控制流速。补充下，上面我们说的分组和 TCP 段是一个意思。</p>
+<h3 data-nodeid="26099">思考题</h3>
+<p data-nodeid="26100"><strong data-nodeid="26234">最后，再给你出一道思考题：既然发送方有窗口，那么接收方也需要有窗口吗</strong>？</p>
+<p data-nodeid="26101">我建议你不要查资料，可以把你的想法写在留言区，我们一起讨论。如果你觉得今天的内容对你有所启发，欢迎分享给身边的朋友。期待看到你的思考！</p>
+<p data-nodeid="27445" class="te-preview-highlight">这一讲就到这里，发现求知的乐趣，我是林䭽，感谢你学习本次课程，下一讲我们将学习“05&nbsp; | UDP 协议： TCP 协议和 UDP 协议的优势和劣势？”。</p></div>
+
+</body></html>

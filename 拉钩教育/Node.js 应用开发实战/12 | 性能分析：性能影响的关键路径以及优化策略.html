@@ -1,0 +1,1231 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>12 | 性能分析：性能影响的关键路径以及优化策略</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>12 | 性能分析：性能影响的关键路径以及优化策略</h1><p data-nodeid="191125">模块一的<a href="https://kaiwu.lagou.com/course/courseInfo.htm?courseId=694#/detail/pc?id=6788&amp;fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="191666">《06 | 哪些因素会影响 Node.js 性能？》</a>，我们详细讲解了影响到 Node.js 性能的一些因素，但是在实际开发过程中，我们应该如何去定位影响性能的关键因素呢？定位到性能问题后，又该如何去优化这部分功能呢？以上就是本讲要介绍的核心知识点。</p>
+<h3 data-nodeid="191126">工具介绍</h3>
+<p data-nodeid="191127">在讲解性能分析实践之前，我们先来看看性能分析所应用的两个比较关键的工具：</p>
+<ul data-nodeid="191128">
+<li data-nodeid="191129">
+<p data-nodeid="191130">压测所使用到的 WRK（Windows Research Kernel）；</p>
+</li>
+<li data-nodeid="191131">
+<p data-nodeid="191132">性能分析所使用到的 Chrome 分析工具 JavaScript Profile。</p>
+</li>
+</ul>
+<h4 data-nodeid="191133">WRK 的安装及参数</h4>
+<p data-nodeid="191134">在压测工具上可选择的比较多，比如 Apache-ab 压测工具、Siege 及本讲所应用的 WRK。<strong data-nodeid="191678">为了能够更好地利用多核的多线程并发测试，这里我们选择使用 WRK 来作为压测工具</strong>。我们看下该工具的安装以及一些常用参数。</p>
+<ul data-nodeid="191135">
+<li data-nodeid="191136">
+<p data-nodeid="191137">在<strong data-nodeid="191684">Mac</strong>上使用软件包管理工具 Homebrew 来安装，使用如下命令即可：</p>
+</li>
+</ul>
+<pre class="lang-powershell" data-nodeid="191138"><code data-language="powershell">brew install wrk
+</code></pre>
+<ul data-nodeid="191139">
+<li data-nodeid="191140">
+<p data-nodeid="191141">在<strong data-nodeid="191690">Linux</strong>上依次执行……的命令安装就可以（如果 Linux 上没有安装 GCC、Make 或者 Git，就需要先安装这几个工具）。</p>
+</li>
+</ul>
+<pre class="lang-powershell" data-nodeid="191142"><code data-language="powershell"><span class="hljs-comment">#下载命令</span>
+git clone https://github.com/wg/wrk.git 
+<span class="hljs-comment">#切换路径到wrk目录下</span>
+<span class="hljs-built_in">cd</span> wrk  
+<span class="hljs-comment">#使用make命令编译环境</span>
+ 
+make 
+</code></pre>
+<ul data-nodeid="191143">
+<li data-nodeid="191144">
+<p data-nodeid="191145">在<strong data-nodeid="191696">Windows</strong>上就非常遗憾了，因为这个工具不支持 Windows。但如果你是 Windows 10，可以切换到 Ubuntu 子系统的方式来安装，或者在 Windows 上安装 Linux 虚拟机也是可以的。</p>
+</li>
+</ul>
+<p data-nodeid="191146">成功安装后，你可以在命令行使用……命令查看具体的参数说明和介绍：</p>
+<pre class="lang-powershell" data-nodeid="191147"><code data-language="powershell">wrk
+</code></pre>
+<p data-nodeid="191148">这一讲因为需要进行并发请求的验证，所以我们会使用下面的压测命令：</p>
+<pre class="lang-powershell" data-nodeid="191149"><code data-language="powershell">wrk <span class="hljs-literal">-t4</span> <span class="hljs-literal">-c300</span> <span class="hljs-literal">-d20s</span> https://www.baidu.com/
+</code></pre>
+<p data-nodeid="191150">其参数说明如下：</p>
+<ul data-nodeid="191151">
+<li data-nodeid="191152">
+<p data-nodeid="191153">-t 代表的是启动 4 个线程；</p>
+</li>
+<li data-nodeid="191154">
+<p data-nodeid="191155">-c 代表的是并发数，300 个并发请求；</p>
+</li>
+<li data-nodeid="191156">
+<p data-nodeid="191157">-d 代表的是持续时长，20s 就是 20 秒。</p>
+</li>
+</ul>
+<p data-nodeid="191158">我们运行上面的命令后，会有相应的压测结果，如下所示：</p>
+<pre class="lang-powershell" data-nodeid="191159"><code data-language="powershell">Running <span class="hljs-number">20</span>s test <span class="hljs-selector-tag">@</span> https://www.baidu.com/
+&nbsp; <span class="hljs-number">10</span> threads and <span class="hljs-number">300</span> connections
+&nbsp; Thread Stats &nbsp; Avg&nbsp; &nbsp; &nbsp; Stdev &nbsp; &nbsp; Max &nbsp; +/- Stdev
+&nbsp; &nbsp; Latency &nbsp; <span class="hljs-number">789.93</span>ms&nbsp; <span class="hljs-number">393.84</span>ms &nbsp; <span class="hljs-number">2.00</span>s&nbsp; &nbsp; <span class="hljs-number">76.57</span>%
+&nbsp; &nbsp; Req/Sec&nbsp; &nbsp; <span class="hljs-number">14.33</span> &nbsp; &nbsp; <span class="hljs-number">10.17</span>&nbsp; &nbsp; <span class="hljs-number">59.00</span> &nbsp; &nbsp; <span class="hljs-number">72.31</span>%
+&nbsp; <span class="hljs-number">2252</span> requests <span class="hljs-keyword">in</span> <span class="hljs-number">20.10</span>s, <span class="hljs-number">34.49</span>MB read
+&nbsp; Socket errors: connect <span class="hljs-number">60</span>, read <span class="hljs-number">0</span>, <span class="hljs-built_in">write</span> <span class="hljs-number">0</span>, timeout <span class="hljs-number">481</span>
+Requests/sec:&nbsp; &nbsp; <span class="hljs-number">112.05</span>
+Transfer/sec:&nbsp; &nbsp; &nbsp; <span class="hljs-number">1.72</span>MB
+</code></pre>
+<p data-nodeid="191160">上面的结果，我们核心应该关注的是 Requests/sec 为 QPS，其次也需要了解平均耗时的情况，也就是上面的 Avg 789.93ms，以及失败超时的情况，即上面 socket errors 的 timeout 481。</p>
+<h4 data-nodeid="191161">Chrome 分析工具 JavaScript Profiler</h4>
+<p data-nodeid="191162">在压测下，如果发现请求 QPS 非常低、平均耗时非常长，或者失败率非常高的话，这时就需要将 CPU 信息进行保存，然后用 Chrome 的 JavaScript Profiler 工具来进行分析。</p>
+<p data-nodeid="191163">方法也很简单，用 Chrome 的开发者工具 More-tools → JavaScript Profiler → Load，读取 CPU Profile，查看火焰图（如图 1 所示）。</p>
+<p data-nodeid="199540" class=""><img src="https://s0.lgstatic.com/i/image6/M00/34/08/CioPOWBwD02Ab_ffAAK5Evk7rNM190.png" alt="Drawing 0.png" data-nodeid="199544"></p>
+<div data-nodeid="199541"><p style="text-align:center">图 1 Chrome 打开 JavaScript Profiler 指引图</p></div>
+
+
+
+<p data-nodeid="191166">要使用这个功能，需要在 Node.js 中对 CPU 进行采集，采集的方式需要使用 v8-profiler 这个库（如果你的 Node.js 版本大于 10，则需要使用 v8-profiler-next 这个库），在上一讲中已经应用过该工具分析过内存泄漏问题。</p>
+<h4 data-nodeid="191167">简单 Demo 演示</h4>
+<p data-nodeid="191168">为了演示这个分析方式，我们写一个最简单的测试代码，如下所示：</p>
+<pre class="lang-javascript" data-nodeid="191169"><code data-language="javascript"><span class="hljs-keyword">const</span> http = <span class="hljs-built_in">require</span>(<span class="hljs-string">'http'</span>);
+<span class="hljs-comment">// 引入 v8-profiler 库，可以作为一个中间件来实现</span>
+<span class="hljs-keyword">const</span> v8Profiler = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./lib/v8_profiler'</span>);
+<span class="hljs-comment">/**
+ * 
+ * 创建 http 服务，简单返回
+ */</span>
+<span class="hljs-keyword">const</span> server = http.createServer(<span class="hljs-function">(<span class="hljs-params">req, res</span>) =&gt;</span> {
+    res.write(<span class="hljs-string">'hello world'</span>);
+    res.end();
+});
+<span class="hljs-comment">/**
+ * 
+ * 启动服务，并开始执行 v8 profiler 的采集工作
+ */</span>
+server.listen(<span class="hljs-number">3000</span>, () =&gt; {
+    <span class="hljs-built_in">console</span>.log(<span class="hljs-string">'server start http://127.0.0.1:3000'</span>);
+    v8Profiler.start();
+});
+</code></pre>
+<p data-nodeid="191170">在上面代码中的第二行，我们引入了一个自身写的 v8-profiler 库，接下来看看这个库的逻辑。</p>
+<pre class="lang-javascript" data-nodeid="191171"><code data-language="javascript"><span class="hljs-meta">'use strict'</span>;
+<span class="hljs-keyword">const</span> v8Profiler = <span class="hljs-built_in">require</span>(<span class="hljs-string">'v8-profiler-next'</span>);
+<span class="hljs-keyword">const</span> fs = <span class="hljs-built_in">require</span>(<span class="hljs-string">'fs'</span>);
+<span class="hljs-comment">// 设置采集数据保存的文件名</span>
+<span class="hljs-keyword">const</span> title = <span class="hljs-string">'example'</span>;
+<span class="hljs-built_in">module</span>.exports = {
+    <span class="hljs-string">'start'</span> : <span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+        <span class="hljs-comment">// 启动采集，如果需要定时采集，可以将 title 设置为一个动态的根据时间变化的值</span>
+        v8Profiler.startProfiling(title, <span class="hljs-literal">true</span>);
+        setTimeout(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> { <span class="hljs-comment">// 30 秒后采集并导出</span>
+          <span class="hljs-keyword">const</span> profile = v8Profiler.stopProfiling(title);
+          profile.export(<span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">error, result</span>) </span>{ <span class="hljs-comment">// 将内容写入指定文件</span>
+            fs.writeFileSync(<span class="hljs-string">\`./cpu_profiler/<span class="hljs-subst">\${title}</span>.cpuprofile\`</span>, result);
+            profile.delete();
+          });
+        }, <span class="hljs-number">30</span> * <span class="hljs-number">1000</span>);
+    }
+};
+</code></pre>
+<p data-nodeid="191172"><strong data-nodeid="191720">上面代码中的 start 方法，就是核心的采集代码</strong>。v8-Profiler 开始采集，使用 title 作为唯一标示，在 30 秒后，停止这个 title 的采集，并获取数据保存在文件中。</p>
+<p data-nodeid="191173">为了验证效果，你可以根据我们下面的步骤来进行分析（代码源码保存在<a href="https://github.com/love-flutter/nodejs-column?fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="191724">GitHub</a>中，自行下载后，可按照下面步骤执行）。</p>
+<p data-nodeid="191174">（1）打开项目，进入项目根目录，执行命令启动服务。</p>
+<pre class="lang-java" data-nodeid="191175"><code data-language="java">npm run test
+</code></pre>
+<p data-nodeid="191176">（2）打开另外一个命令窗口，开始执行压测程序。</p>
+<pre class="lang-java" data-nodeid="191177"><code data-language="java">wrk -t2 -c300 -d20s http:<span class="hljs-comment">//127.0.0.1:3000/</span>
+</code></pre>
+<p data-nodeid="191178">（3）大概 30 秒后，项目目录下的 cpu_profiler 文件夹下会生成 example.cpuprofile 文件。</p>
+<p data-nodeid="191179">（4）打开 Chrome 工具中的 JavaScript Profiler，然后 load 刚才项目目录下的 cpu_profiler/example.cpuprofile 文件，就可以看到如图 2 所示的结果。</p>
+<p data-nodeid="204356" class=""><img src="https://s0.lgstatic.com/i/image6/M01/33/FF/Cgp9HWBwD1yAaayGAAO16nRrzQQ497.png" alt="Drawing 1.png" data-nodeid="204360"></p>
+<div data-nodeid="204357"><p style="text-align:center">图 2 cpuprofile 演示结果</p></div>
+
+
+
+<p data-nodeid="191182">从上面的结果可以看到相应的单个执行时间和总的耗时。如果性能较慢，你可以参照标准的结果来进行分析，或者对比一个性能较好、一个性能较差的执行结果。为了让你更清晰地了解这些，下面我将从实践来进行分析。</p>
+<h3 data-nodeid="191183">实践分析</h3>
+<p data-nodeid="191184">在分析任何数据之前，首先必须有一个标准的数据进行比较，如果你用的是 Express、Eggjs 等框架，需要做一个完全空转的数据作为标准分析数据。在本讲，由于我们没有用任何框架，所以需要设计一个完全空转的 HTTP 服务来作为标准的分析数据。</p>
+<h4 data-nodeid="191185">标准数据</h4>
+<p data-nodeid="191186">这里我们还是用上面“简单 Demo 演示”中的代码，然后通过 WRK 下面的压测命令来压测，看下具体的数据情况。</p>
+<pre class="lang-java" data-nodeid="191187"><code data-language="java">wrk -t2 -c300 -d20s http:<span class="hljs-comment">//127.0.0.1:3000/</span>
+</code></pre>
+<p data-nodeid="191188">压测得到的结果如表 1 所示。</p>
+<p data-nodeid="209047"><img src="https://s0.lgstatic.com/i/image6/M00/34/08/CioPOWBwD2aAAtjKAABBXwAaJE8675.png" alt="Drawing 2.png" data-nodeid="209050"></p>
+
+
+
+
+<p data-nodeid="191219">有了这份数据后，我们再来逐个分析以下问题。</p>
+<h4 data-nodeid="191220">CPU 计算耗时</h4>
+<p data-nodeid="191221">为了验证效果，这里我们写一个 CPU 计算耗时的逻辑，然后继续压测。这点在模块一的<a href="https://kaiwu.lagou.com/course/courseInfo.htm?courseId=694#/detail/pc?id=6788&amp;fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="191788">《06 | 哪些因素会影响 Node.js 性能？》</a>已经有一些例子，我们拿一个出来尝试一下，比如 MD5 计算的逻辑，代码如下：</p>
+<pre class="lang-javascript" data-nodeid="191222"><code data-language="javascript">crypto = <span class="hljs-built_in">require</span>(<span class="hljs-string">'crypto'</span>);
+<span class="hljs-built_in">module</span>.exports = <span class="hljs-function">(<span class="hljs-params">content</span>) =&gt;</span> {
+    <span class="hljs-keyword">return</span> crypto.createHash(<span class="hljs-string">'md5'</span>).update(content).digest(<span class="hljs-string">"hex"</span>)
+}
+</code></pre>
+<p data-nodeid="191223">核心逻辑就是应用 crypto 来生成 MD5 加密数据，为了效果更好，我们在入口文件 index.js 中多调用几次，这里只修改 server 中的代码逻辑，代码如下：</p>
+<pre class="lang-javascript" data-nodeid="191224"><code data-language="javascript"><span class="hljs-keyword">const</span> server = http.createServer(<span class="hljs-function">(<span class="hljs-params">req, res</span>) =&gt;</span> {
+    <span class="hljs-comment">// 设置返回的字符串</span>
+    <span class="hljs-keyword">let</span> ret;
+    <span class="hljs-comment">// 加密一组数据</span>
+    <span class="hljs-keyword">const</span> md5List = [<span class="hljs-string">'hello'</span>, <span class="hljs-string">'Node.js'</span>, <span class="hljs-string">'lagou'</span>, <span class="hljs-string">'is'</span>, <span class="hljs-string">'great'</span>];
+    md5List.forEach( <span class="hljs-function">(<span class="hljs-params">str</span>)=&gt;</span> {
+        <span class="hljs-keyword">if</span>(ret){
+            ret = <span class="hljs-string">\`<span class="hljs-subst">\${ret}</span> <span class="hljs-subst">\${getMd5(str)}</span>\`</span>;
+        } <span class="hljs-keyword">else</span> {
+            ret = getMd5(str)
+        }
+    });
+    res.write(ret);
+    res.end();
+});
+</code></pre>
+<p data-nodeid="191225">修改完成后，我们再按照简单 Demo 中的四个步骤压测数据即可：</p>
+<ul data-nodeid="191226">
+<li data-nodeid="191227">
+<p data-nodeid="191228">启动服务</p>
+</li>
+<li data-nodeid="191229">
+<p data-nodeid="191230">开始压测</p>
+</li>
+<li data-nodeid="191231">
+<p data-nodeid="191232">等待 CPU 采集</p>
+</li>
+<li data-nodeid="191233">
+<p data-nodeid="191234">分析压测数据</p>
+</li>
+</ul>
+<p data-nodeid="191235">接下来我们看下压测后的数据，如表 2 所示。</p>
+<p data-nodeid="211325" class=""><img src="https://s0.lgstatic.com/i/image6/M00/34/08/CioPOWBwD3SAIEtvAABS4dW-YPo314.png" alt="Drawing 3.png" data-nodeid="211328"></p>
+
+
+
+<p data-nodeid="191274">这一对比可以非常清晰地看到，相对于标准服务，CPU 耗时服务在各方面（平均耗时、最低耗时、最大耗时以及失败率）都差很多，在性能上两者是有比较大的落差的，如果我们不知道是因为 MD5 影响到 CPU 计算导致的，那么就需要分析 CPU 耗时的情况了。</p>
+<p data-nodeid="191275">接下来我们打开 Chrome JavaScript Profiler 工具，可以看到如图 3 所示的结果。</p>
+<p data-nodeid="215563"><img src="https://s0.lgstatic.com/i/image6/M00/34/08/CioPOWBwD3uADtMhAAMNNH1bIOY973.png" alt="Drawing 4.png" data-nodeid="215567"></p>
+<div data-nodeid="215564" class=""><p style="text-align:center">图 3 CPU 压测 CPU 耗时分析</p></div>
+
+
+
+<p data-nodeid="191278">几个耗时较长的函数，例如 digest、Hash 以及 update 等，都是在 MD5 计算中的逻辑，因此可以非常清晰地了解到，在 MD5 计算方面会对 Node.js 的服务有一个比较大的性能影响，因此在开发时尽量减少或者避免这种类似的计算服务。</p>
+<h4 data-nodeid="191279">网络 I/O</h4>
+<p data-nodeid="191280">为了演示效果，我们<strong data-nodeid="191858">先创建一个新的服务</strong>，这个服务在原来的“简单 Demo 演示”基础上增加了一个延迟返回的效果，具体代码在 api_server 文件项目中，核心代码如下：</p>
+<pre class="lang-javascript" data-nodeid="191281"><code data-language="javascript"><span class="hljs-keyword">const</span> http = <span class="hljs-built_in">require</span>(<span class="hljs-string">'http'</span>);
+<span class="hljs-comment">/**
+ * 
+ * 创建 http 服务，简单返回
+ */</span>
+<span class="hljs-keyword">const</span> server = http.createServer(<span class="hljs-function">(<span class="hljs-params">req, res</span>) =&gt;</span> {
+    setTimeout(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> { <span class="hljs-comment">// 延迟 1 秒返回</span>
+        res.write(<span class="hljs-string">'this is api result'</span>);
+        res.end();
+    }, <span class="hljs-number">1</span> * <span class="hljs-number">1000</span>);
+});
+<span class="hljs-comment">/**
+ * 
+ * 启动服务，并开始执行 v8 profiler 的采集工作
+ */</span>
+server.listen(<span class="hljs-number">4000</span>, () =&gt; {
+    <span class="hljs-built_in">console</span>.log(<span class="hljs-string">'server start http://127.0.0.1:4000'</span>);
+});
+</code></pre>
+<p data-nodeid="191282">核心代码是在 setTimeout 延迟返回，其次修改了以下监听端口，从 3000 修改为 4000。</p>
+<p data-nodeid="191283"><strong data-nodeid="191868">接下来我们创建一个 network_io</strong>，实现调用 http://127.0.0.1:4000 这个服务，从而实现网络 I/O 操作。首先还是实现一个 call_api 的服务，该服务会应用到 request 这个 npm 库（后续这个库不会维护了，暂时还没有替代方案，除非自己手动实现），代码如下：</p>
+<pre class="lang-javascript" data-nodeid="191284"><code data-language="javascript"><span class="hljs-comment">// 引入 request 库，需要在 package.json 中申明，并且 npm install</span>
+<span class="hljs-keyword">const</span> request = <span class="hljs-built_in">require</span>(<span class="hljs-string">'request'</span>);
+<span class="hljs-comment">/**
+ * 
+ * request 调用外部 api
+ * @param {*} apiLink string
+ * @param {*} callback funtion
+ * 
+ */</span>
+<span class="hljs-built_in">module</span>.exports = <span class="hljs-function">(<span class="hljs-params">apiLink, callback</span>) =&gt;</span> {
+    request(apiLink, <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">error, response, body</span>) </span>{
+        <span class="hljs-keyword">if</span>(error) {
+            callback(<span class="hljs-literal">false</span>);
+        } <span class="hljs-keyword">else</span> {
+            callback(body);
+        }
+    });
+}
+</code></pre>
+<p data-nodeid="191285">这部分代码主要是应用 request 模块调用 apiLink 服务，并获取执行结果。通过回调的方式返回具体的数据，也就是上面的参数 callback。</p>
+<p data-nodeid="191286">最后我们再来看下 index.js 中的核心部分 server 的修改，代码如下：</p>
+<pre class="lang-javascript" data-nodeid="191287"><code data-language="javascript"><span class="hljs-comment">/**
+ * 
+ * 创建 http 服务，简单返回
+ */</span>
+<span class="hljs-keyword">const</span> server = http.createServer(<span class="hljs-function">(<span class="hljs-params">req, res</span>) =&gt;</span> {
+    callApi(<span class="hljs-string">'http://127.0.0.1:4000'</span>, (ret) =&gt; { <span class="hljs-comment">// 调用 4000 服务，并显示返回结果</span>
+        <span class="hljs-keyword">if</span>(ret) {
+            res.write(ret);
+        } <span class="hljs-keyword">else</span> {
+            res.write(<span class="hljs-string">'call api server error'</span>);
+        }
+        res.end();
+    });
+});
+</code></pre>
+<p data-nodeid="191288">接下来就启动两个服务，分别打开地址：</p>
+<ul data-nodeid="191289">
+<li data-nodeid="191290">
+<p data-nodeid="191291"><a href="http://127.0.0.1:4000?fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="191874">http://127.0.0.1:4000</a></p>
+</li>
+<li data-nodeid="191292">
+<p data-nodeid="191293"><a href="http://127.0.0.1:3000?fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="191877">http://127.0.0.1:3000</a></p>
+</li>
+</ul>
+<p data-nodeid="191294">看下是否正常响应，正常返回数据后，我们再启动对 3000 服务的压测，运行如下命令：</p>
+<pre class="lang-java" data-nodeid="191295"><code data-language="java">wrk -t2 -c300 -d20s http:<span class="hljs-comment">//127.0.0.1:3000/</span>
+</code></pre>
+<p data-nodeid="191296">接下来我们看下压测后的数据，如表 3 所示：</p>
+<p data-nodeid="217680" class=""><img src="https://s0.lgstatic.com/i/image6/M00/34/00/Cgp9HWBwD4-AFJLoAABlk46DdAs957.png" alt="Drawing 5.png" data-nodeid="217683"></p>
+
+
+
+<p data-nodeid="191343">拿到压测数据后，同样按照 CPU 分析方法，可以看到如图 4 所示的性能分析结果。</p>
+<p data-nodeid="221527" class=""><img src="https://s0.lgstatic.com/i/image6/M01/34/00/Cgp9HWBwD5mAFR0WAAHjSmqkmd0847.png" alt="Drawing 6.png" data-nodeid="221531"></p>
+<div data-nodeid="221528"><p style="text-align:center">图 4 网络 I/O 性能分析数据</p></div>
+
+
+
+<p data-nodeid="191346">其中有一个 connect，该模块在 net.js 中，这里就可以得到是网络 I/O 引起的问题。</p>
+<p data-nodeid="191347">最后我们再来看下 磁盘 I/O 的问题。</p>
+<h4 data-nodeid="191348">磁盘 I/O</h4>
+<p data-nodeid="191349">这里主要使用 Node.js 的 fs 模块来读取本地的文件，并显示返回文件的内容，核心代码是 server 回调部分，代码如下：</p>
+<pre class="lang-javascript" data-nodeid="191350"><code data-language="javascript"><span class="hljs-keyword">const</span> server = http.createServer(<span class="hljs-function">(<span class="hljs-params">req, res</span>) =&gt;</span> {
+    <span class="hljs-keyword">let</span> ret = fs.readFileSync(<span class="hljs-string">'./test_file.conf'</span>);
+    res.write(ret);
+    res.end();
+});
+</code></pre>
+<p data-nodeid="191351">接下来，我们同样用如下命令来启动压测服务：</p>
+<pre class="lang-java" data-nodeid="191352"><code data-language="java">wrk -t2 -c300 -d20s http:<span class="hljs-comment">//127.0.0.1:3000/</span>
+</code></pre>
+<p data-nodeid="191353">压测后将得到如表格 4 所示的结果。</p>
+<p data-nodeid="223452" class=""><img src="https://s0.lgstatic.com/i/image6/M00/34/08/CioPOWBwD6SAOvwRAAB4GHKuanE270.png" alt="Drawing 7.png" data-nodeid="223455"></p>
+
+
+
+<p data-nodeid="191408">从结果看也是存在一定损耗的，具体在哪方面影响到性能，同样用 Chrome 工具载入该服务采集的 CPU 信息，如图 5 所示。</p>
+<p data-nodeid="226862"><img src="https://s0.lgstatic.com/i/image6/M00/34/00/Cgp9HWBwD6yATYtxAAHRgb9iz4o952.png" alt="Drawing 8.png" data-nodeid="226866"></p>
+<div data-nodeid="226863" class=""><p style="text-align:center">图 5 磁盘 I/O CPU 采集信息</p></div>
+
+
+
+<p data-nodeid="191411">从图 5 中可以非常清晰地看到前面几个耗时较长的都是关于文件读写相关的模块，如上面红色圈里面的信息。</p>
+<h3 data-nodeid="191412">优化以及效果</h3>
+<p data-nodeid="191413">上面已经介绍到了那么多性能影响的部分，那么接下来看看如何进行一些优化，来提升性能。</p>
+<h4 data-nodeid="191414">CPU 计算耗时</h4>
+<p data-nodeid="191415">这部分只能说减少操作，或者减少运算。像我们上面的例子，如果都是一样的 MD5 计算，那么增加一个短时间的缓存就可以了。当然这里我们可以直接用内存来缓存（实际开发过程中，不能使用内存的方式，因为会造成内存使用越来越大，一般使用共享内存，并短时间保存即可），代码如下（代码保存在 cpu_opt 中）：</p>
+<pre class="lang-javascript" data-nodeid="191416"><code data-language="javascript">crypto = <span class="hljs-built_in">require</span>(<span class="hljs-string">'crypto'</span>);
+<span class="hljs-comment">// 保存缓存信息</span>
+<span class="hljs-keyword">const</span> md5Cache = {};
+<span class="hljs-built_in">module</span>.exports = <span class="hljs-function">(<span class="hljs-params">content</span>) =&gt;</span> { 
+    <span class="hljs-keyword">if</span>(md5Cache[content]) { <span class="hljs-comment">// 判断是否存在缓存信息，存在则直接返回</span>
+        <span class="hljs-keyword">return</span> md5Cache[content]
+    }
+    <span class="hljs-comment">/** 不存在则计算并返回 */</span>
+    md5Cache[content] = crypto.createHash(<span class="hljs-string">'md5'</span>).update(content).digest(<span class="hljs-string">"hex"</span>);
+    <span class="hljs-keyword">return</span> md5Cache[content];
+}
+</code></pre>
+<p data-nodeid="191417"><strong data-nodeid="192020">核心就是在原来的基础上，增加计算的缓存，避免多次相同的计算</strong>，接下来我们压测后看看实际的效果数据，并与之前的进行对比，得到的结果如表 5 所示。</p>
+<p data-nodeid="228565" class=""><img src="https://s0.lgstatic.com/i/image6/M01/34/00/Cgp9HWBwD7aAKWHYAABelIOMBeE096.png" alt="Drawing 9.png" data-nodeid="228568"></p>
+
+
+
+<p data-nodeid="191464">对比数据后，可以看到已经非常好了，已经和标准数据相差无几，QPS 和 标准服务也基本一致（这里比标准服务高，是因为本机测试，会有一定的起伏，是正常情况）。也就代表本次优化是达到了效果的。</p>
+<h4 data-nodeid="191465">网络 I/O</h4>
+<p data-nodeid="191466">网络 I/O 同样的办法也是增加缓存，避免重复的请求导致的问题。这里我们同样<strong data-nodeid="192085">用缓存的方式来保存请求结果</strong>，优化的代码如下（代码保存在 network_io_opt 中）：</p>
+<pre class="lang-javascript" data-nodeid="191467"><code data-language="javascript"><span class="hljs-comment">// 引入 request 库，需要在 package.json 中申明，并且 npm install</span>
+<span class="hljs-keyword">const</span> request = <span class="hljs-built_in">require</span>(<span class="hljs-string">'request'</span>);
+<span class="hljs-comment">// 缓存 api 请求结果数据</span>
+<span class="hljs-keyword">const</span> apiCacheData = {};
+<span class="hljs-comment">/**
+ * 
+ * request 调用外部 api
+ * @param {*} apiLink string
+ * @param {*} callback funtion
+ * 
+ */</span>
+<span class="hljs-built_in">module</span>.exports = <span class="hljs-function">(<span class="hljs-params">apiLink, callback</span>) =&gt;</span> {
+    <span class="hljs-keyword">if</span>(apiCacheData[apiLink]) {
+        <span class="hljs-keyword">return</span> callback(apiCacheData[apiLink]);
+    }
+    request(apiLink, <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">error, response, body</span>) </span>{
+        <span class="hljs-keyword">if</span>(error) {
+            callback(<span class="hljs-literal">false</span>);
+        } <span class="hljs-keyword">else</span> {
+            apiCacheData[apiLink] = body;
+            callback(body);
+        }
+    });
+}
+</code></pre>
+<p data-nodeid="191468"><strong data-nodeid="192090">其次为了服务性能考虑，我们可以考虑放弃部分超时请求，从而提升服务性能</strong>。避免因为部分请求返回慢，导致整体服务被 block 住，修改 request 部分增加超时处理，代码如下：</p>
+<pre class="lang-javascript" data-nodeid="191469"><code data-language="javascript"><span class="hljs-built_in">module</span>.exports = <span class="hljs-function">(<span class="hljs-params">apiLink, callback</span>) =&gt;</span> {
+    <span class="hljs-keyword">if</span>(apiCacheData[apiLink]) {
+        <span class="hljs-keyword">return</span> callback(apiCacheData[apiLink]);
+    }
+    request(apiLink, {<span class="hljs-attr">timeout</span>: <span class="hljs-number">3000</span>}, <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">error, response, body</span>) </span>{
+        <span class="hljs-keyword">if</span>(error) {
+            callback(<span class="hljs-literal">false</span>);
+        } <span class="hljs-keyword">else</span> {
+            apiCacheData[apiLink] = body;
+            callback(body);
+        }
+    });
+}
+</code></pre>
+<p data-nodeid="191470">实际情况需要根据具体的接口性能来设置这个超时时间，避免超时时间过度影响服务，也避免时间过长无法达到效果。</p>
+<p data-nodeid="191471">优化完成后，同样我们再跑一遍测试数据：</p>
+<ul data-nodeid="191472">
+<li data-nodeid="191473">
+<p data-nodeid="191474">首先还是先去 api_server 中启动 api 服务；</p>
+</li>
+<li data-nodeid="191475">
+<p data-nodeid="191476">接下来再启动本文件夹 network_io_opt 的服务；</p>
+</li>
+<li data-nodeid="191477">
+<p data-nodeid="191478">启动完成后，再进行压测。</p>
+</li>
+</ul>
+<p data-nodeid="191479" class="">可以得到表 6 的压测对比数据。</p>
+<p data-nodeid="230077" class=""><img src="https://s0.lgstatic.com/i/image6/M00/34/00/Cgp9HWBwD8GACAFLAABqJCdynds886.png" alt="Drawing 10.png" data-nodeid="230080"></p>
+
+
+
+<p data-nodeid="191526">从结果中可以看出优化效果非常明显，一个简单的优化就可以将原来 272.96 的 QPS 提升到 31503.58。</p>
+<p data-nodeid="191527">最后我们再来看看磁盘 I/O 的优化。</p>
+<h4 data-nodeid="191528">磁盘 I/O</h4>
+<p data-nodeid="191529"><strong data-nodeid="192163">磁盘 I/O 的优化分为读优化和写优化</strong>，优化的策略有：</p>
+<ul data-nodeid="191530">
+<li data-nodeid="191531">
+<p data-nodeid="191532">为了提升性能需要将同步修改异步，避免影响主线程的性能；</p>
+</li>
+<li data-nodeid="191533">
+<p data-nodeid="191534">读优化，必须增加必要的缓存，减少相同文件的重复读取；</p>
+</li>
+<li data-nodeid="191535">
+<p data-nodeid="191536">写优化，可以使用异步写文件的方式，先将写内容缓存到队列（如我们第一部分的第 08 讲的方案）；</p>
+</li>
+<li data-nodeid="191537">
+<p data-nodeid="191538">合并多次写操作，避免频繁打开文件，读写文件内容。</p>
+</li>
+</ul>
+<p data-nodeid="191539">当然对于本讲，我们着重优化 2 点：</p>
+<ul data-nodeid="191540">
+<li data-nodeid="191541">
+<p data-nodeid="191542">修改为异步</p>
+</li>
+<li data-nodeid="191543">
+<p data-nodeid="191544">增加缓存</p>
+</li>
+</ul>
+<p data-nodeid="191545">优化代码如下（代码在 disk_io_opt 中）：</p>
+<pre class="lang-javascript" data-nodeid="191546"><code data-language="javascript"><span class="hljs-keyword">const</span> server = http.createServer(<span class="hljs-function">(<span class="hljs-params">req, res</span>) =&gt;</span> {
+    fs.readFile(<span class="hljs-string">'./test_file.conf'</span>, (err, data) =&gt; {
+        <span class="hljs-keyword">if</span> (err) {
+            res.write(<span class="hljs-string">'error read file'</span>);
+            res.end();
+        } <span class="hljs-keyword">else</span> {
+            res.write(data);
+            res.end();
+        }
+    });
+});
+</code></pre>
+<p data-nodeid="191547">接下来继续压测看下效果，如表 7 所示：</p>
+<p data-nodeid="231399" class=""><img src="https://s0.lgstatic.com/i/image6/M00/34/00/Cgp9HWBwD8qATRwGAABrIJLpIKs046.png" alt="Drawing 11.png" data-nodeid="231402"></p>
+
+
+
+<p data-nodeid="191594">从上面看得出异步 I/O 对服务性能提升还是比较突出，也是比较关键的。如果文件大会更突出，因此在平时代码中要非常注重这点，减少同步读写的操作。</p>
+<p data-nodeid="191595">那么如果我们继续优化，增加缓存呢？我们来看下效果，修改下面代码：</p>
+<pre class="lang-javascript" data-nodeid="191596"><code data-language="javascript"><span class="hljs-comment">// 文件缓存</span>
+<span class="hljs-keyword">let</span> fileCache;
+<span class="hljs-comment">/**
+ * 
+ * 创建 http 服务，简单返回
+ */</span>
+<span class="hljs-keyword">const</span> server = http.createServer(<span class="hljs-function">(<span class="hljs-params">req, res</span>) =&gt;</span> {
+    <span class="hljs-keyword">if</span>(fileCache) {
+        res.write(fileCache);
+        res.end();
+        <span class="hljs-keyword">return</span>;
+    }
+    fs.readFile(<span class="hljs-string">'./test_file.conf'</span>, (err, data) =&gt; {
+        <span class="hljs-keyword">if</span> (err) {
+            res.write(<span class="hljs-string">'error read file'</span>);
+            res.end();
+        } <span class="hljs-keyword">else</span> {
+            fileCache = data;
+            res.write(data);
+            res.end();
+        }
+    });
+});
+</code></pre>
+<p data-nodeid="191597">并且重新压测看下数据，如表格 8 所示。</p>
+<p data-nodeid="232531" class=""><img src="https://s0.lgstatic.com/i/image6/M00/34/08/CioPOWBwD9KAICB5AAB9TVaRLF4498.png" alt="Drawing 12.png" data-nodeid="232534"></p>
+
+
+
+<p data-nodeid="191652">从结果看已经和标准的数据非常接近，因此<strong data-nodeid="192298">在 Node.js 开发过程中，要特别注意文件读取，避免相同文件的重复读取</strong>。从表格 8 中的异步和缓存数据对比来看，通过缓存的处理优化，就可以在 QPS 上从 18353.39 提升至 35058.79，有 91% 以上的性能提升。</p>
+<h3 data-nodeid="191653">总结</h3>
+<p data-nodeid="191654">学完本讲，你应该要掌握两个工具的应用，对于服务端研发来说这些工具是非常重要的，我希望你能深入去实践应用这两个工具。其次了解 3 种影响性能因素的优化策略，同时在日常开发中，应尽量避免影响性能的代码逻辑。</p>
+<p data-nodeid="191655">那你在实际的工作中，是如何提升性能的呢，欢迎在评论区分享你的经验。</p>
+<p data-nodeid="233443">这一讲就讲完了，下一讲将讲解“常见网络攻击以及防护策略”，到时见~</p>
+
+
+
+
+
+<hr data-nodeid="191661">
+
+
+
+<p data-nodeid="191033"><a href="https://shenceyun.lagou.com/t/mka" data-nodeid="191040"><img src="https://s0.lgstatic.com/i/image6/M00/12/FA/CioPOWBBrAKAAod-AASyC72ZqWw233.png" alt="Drawing 2.png" data-nodeid="191039"></a></p>
+<p data-nodeid="191034"><strong data-nodeid="191044">《大前端高薪训练营》</strong></p>
+<p data-nodeid="191035" class="">对标阿里 P7 技术需求 + 每月大厂内推，6 个月助你斩获名企高薪 Offer。<a href="https://shenceyun.lagou.com/t/mka" data-nodeid="191048">点击链接</a>，快来领取！</p></div>
+
+</body></html>

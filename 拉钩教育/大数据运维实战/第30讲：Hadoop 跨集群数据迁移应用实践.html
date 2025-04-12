@@ -1,0 +1,889 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第30讲：Hadoop 跨集群数据迁移应用实践</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>第30讲：Hadoop 跨集群数据迁移应用实践</h1><p data-nodeid="187761">我们的 Hadoop 大数据平台已经运行多年，使用的版本是 CDH 5.8，平台上的各个组件（HDFS、Yarn、Hive、Spark）也都是基于这个版本的，但随着对 Hadoop 平台的深入使用，部分组件版本过低，有些新功能无法使用，这迫使我们必须要升级到新的版本。</p>
+<p data-nodeid="187762">CDH 5.8 版本的 Hadoop 是基于 Hadoop 2.x 的，此次升级计划从 Hadoop 2.x 版本升级到 3.x 版本，相关依赖组件也一并升级。</p>
+<p data-nodeid="187763">大数据平台升级方法常用的有两种：一种是在现有平台基础上升级；第二种是重新构建一套大数据平台，然后将老平台的数据、业务等迁移到新的平台。</p>
+<p data-nodeid="187764">由于我们的老 Hadoop 平台硬件也不太给力，在现有平台基础上升级意义不大，所以选择了第二种方法，全新部署基于 Hadoop 3.x 的大数据平台，先将数据导入新的平台，再切换业务到新的平台下，所有业务切换完成后关闭老平台。</p>
+<p data-nodeid="188786" class="">所以，本课时重点介绍<strong data-nodeid="188792">如何完成新、旧平台下数据的迁移</strong> 。</p>
+
+<h3 data-nodeid="190624" class="">数据迁移前准备工作</h3>
+
+
+
+
+
+<p data-nodeid="187767">在迁移数据之前，首先需要安装部署新的大数据平台，接着才能进行数据迁移。那么在迁移之前，需要考虑如下几个问题：</p>
+<ul data-nodeid="187768">
+<li data-nodeid="187769">
+<p data-nodeid="187770">需要迁移的数据量有多少？</p>
+</li>
+<li data-nodeid="187771">
+<p data-nodeid="187772">有什么好的工具可以批量、快速地将数据迁移过去？</p>
+</li>
+<li data-nodeid="187773">
+<p data-nodeid="187774">在迁移数据过程中，要保障不影响老平台的正常运行，可使用的带宽最多有多少？</p>
+</li>
+<li data-nodeid="187775">
+<p data-nodeid="187776">数据迁移完成后，如何校验数据一致性？</p>
+</li>
+<li data-nodeid="187777">
+<p data-nodeid="187778">新平台下 HDFS 数据文件权限，如何和老平台保持一致？</p>
+</li>
+</ul>
+<p data-nodeid="187779">我们这个数据迁移，涉及的数据有 1P 左右，这么大的数据量通过传统的 SCP、FTP 等方式复制肯定不现实，因此需要一个更加高效的数据传输方案；另外，数据每天都在增加，迁移过程也不可能几个小时完成，因此还要考虑数据的增量传输方式。此外，在数据传输过程中，会占用新、老平台大量带宽，如何高效传输数据而不影响老平台的使用，也是个难题。</p>
+<p data-nodeid="187780">带着这些问题，我将从数据迁移流程、迁移时间、迁移工具三个方面，来介绍如何制定数据迁移方案。</p>
+<h3 data-nodeid="191425" class="">数据迁移流程</h3>
+
+
+<p data-nodeid="187782">由于在老平台下每天都会生成新的数据，并且要保证有足够的带宽给业务使用，所以需要根据各个业务特点制定迁移步骤，可以通过按业务、分目录、分批迁移的方法来进行。</p>
+<p data-nodeid="193024" class="">首先，可以迁移跟业务无关的<strong data-nodeid="193030">冷数据</strong>，这些数据不会有新增，可以马上迁移到新的 HDFS 集群上。</p>
+
+
+<p data-nodeid="192623" class="">其次，可以迁移历史<strong data-nodeid="192629">老数据</strong>，这些数据量通常会比较大，可以按照年、月等形式，分批、分次进行传输。</p>
+
+
+<p data-nodeid="193826" class="">然后，可以迁移<strong data-nodeid="193832">业务量较小、数据量变动不多</strong>的这部分数据，比如数据每天变动一次，那么可以在当天将数据迁移完毕，然后将业务一起迁移到新的集群中。</p>
+
+
+<p data-nodeid="194628" class="">最后，要迁移的是<strong data-nodeid="194634">数据量变化较大、时刻都在产生新数据的业务</strong>，对待这类应用，可以先将大部分数据传输到新的集群；然后将业务同时在新集群上运行一份，这样，新、旧两套集群都在同时运行这个业务了；确定业务在新集群上运行正常后，在旧集群上将新、旧集群并行这段时间的差异数据复制到新的集群；最后，停掉老集群业务即可，这样就实现了新、旧集群的无缝切换。</p>
+
+
+<p data-nodeid="187787">为了不影响老集群业务的正常运行，在复制数据时，可以选择业务不繁忙的时段（比如凌晨）集中复制数据。</p>
+<h3 data-nodeid="196214" class="">数据迁移时间</h3>
+
+
+
+
+<p data-nodeid="187789">如果要迁移的数据较多，可采用分批次、逐个迁移的方式。</p>
+<p data-nodeid="187790">对于历史数据，可设置一个较小的传输带宽持续进行传输；而对于每天都有新增的数据，为了减小对线上业务的影响，尽量选择老集群低负载运行的时间段来进行数据迁移，比如可以写个定时脚本，在凌晨或者集群负载最低的时候开启数据迁移任务。</p>
+<p data-nodeid="187791">由于新、旧集群同时运行，所以对于数据的迁移完成时间没有严格要求，但选择数据迁移的时机、迁移的顺序却至关重要，需要严格考虑。</p>
+<h3 data-nodeid="197771" class="">数据迁移工具 Distcp</h3>
+
+
+
+
+<p data-nodeid="198155" class="">数据迁移工具推荐使用 Hadoop 自带的数据迁移工具 <strong data-nodeid="198161">Distcp</strong>，此工具主要用于 Hadoop 集群内部和集群之间的数据复制。它使用 Map/Reduce 实现文件分发、错误处理和恢复，它把文件和目录的列表作为 map 任务的输入，通过这种模式，可以实现数据的分布式复制，极大提高了数据传输的速率。</p>
+
+<p data-nodeid="187794">Distcp 使用虽然方便，但是 Hadoop 新、旧集群的版本差别太大，比如老 Hadoop 为 Hadoop 1.x，新 Hadoop 为 Hadoop 3.x 时，那么它们之间传输数据，可能会出现问题，这个需要注意。</p>
+<p data-nodeid="187795">在完成了所有准备工作后，可先尝试进行小批量的迁移，例如，可以先进行 100G 的数据迁移、500G 的数据迁移、1T 的数据迁移，以此来评估数据迁移速率和迁移过程中可能遇到的问题。</p>
+<p data-nodeid="198544" class=""><strong data-nodeid="198549">Distcp 命令的本质是一个 MapReduce 任务</strong>，它只有 Map 阶段，没有 Reduce 阶段，具备分布式执行的特性。它在 Map 任务中从老集群读取数据，然后写入新集群，以此来完成数据迁移。</p>
+
+<p data-nodeid="187797" class="">此工具使用很简单，只需要执行如下命令即可开始数据复制：</p>
+<p data-nodeid="198932" class=""><strong data-nodeid="198936">Hadoop Distcp  源 HDFS 文件路径目标 HDFS 文件路径。</strong></p>
+
+<p data-nodeid="187799">例如，下面的操作是将 bigdata1 集群上的 /data 目录复制到 bigdata2 集群中：</p>
+<pre class="lang-java" data-nodeid="200468"><code data-language="java">[hadoop<span class="hljs-meta">@namenodemaster</span> ~]$ hadoop distcp hdfs:<span class="hljs-comment">//bigdata1:8020/data hdfs://bigdata2:8020/ </span>
+</code></pre>
+
+
+
+
+<p data-nodeid="187801">此工具常用的几个选项如下：</p>
+<ul data-nodeid="201261">
+<li data-nodeid="201262">
+<p data-nodeid="201263">-m &lt;num_maps&gt;，用来指定复制数据时 map 的数目，请注意，并不是 map 数越多吞吐量越大；</p>
+</li>
+<li data-nodeid="201264">
+<p data-nodeid="201265">-i，表示忽略失败；</p>
+</li>
+<li data-nodeid="201266">
+<p data-nodeid="201267">-log <code data-backticks="1" data-nodeid="201284">&lt;logdir&gt;</code>，用来开启日志记录功能，到指定的文件中；</p>
+</li>
+<li data-nodeid="201268">
+<p data-nodeid="201269">-update，表示当目标 HDFS 上的文件不存在或文件不一致时，才会从源集群复制；</p>
+</li>
+<li data-nodeid="201270">
+<p data-nodeid="201271">-overwrite，表示覆盖目标 HDFS 上相同的文件；</p>
+</li>
+<li data-nodeid="201272">
+<p data-nodeid="201273">-filter，表示过滤不需要复制的文件；</p>
+</li>
+<li data-nodeid="201274">
+<p data-nodeid="201275">-delete，表示以源 HDFS 为准，也就是如果目标 HDFS 上存在此文件，但源 HDFS 上不存在此文件时，则删除这个文件。</p>
+</li>
+</ul>
+<p data-nodeid="201276" class=""><strong data-nodeid="201294">注意</strong>：当使用 Distcp 工具时，可以在老 Dadoop 集群上执行，也可以在新 Hadoop 上执行，如果在老 Hadoop 集群，可执行如下命令：</p>
+
+
+
+<pre class="lang-java" data-nodeid="201677"><code data-language="java">[hadoop<span class="hljs-meta">@namenodemaster</span> ~]$ hadoop distcp /logs hdfs:<span class="hljs-comment">//172.16.218.29:8020/data/hadoop </span>
+</code></pre>
+
+<p data-nodeid="187819">这个操作是在老集群上通过 Hadoop 用户，将老集群的 HDFS 上 /logs 目录，迁移到新集群的 /data/hadoop 路径下。注意新集群的 NameNode 节点 IP 是 172.16.218.29，8020 是默认端口。</p>
+<p data-nodeid="187820">由于此命令是通过老集群的 Hadoop 用户执行的，因此，要确保新集群中 /data/hadoop 目录有 Hadoop 用户的读写权限，否则执行会报错。</p>
+<p data-nodeid="202434">此命令执行后，可以在老集群的 Yarn 界面下发现有一个 Distcp 任务在运行，如下图所示：</p>
+<p data-nodeid="202435" class=""><img src="https://s0.lgstatic.com/i/image/M00/3E/C0/CgqCHl8tHTiAcSEkAAB_dGYJO0c193.png" alt="image1 (1).png" data-nodeid="202443"></p>
+
+
+<p data-nodeid="187823">从图中可以看出，此 Distcp 其实执行的就是一个 MAPREDUCE 任务。很明显，如果在老集群执行 Distcp 命令，就会占据老集群的 yarn 资源，这样会影响老集群下业务的正常运行，因此， 在实际迁移环境中，一般都在新的集群下执行 Distcp 命令，执行方式如下：</p>
+<pre class="lang-java" data-nodeid="202834"><code data-language="java">[hadoop<span class="hljs-meta">@newmaster</span> ~]$ hadoop distcp hdfs:<span class="hljs-comment">//172.16.216.99:8020/logs  /data/hadoop </span>
+</code></pre>
+
+<p data-nodeid="187825">此命令执行后，也会在新集群 Yarn 中运行一个 MAPREDUCE 任务，在使用 Distcp 时，必须注意以下事项：</p>
+<ul data-nodeid="187826">
+<li data-nodeid="187827">
+<p data-nodeid="187828">数据源集群的所有节点，必须和目标集群所有节点能互相通信；</p>
+</li>
+<li data-nodeid="187829">
+<p data-nodeid="187830">指定的目标 HDFS 路径必须存在，否则报错；</p>
+</li>
+<li data-nodeid="187831">
+<p data-nodeid="187832">Distcp 命令中，可以使用主机名，也可以使用 IP 地址。</p>
+</li>
+</ul>
+<p data-nodeid="204428" class="">在使用 Distcp 时，还有很多小技巧，例如，为了传输速度，可以使用 Distcp 的 “-m <code data-backticks="1" data-nodeid="204430">&lt;arg&gt;</code>” 参数来设置 map 任务的最大数量（默认 20），以提高并发性。<strong data-nodeid="204438">但需要注意</strong>：这里要结合最大网络传输速率来设置；如果对传输带宽要限制，还可以使用“-bandwidth <code data-backticks="1" data-nodeid="204436">&lt;arg&gt;</code>”参数来控制单个 Map 任务的最大带宽，单位是 MB。</p>
+
+
+
+
+<p data-nodeid="187834">在数据迁移过程中，最主要的就是文件的权限，如果传输过程中权限丢失，那么重新配置权限将非常麻烦。为此，Distcp 也提供了一个参数 -p 来在新集群里保留文件的权限、属性等信息（主要是复制、块大小、用户、组、权限、校验和类型、ACL、XATTR、时间戳）。而如果要增量迁移数据，则可以使用 Distcp 的 update 参数，这样就会忽略新集群中已经存在的文件，提升数据迁移效率。</p>
+<h3 data-nodeid="187835">小结</h3>
+<p data-nodeid="187836">本课时主要介绍了在 Hadoop 版本升级过程中，如何在两个 Hadoop 集群环境下高效、快速地进行迁移数据，重点介绍了 Distcp 这个工具的使用，此工具主要用于在两个 Hadoop 集群之间进行数据复制。掌握了此工具的使用，不但可以做好数据的快速迁移，还可以通过它对 HDFS 集群数据进行跨机房的异地备份，最大限度地保证数据的安全性。</p>
+<p data-nodeid="187837">至此，这门课程到这里就讲完了，如果你觉得课程不错，从中有所收获的话，不要忘了推荐给身边的朋友哦。前路漫漫，一起加油。</p></div>
+
+</body></html>

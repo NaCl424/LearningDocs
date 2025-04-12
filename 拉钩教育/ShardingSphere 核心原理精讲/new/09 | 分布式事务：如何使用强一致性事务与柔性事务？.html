@@ -1,0 +1,1390 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>09 | 分布式事务：如何使用强一致性事务与柔性事务？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>09 | 分布式事务：如何使用强一致性事务与柔性事务？</h1><p data-nodeid="153862" class="">你好，欢迎进入第 09 课时的学习。今天，我们将介绍一个分布式环境下的重要主题，即分布式事务。在介绍 ShardingSphere 中的具体应用方式之前，我们有必要对分布式事务的基本概念做简要介绍。</p>
+<h3 data-nodeid="153863">如何理解分布式事务？</h3>
+<p data-nodeid="154398" class="">在传统的关系型数据库中，事务是一个标准组件，几乎所有成熟的关系型数据库都提供了对本地事务的原生支持。本地事务提供了 ACID 事务特性。基于本地事务，为了保证数据的一致性，我们先开启一个事务后，才可以执行数据操作，最后提交或回滚就可以了。更进一步，借助于 Spring 等集成化框架，开发人员只需关注引起数据改变的业务即可。</p>
+
+<p data-nodeid="153865">但在分布式环境下，事情就会变得比较复杂。假设系统中存在多个独立的数据库，为了确保数据在这些独立的数据库中保持一致，我们需要把这些数据库纳入同一个事务中。这时本地事务就无能为力了，我们需要使用分布式事务。</p>
+<p data-nodeid="153866">业界关于如何实现分布式事务也有一些通用的实现机制，例如支持两阶段提交的 XA 协议以及以 Saga 为代表的柔性事务。针对不同的实现机制，也存在一些供应商和开发工具。因为这些开发工具在使用方式上和实现原理上都有较大的差异性，所以开发人员的一大诉求在于，希望能有一套统一的解决方案能够屏蔽这些差异。同时，我们也希望这种解决方案能够提供友好的系统集成性。</p>
+<p data-nodeid="153867">ShardingSphere 作为一款分布式数据库中间件，势必要考虑分布式事务的实现方案。而在设计上，ShardingSphere 从一开始就充分考虑到了开发人员的这些诉求，接下来让我们一起来看一下。</p>
+<h3 data-nodeid="153868">ShardingSphere 中的分布式事务</h3>
+<p data-nodeid="153869">在 ShardingSphere 中，除本地事务之外，还提供针对分布式事务的两种实现方案，分别是 XA 事务和柔性事务。这点可以从事务类型枚举值 TransactionType 中得到验证：</p>
+<pre class="lang-java hljs" data-nodeid="153870"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">enum</span> TransactionType {
+    LOCAL, XA, BASE
+}
+</code></pre>
+<h4 data-nodeid="153871">XA 事务</h4>
+<p data-nodeid="154756" class="te-preview-highlight">XA 事务提供基于两阶段提交协议的实现机制。所谓两阶段提交，顾名思义分成两个阶段，一个是准备阶段，一个是执行阶段。在准备阶段中，协调者发起一个提议，分别询问各参与者是否接受。在执行阶段，协调者根据参与者的反馈，提交或终止事务。如果参与者全部同意则提交，只要有一个参与者不同意就终止。</p>
+
+<p data-nodeid="153873"><img src="https://s0.lgstatic.com/i/image/M00/31/26/CgqCHl8MBruAHHnkAABo-3eRic0694.png" alt="Drawing 0.png" data-nodeid="153961"></p>
+<div data-nodeid="153874"><p style="text-align:center">两阶段提交示意图</p></div>
+<p data-nodeid="153875">目前，业界在实现 XA 事务时也存在一些主流工具库，包括 Atomikos、Narayana 和 Bitronix。ShardingSphere 对这三种工具库都进行了集成，并默认使用 Atomikos 来完成两阶段提交。</p>
+<h4 data-nodeid="153876">BASE 事务</h4>
+<p data-nodeid="153877">XA 事务是典型的强一致性事务，也就是完全遵循事务的 ACID 设计原则。与 XA 事务这种“刚性”不同，柔性事务则遵循 BASE 设计理论，追求的是最终一致性。这里的 BASE 来自基本可用（Basically Available）、软状态（Soft State）和最终一致性（Eventual Consistency）这三个概念。</p>
+<p data-nodeid="153878">关于如何实现基于 BASE 原则的柔性事务，业界也存在一些优秀的框架，例如阿里巴巴提供的 Seata。ShardingSphere 内部也集成了对 Seata 的支持。当然，我们也可以根据需要，集成其他分布式事务类开源框架，并基于微内核架构嵌入到 ShardingSphere 运行时环境中。</p>
+<p data-nodeid="153879">介绍完理论知识之后，接下来让我们分别使用 XA 事务和 BASE 事务来实现分布式环境下的数据一致性。</p>
+<h3 data-nodeid="153880">使用 XA 事务</h3>
+<p data-nodeid="153881">在 Spring 应用程序中添加对 XA 事务的支持相对简单，无论是 Spring 框架，还是 ShardingSphere 自身，都为我们提供了低成本的开发机制。</p>
+<h4 data-nodeid="153882">开发环境准备</h4>
+<p data-nodeid="153883">要想使用 XA 事务，我们首先要在 pom 文件中添加 sharding-jdbc-core 和 sharding-transaction-xa-core 这两个依赖：</p>
+<pre class="lang-xml hljs" data-nodeid="153884"><code data-language="xml"><span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.apache.shardingsphere<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>sharding-jdbc-core<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+&nbsp;
+<span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.apache.shardingsphere<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>sharding-transaction-xa-core<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+</code></pre>
+<p data-nodeid="153885">在今天的案例中，我们将演示如何在分库环境下实现分布式事务，因此我们需要在 Spring Boot 中创建一个 .properties 文件，并包含分库需要的所有配置项信息：</p>
+<pre class="lang-java hljs" data-nodeid="153886"><code data-language="java">spring.shardingsphere.datasource.names=ds0,ds1
+&nbsp;
+spring.shardingsphere.datasource.ds0.type=com.zaxxer.hikari.HikariDataSource
+spring.shardingsphere.datasource.ds0.driver-<span class="hljs-class"><span class="hljs-keyword">class</span>-<span class="hljs-title">name</span></span>=com.mysql.jdbc.Driver
+spring.shardingsphere.datasource.ds0.jdbc-url=jdbc:mysql:<span class="hljs-comment">//localhost:3306/ds0</span>
+spring.shardingsphere.datasource.ds0.username=root
+spring.shardingsphere.datasource.ds0.password=root
+spring.shardingsphere.datasource.ds0.autoCommit: <span class="hljs-keyword">false</span>
+&nbsp;
+spring.shardingsphere.datasource.ds1.type=com.zaxxer.hikari.HikariDataSource
+spring.shardingsphere.datasource.ds1.driver-<span class="hljs-class"><span class="hljs-keyword">class</span>-<span class="hljs-title">name</span></span>=com.mysql.jdbc.Driver
+spring.shardingsphere.datasource.ds1.jdbc-url=jdbc:mysql:<span class="hljs-comment">//localhost:3306/ds1</span>
+spring.shardingsphere.datasource.ds1.username=root
+spring.shardingsphere.datasource.ds1.password=root
+spring.shardingsphere.datasource.ds0.autoCommit: <span class="hljs-keyword">false</span>
+&nbsp;
+spring.shardingsphere.sharding.<span class="hljs-keyword">default</span>-database-strategy.inline.sharding-column=user_id
+spring.shardingsphere.sharding.<span class="hljs-keyword">default</span>-database-strategy.inline.algorithm-expression=ds$-&gt;{user_id % <span class="hljs-number">2</span>}
+spring.shardingsphere.sharding.binding-tables=health_record,health_task
+spring.shardingsphere.sharding.broadcast-tables=health_level
+&nbsp;
+spring.shardingsphere.sharding.tables.health_record.actual-data-nodes=ds$-&gt;{<span class="hljs-number">0.</span>.<span class="hljs-number">1</span>}.health_record
+spring.shardingsphere.sharding.tables.health_record.key-generator.column=record_id
+spring.shardingsphere.sharding.tables.health_record.key-generator.type=SNOWFLAKE
+spring.shardingsphere.sharding.tables.health_record.key-generator.props.worker.id=<span class="hljs-number">33</span>
+spring.shardingsphere.sharding.tables.health_task.actual-data-nodes=ds$-&gt;{<span class="hljs-number">0.</span>.<span class="hljs-number">1</span>}.health_task
+spring.shardingsphere.sharding.tables.health_task.key-generator.column=task_id
+spring.shardingsphere.sharding.tables.health_task.key-generator.type=SNOWFLAKE
+spring.shardingsphere.sharding.tables.health_task.key-generator.props.worker.id=<span class="hljs-number">33</span>
+&nbsp;
+spring.shardingsphere.props.sql.show=<span class="hljs-keyword">true</span>
+</code></pre>
+<h4 data-nodeid="153887">实现 XA 事务</h4>
+<p data-nodeid="153888">通过分库配置，我们将获取 SQL 执行的目标 DataSource。由于我们使用 Spring 框架而不是使用原生的 JDBC 进行事务管理，所以需要将 DataSource 与 Spring 中的事务管理器 PlatformTransactionManager 关联起来。</p>
+<p data-nodeid="153889">另一方面，为了更好地集成 ShardingSphere 中的分布式事务支持，我们可以通过 Spring 框架提供的 JdbcTemplate 模板类来简化 SQL 的执行过程。一种常见的做法是创建一个事务配置类来初始化所需的 PlatformTransactionManager 和 JdbcTemplate 对象：</p>
+<pre class="lang-java hljs" data-nodeid="153890"><code data-language="java"><span class="hljs-meta">@Configuration</span>
+<span class="hljs-meta">@EnableTransactionManagement</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">TransactionConfiguration</span> </span>{
+
+&nbsp;&nbsp;&nbsp; <span class="hljs-meta">@Bean</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> PlatformTransactionManager <span class="hljs-title">txManager</span><span class="hljs-params">(<span class="hljs-keyword">final</span> DataSource dataSource)</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> DataSourceTransactionManager(dataSource);
+&nbsp;&nbsp;&nbsp; }
+
+&nbsp;&nbsp;&nbsp; <span class="hljs-meta">@Bean</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> JdbcTemplate <span class="hljs-title">jdbcTemplate</span><span class="hljs-params">(<span class="hljs-keyword">final</span> DataSource dataSource)</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> JdbcTemplate(dataSource);
+&nbsp;&nbsp;&nbsp; }
+}
+</code></pre>
+<p data-nodeid="153891">一旦初始化了 JdbcTemplate，就可以在业务代码中注入这个模板类来执行各种 SQL 操作，常见的做法是传入一个 PreparedStatementCallback，并在这个回调中执行各种具体的 SQL：</p>
+<pre class="lang-java hljs" data-nodeid="153892"><code data-language="java"><span class="hljs-meta">@Autowired</span>
+JdbcTemplate jdbcTemplate;
+&nbsp;
+jdbcTemplate.execute(SQL, (PreparedStatementCallback&lt;Object&gt;) preparedStatement -&gt; {
+&nbsp;&nbsp;&nbsp; …
+&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> preparedStatement;
+});
+</code></pre>
+<p data-nodeid="153893">在上面的代码中，我们通过 PreparedStatementCallback 回调获取一个 PreparedStatement 对象。或者，我们可以使用 JdbcTemplate 另一种执行 SQL 的代码风格，通过使用更基础的 ConnectionCallback 回调接口：</p>
+<pre class="lang-java hljs" data-nodeid="153894"><code data-language="java">jdbcTemplate.execute((ConnectionCallback&lt;Object&gt;) connection-&gt; {
+&nbsp;&nbsp;&nbsp; …
+&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> connection;
+});
+</code></pre>
+<p data-nodeid="153895">为了在业务代码中以最少的开发成本嵌入分布式事务机制，ShardingSphere 也专门提供了一个 @ShardingTransactionType 注解来配置所需要执行的事务类型：</p>
+<pre class="lang-java hljs" data-nodeid="153896"><code data-language="java"><span class="hljs-meta">@Target({ElementType.METHOD, ElementType.TYPE})</span>
+<span class="hljs-meta">@Retention(RetentionPolicy.RUNTIME)</span>
+<span class="hljs-meta">@Inherited</span>
+<span class="hljs-keyword">public</span> <span class="hljs-meta">@interface</span> ShardingTransactionType {
+
+&nbsp;&nbsp;&nbsp; <span class="hljs-function">TransactionType <span class="hljs-title">value</span><span class="hljs-params">()</span> <span class="hljs-keyword">default</span> TransactionType.LOCAL</span>;
+}
+</code></pre>
+<p data-nodeid="153897">我们知道，ShardingSphere 提供的事务类型有三种，分别是 LOCAL、XA 和 BASE，默认使用的是 LOCAL。所以如果需要用到分布式事务，需要在业务方法上显式的添加这个注解：</p>
+<pre class="lang-java hljs" data-nodeid="153898"><code data-language="java"><span class="hljs-meta">@Transactional</span>
+<span class="hljs-meta">@ShardingTransactionType(TransactionType.XA)</span>
+<span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">insert</span><span class="hljs-params">()</span></span>{
+&nbsp;&nbsp;&nbsp; …
+}
+</code></pre>
+<p data-nodeid="153899">另一种设置 TransactionType 的方式是使用 TransactionTypeHolder 工具类。TransactionTypeHolder 类中通过 ThreadLocal 来保存 TransactionType：</p>
+<pre class="lang-java hljs" data-nodeid="153900"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">final</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">TransactionTypeHolder</span> </span>{
+
+&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> ThreadLocal&lt;TransactionType&gt; CONTEXT = <span class="hljs-keyword">new</span> ThreadLocal&lt;TransactionType&gt;() {
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-meta">@Override</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">protected</span> TransactionType <span class="hljs-title">initialValue</span><span class="hljs-params">()</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> TransactionType.LOCAL;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; }
+&nbsp;&nbsp;&nbsp; };
+
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> TransactionType <span class="hljs-title">get</span><span class="hljs-params">()</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> CONTEXT.get();
+&nbsp;&nbsp;&nbsp; }
+
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">set</span><span class="hljs-params">(<span class="hljs-keyword">final</span> TransactionType transactionType)</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CONTEXT.set(transactionType);
+&nbsp;&nbsp;&nbsp; }
+
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">clear</span><span class="hljs-params">()</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CONTEXT.remove();
+&nbsp;&nbsp;&nbsp; }
+}
+</code></pre>
+<p data-nodeid="153901">可以看到，TransactionTypeHolder 中默认采用的是本地事务，我们可以通过 set 方法来改变初始设置：</p>
+<pre class="lang-js hljs" data-nodeid="153902"><code data-language="js">TransactionTypeHolder.set(TransactionType.XA);
+</code></pre>
+<p data-nodeid="153903">现在，使用 XA 开发分布式事务的整体结构的方法已经梳理清楚了，我们可以通过创建一个 insertHealthRecords 方法，在其中添加对 HealthRecord 和 HealthTask 的数据插入代码：</p>
+<pre class="lang-java hljs" data-nodeid="153904"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">private</span> List&lt;Long&gt; <span class="hljs-title">insertHealthRecords</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> SQLException </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; List&lt;Long&gt; result = <span class="hljs-keyword">new</span> ArrayList&lt;&gt;(<span class="hljs-number">10</span>);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; jdbcTemplate.execute((ConnectionCallback&lt;Object&gt;) connection-&gt; {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; connection.setAutoCommit(<span class="hljs-keyword">false</span>);
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  <span class="hljs-keyword">try</span> {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">for</span> (Long i = <span class="hljs-number">1L</span>; i &lt;= <span class="hljs-number">10</span>; i++) {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; HealthRecord healthRecord = createHealthRecord(i);
+&nbsp;&nbsp;&nbsp;  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; insertHealthRecord(healthRecord, connection);
+
+&nbsp;&nbsp;&nbsp;  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; HealthTask healthTask = createHealthTask(i, healthRecord);
+&nbsp;&nbsp;&nbsp;  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; insertHealthTask(healthTask, connection);
+
+&nbsp;&nbsp;&nbsp;  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; result.add(healthRecord.getRecordId()); 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; }
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp; connection.commit();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  } <span class="hljs-keyword">catch</span> (<span class="hljs-keyword">final</span> SQLException ex) {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp; connection.rollback();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">throw</span> ex;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; }
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> connection;
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; });
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> result;
+&nbsp;&nbsp;&nbsp; }
+</code></pre>
+<p data-nodeid="153905">可以看到，在执行插入操作之前，我们关闭了 Connection 的自动提交功能。在 SQL 执行完毕之后，手动通过 Connection commit 方法执行事务提交。一旦在 SQL 的执行过程中出现任何异常时，就调用 Connection 的 rollback 方法回滚事务。</p>
+<p data-nodeid="153906">这里有必要介绍执行数据插入的具体实现过程，我们以 insertHealthRecord 方法为例进行展开：</p>
+<pre class="lang-java hljs" data-nodeid="153907"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title">insertHealthRecord</span><span class="hljs-params">(HealthRecord healthRecord, Connection connection)</span> <span class="hljs-keyword">throws</span> SQLException </span>{
+&nbsp;&nbsp;&nbsp;  <span class="hljs-keyword">try</span> (PreparedStatement preparedStatement = connection.prepareStatement(sql_health_record_insert, Statement.RETURN_GENERATED_KEYS)) {
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; preparedStatement.setLong(<span class="hljs-number">1</span>, healthRecord.getUserId());
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; preparedStatement.setLong(<span class="hljs-number">2</span>, healthRecord.getLevelId() % <span class="hljs-number">5</span> );
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; preparedStatement.setString(<span class="hljs-number">3</span>, <span class="hljs-string">"Remark"</span> + healthRecord.getUserId());
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; preparedStatement.executeUpdate(); 
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">try</span> (ResultSet resultSet = preparedStatement.getGeneratedKeys()) {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">if</span> (resultSet.next()) {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp; healthRecord.setRecordId(resultSet.getLong(<span class="hljs-number">1</span>));
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; }
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; }
+&nbsp;&nbsp;&nbsp;  }
+}
+</code></pre>
+<p data-nodeid="153908">首先通过 Connection 对象构建一个 PreparedStatement。请注意，<strong data-nodeid="153988">由于我们需要通过 ShardingSphere 的主键自动生成机制，所以在创建 PreparedStatement 时需要进行特殊地设置：</strong></p>
+<pre class="lang-java hljs" data-nodeid="153909"><code data-language="java">connection.prepareStatement(sql_health_record_insert, Statement.RETURN_GENERATED_KEYS)
+</code></pre>
+<p data-nodeid="153910">通过这种方式，在 PreparedStatement 完成 SQL 执行之后，我们就可以获取自动生成的主键值：</p>
+<pre class="lang-java hljs" data-nodeid="153911"><code data-language="java"><span class="hljs-keyword">try</span> (ResultSet resultSet = preparedStatement.getGeneratedKeys()) {
+&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">if</span> (resultSet.next()) {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; healthRecord.setRecordId(resultSet.getLong(<span class="hljs-number">1</span>));
+&nbsp;&nbsp;&nbsp;&nbsp; }
+}
+</code></pre>
+<p data-nodeid="153912">当获取这个主键值之后，就将这个主键值设置回 HealthRecord，这是使用自动生成主键的常见做法。</p>
+<p data-nodeid="153913">最后，我们在事务方法的入口处，需要设置 TransactionType：</p>
+<pre class="lang-java hljs" data-nodeid="153914"><code data-language="java">&nbsp;&nbsp;&nbsp; <span class="hljs-meta">@Override</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">processWithXA</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> SQLException </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; TransactionTypeHolder.set(TransactionType.XA);
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; insertHealthRecords();
+&nbsp;&nbsp;&nbsp; }
+</code></pre>
+<p data-nodeid="153915">现在让我们执行这个 processWithXA 方法，看看数据是否已经按照分库的配置写入到目标数据库表中。下面是 ds0 中的 health_record 表和 health_task 表：</p>
+<p data-nodeid="153916"><img src="https://s0.lgstatic.com/i/image/M00/31/1C/Ciqc1F8MB4yADpvNAAAn7gHRWyw024.png" alt="Drawing 2.png" data-nodeid="153999"></p>
+<div data-nodeid="153917"><p style="text-align:center">ds0 中的 health_record 表</p></div>
+<p data-nodeid="153918"><img src="https://s0.lgstatic.com/i/image/M00/31/1C/Ciqc1F8MCEuAUA1NAAAuoAPD9w4209.png" alt="Drawing 3.png" data-nodeid="154002"></p>
+<div data-nodeid="153919"><p style="text-align:center">ds0 中的 health_task 表</p></div>
+<p data-nodeid="153920">下面则是 ds1 中的 health\_record 表和 health\_task 表：<br>
+<img src="https://s0.lgstatic.com/i/image/M00/31/27/CgqCHl8MB6SAOFIhAAAoGKuCLOw688.png" alt="Drawing 4.png" data-nodeid="154013"></p>
+<div data-nodeid="153921"><p style="text-align:center">ds1 中的 health_record 表</p></div>
+<p data-nodeid="153922"><img src="https://s0.lgstatic.com/i/image/M00/31/1C/Ciqc1F8MCFiAH4szAAAvGNmTj1Y923.png" alt="Drawing 5.png" data-nodeid="154016"></p>
+<div data-nodeid="153923"><p style="text-align:center">ds1 中的 health_task 表</p></div>
+<p data-nodeid="153924">我们也可以通过控制台日志来跟踪具体的 SQL 执行过程：</p>
+<pre class="lang-xml hljs" data-nodeid="153925"><code data-language="xml">2020-06-01 20:11:52.043&nbsp; INFO 10720 --- [&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; main] ShardingSphere-SQL&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; : Rule Type: sharding
+2020-06-01 20:11:52.043&nbsp; INFO 10720 --- [&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; main] ShardingSphere-SQL&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; : Logic SQL: INSERT INTO health_record (user_id, level_id, remark) VALUES (?, ?, ?)
+…
+2020-06-01 20:11:52.043&nbsp; INFO 10720 --- [&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; main] ShardingSphere-SQL&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; : Actual SQL: ds1 ::: INSERT INTO health_record (user_id, level_id, remark, record_id) VALUES (?, ?, ?, ?) ::: [1, 1, Remark1, 474308304135393280]
+…
+</code></pre>
+<p data-nodeid="153926">现在，让我们模拟事务失败的场景，可以在代码执行过程中故意抛出一个异常来做到这一点：</p>
+<pre class="lang-java hljs" data-nodeid="153927"><code data-language="java">	<span class="hljs-keyword">try</span> {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">for</span> (Long i = <span class="hljs-number">1L</span>; i &lt;= <span class="hljs-number">10</span>; i++) {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; HealthRecord healthRecord = createHealthRecord(i);
+&nbsp;&nbsp;&nbsp;  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; insertHealthRecord(healthRecord, connection);
+
+&nbsp;&nbsp;&nbsp;  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; HealthTask healthTask = createHealthTask(i, healthRecord);
+&nbsp;&nbsp;&nbsp;  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; insertHealthTask(healthTask, connection);
+
+&nbsp;&nbsp;&nbsp;  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; result.add(healthRecord.getRecordId());
+
+&nbsp;&nbsp;&nbsp;  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-comment">//手工抛出异常</span>
+&nbsp;&nbsp;&nbsp;  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> SQLException(<span class="hljs-string">"数据库执行异常!"</span>);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; }
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp; connection.commit();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;  } <span class="hljs-keyword">catch</span> (<span class="hljs-keyword">final</span> SQLException ex) {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp; connection.rollback();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">throw</span> ex;
+    }
+</code></pre>
+<p data-nodeid="153928">再次执行 processWithXA 方法，基于 connection 提供的 rollback 方法，我们发现已经执行的部分 SQL 并没有提交到任何一个数据库中。</p>
+<h3 data-nodeid="153929">使用 BASE 事务</h3>
+<p data-nodeid="153930">相较于 XA 事务，在业务代码中集成 BASE 事务的过程就显得相对复杂一点，因为我们需要借助外部框架来做到这一点。这里，我们将基于阿里巴巴提供的 Seata 框架来演示如何使用 BASE 事务。</p>
+<h4 data-nodeid="153931">开发环境准备</h4>
+<p data-nodeid="153932">同样，要想使用基于 Seata 的 BASE 事务，我们首先需要在 pom 文件中添加对 sharding-jdbc-core 和 sharding-transaction-base-seata-at 这两个依赖：</p>
+<pre class="lang-xml hljs" data-nodeid="153933"><code data-language="xml"><span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.apache.shardingsphere<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>sharding-jdbc-core<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+&nbsp;
+<span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+&nbsp;&nbsp;&nbsp; &nbsp;<span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.apache.shardingsphere<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>sharding-transaction-base-seata-at<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+</code></pre>
+<p data-nodeid="153934">因为用到了 Seata 框架，所以也需要引入 Seate 框架的相关组件：</p>
+<pre class="lang-xml hljs" data-nodeid="153935"><code data-language="xml">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>io.seata<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>seata-rm-datasource<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>io.seata<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>seata-tm<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>io.seata<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>seata-codec-all<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+</code></pre>
+<p data-nodeid="153936">然后，我们下载并启动 Seata 服务器，这个过程需要设置 Seata 服务器 config 目录下的 registry.conf，以便指定注册中心，这里使用 ZooKeeper 来充当注册中心。关于如何启动 Seata 服务器的过程可以参考 Seata 的官方文档。请注意，按照 Seata 的运行要求，我们需要在每一个分片数据库实例中创建一张 undo_log 表。然后，我们还需要在代码工程中 classpath 中增加一个 seata.conf 配置文件：</p>
+<pre class="lang-xml hljs" data-nodeid="153937"><code data-language="xml">client {
+&nbsp;&nbsp;&nbsp; application.id = health-base
+&nbsp;&nbsp;&nbsp; transaction.service.group = health-base-group
+}
+</code></pre>
+<p data-nodeid="153938">现在，在 src/main/resources 目录下的文件组织形式应该是这样：</p>
+<p data-nodeid="153939"><img src="https://s0.lgstatic.com/i/image/M00/31/1C/Ciqc1F8MB7aAL-kkAAAU1FYPsK0495.png" alt="Drawing 6.png" data-nodeid="154031"></p>
+<p data-nodeid="153940">当然，这里我们还是继续沿用前面介绍的分库配置。</p>
+<h3 data-nodeid="153941">实现 BASE 事务</h3>
+<p data-nodeid="153942">基于 ShardingSphere 提供的分布式事务的抽象，我们从 XA 事务转到 BASE 事务唯一要做的事情就是重新设置 TransactionType，也就是修改一行代码：</p>
+<pre class="lang-java hljs" data-nodeid="153943"><code data-language="java">&nbsp;&nbsp;&nbsp; <span class="hljs-meta">@Override</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">processWithBASE</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> SQLException </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; TransactionTypeHolder.set(TransactionType.BASE);
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; insertHealthRecords();
+&nbsp;&nbsp;&nbsp; }
+</code></pre>
+<p data-nodeid="153944">重新执行测试用例，我们发现在正常提交和异常回滚的场景下，基于 Seata 的分布式事务同样发挥了效果。</p>
+<h3 data-nodeid="154040" class="">小结</h3>
+
+<p data-nodeid="153946">分布式事务是 ShardingSphere 中提供的一大核心功能，也是分布式环境下数据处理所必须要考虑的话题。ShardingSphere 提供了两种处理分布式事务的实现方式，分别是基于强一致性的 XA 事务，以及基于最终一致性的 BASE 事务。今天，我们结合案例对这两种事务的使用方式做了详细的介绍。</p>
+<p data-nodeid="153947">这里给你留一道思考题：当使用 ShardingSphere 时，在业务代码中嵌入分布式事务有哪些开发方式？</p>
+<p data-nodeid="153948" class="">本课时的内容就到这里。在下一课时中，我们将介绍 ShardingSphere 中提供了与数据访问安全性相关的一个话题，也就是通过数据脱敏完成对敏感数据的安全访问。</p></div>
+
+</body></html>

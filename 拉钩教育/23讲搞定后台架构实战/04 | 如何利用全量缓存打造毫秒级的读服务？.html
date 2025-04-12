@@ -1,0 +1,892 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>04 | 如何利用全量缓存打造毫秒级的读服务？</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>04 | 如何利用全量缓存打造毫秒级的读服务？</h1><p data-nodeid="1105" class="">上一讲我们介绍了一个简单易实现，且成本较低的高性能读服务方案及其升级方案，但其中仍有两个问题暂未完全解决：</p>
+<ul data-nodeid="1106">
+<li data-nodeid="1107">
+<p data-nodeid="1108">第一个问题是为了保证缓存更新实时性而带来的分布式事务的问题；</p>
+</li>
+<li data-nodeid="1109">
+<p data-nodeid="1110">第二个问题是懒加载导致的毛刺问题。</p>
+</li>
+</ul>
+<p data-nodeid="1111">在本讲里，我将针对上述两个问题，和你一起利用全量缓存打造一个无毛刺、平均性能在 100ms 以内的读服务。</p>
+<h3 data-nodeid="1112">全量缓存的基本架构</h3>
+<p data-nodeid="1113">全量缓存是指将数据库中的所有数据都存储在缓存中，同时在缓存中不设置过期时间的一种实现方式，此实现的架构如下图 1 所示：</p>
+<p data-nodeid="1114"><img src="https://s0.lgstatic.com/i/image2/M01/05/F8/CgpVE2ABd_GAJL0AAAFkMI1YwU4141.png" alt="图片1.png" data-nodeid="1203"></p>
+<div data-nodeid="1115"><p style="text-align:center">图 1：全量缓存的架构图</p></div>
+<p data-nodeid="1116">因为所有数据都存储在缓存里，读服务在查询时不会再降级到数据库里，所有的请求都完全依赖缓存。此时，因降级到数据库导致的毛刺问题就解决了。</p>
+<p data-nodeid="1117">但全量缓存并没有解决更新时的分布式事务问题，反而把问题放大了。因为全量缓存对数据更新要求更加严格，要求所有数据库已有数据和实时更新的数据必须完全同步至缓存，不能有遗漏。</p>
+<p data-nodeid="1118">对于此问题，一种有效的方案是采用订阅数据库的 Binlog 实现数据同步。</p>
+<h3 data-nodeid="1119">基于 Binlog 的全量缓存架构</h3>
+<p data-nodeid="1120">在实施基于 Binlog 的架构方案前，我先简单介绍下 Binlog，更加详细的介绍我将在“<strong data-nodeid="1213">05 讲</strong>”里和你讨论。首先看下 Binlog 的原理，如下图 2 所示：</p>
+<p data-nodeid="1121"><img src="https://s0.lgstatic.com/i/image2/M01/05/F6/Cip5yGABeA2AOa1fAAI_L-iG_j4329.png" alt="图片2.png" data-nodeid="1216"></p>
+<div data-nodeid="1122"><p style="text-align:center">图 2：Binlog 原理图</p></div>
+<p data-nodeid="1123">Binlog 是 MySQL 及大部分主流数据库的主从数据同步方案。主数据库会将所有的变更按一定格式写入它本机的 Binlog 文件中。在主从同步时，从数据库会和主数据库建立连接，通过特定的协议串行地读取主数据库的 Binlog 文件，并在从库进行 Binlog 的回放，进而完成主从复制。</p>
+<p data-nodeid="1124">现在很多开源工具（如阿里的 Canal、MySQL_Streamer、Maxwell、Linkedin 的 Databus 等）可以模拟主从复制的协议。通过模拟协议读取主数据库的 Binlog 文件，从而获取主库的所有变更。对于这些变更，它们开放了各种接口供业务服务获取数据。</p>
+<p data-nodeid="1125">基于 Binlog 的全量缓存架构正是依赖此类中间件完来成数据同步的，架构如下图 3 所示：</p>
+<p data-nodeid="1126"><img src="https://s0.lgstatic.com/i/image2/M01/05/F6/Cip5yGABeDCAYarfAAFnB1IDAUU439.png" alt="图片3.png" data-nodeid="1224"></p>
+<div data-nodeid="5703" class=""><p style="text-align:center">图 3：基于 Binlog 的缓存同步架构图</p></div>
+
+
+
+
+<p data-nodeid="1128">将 Binlog 的中间件挂载至目标数据库上，就可以实时获取该数据库的所有变更数据。对这些变更数据解析后，便可直接写入缓存里。</p>
+<p data-nodeid="1129">采用了 Binlog 的同步方案后，全量缓存的架构变得更加完整，主要表现在以下 3 个方面。</p>
+<p data-nodeid="1130"><strong data-nodeid="1232">1. 降低了延迟</strong></p>
+<p data-nodeid="1131">缓存基本上是准实时的，数据库的主从同步保持在毫秒级别，数据库的数据变更可以实时地反映到缓存里。</p>
+<p data-nodeid="1132"><strong data-nodeid="1239">2. 解决了分布式事务的问题</strong></p>
+<p data-nodeid="1133">Binlog 的主从复制是基于 ACK 机制，如果同步缓存失败了，被消费的 Binlog 不会被确认，下一次会重复消费，数据最终会写入缓存中。这就解决了因无法满足分布式事务而导致的丢数据问题，保障了数据的最终一致性。</p>
+<p data-nodeid="1134"><strong data-nodeid="1246">3. 提升了代码的简洁性和可维护性</strong></p>
+<p data-nodeid="1135">因为所有对数据库的修改最终都会反映到 Binlog 里，只要数据库的表结构不变更，对 Binlog 数据的处理程序就能保持固定。回想一下，如果采用在上一讲里提到的在代码里添加主动更新缓存的方式，那么每增加一个对数据库修改的接口，都需要加上更新缓存的代码。相比 Binlog 的方式，它的维护成本和出错概率就高得多。</p>
+<p data-nodeid="1136">基于 Binlog 的全量缓存带来了这么多提升，那它是否存在一些缺陷呢？答案是肯定的，<strong data-nodeid="1253">任何方案在带来某一方面的提升时，必然是在其他方面做出了一些取舍，架构其实是一门平衡的艺术</strong>。</p>
+<h3 data-nodeid="1137">使用 Binlog 的全量缓存存在的问题</h3>
+<p data-nodeid="1138">在使用的了 Binlog 的全量缓存时，会带来两个问题。</p>
+<p data-nodeid="1139"><strong data-nodeid="1260">第一个问题：提升了系统的整体复杂度</strong>。当架构中只存在一个数据库中间件时，系统相对比较简单。当使用了 Binlog 后，整个数据同步的流程变长，且关注点和出错点由一个中间件变为了两个。</p>
+<p data-nodeid="1140"><strong data-nodeid="1265">第二个问题：缓存的容量会成倍上升，相应的资源成本也大幅上升。</strong> 在一些对性能要求极致且实时性高的场景下，只能进行取舍，为了获取这些增强的能力，需要付出一定的代价。除了取舍之外，在技术上还有几点可以进行提升。</p>
+<p data-nodeid="1141"><strong data-nodeid="1270">首先是存储在缓存中的数据需要经过筛选，有业务含义且会被查询的才进行存储</strong>。比如数据库常见的修改时间、创建时间、修改人、数据有效位等一些记录性字段可以不存储在缓存中。</p>
+<p data-nodeid="1142"><strong data-nodeid="1275">其次是存储在缓存中的数据可以进行压缩</strong>。可以采用 Gzip、Snappy 等一些较常见的压缩算法进行处理，但压缩算法通常较消耗 CPU。在实际选型时，可以先压测再评估是否选择。如果无法承受压缩带来的 CPU 消耗，希望在缓存中直接存储 JSON 格式的数据或 Redis 的 Hash 结构的数据。这里我再和你分享 3 个节约缓存的小技巧。</p>
+<p data-nodeid="1143"><strong data-nodeid="1280">技巧一</strong>：将数据按 JSON 格式序列化时，可以在字段上添加替代标识，表示在序列化后此字段的名称用替代标识进行表示。假设有一个 DemoClass 类，采用了替代标识后的格式，如下所示：</p>
+<pre class="lang-java" data-nodeid="1144"><code data-language="java">Class DemoClass{
+
+  <span class="hljs-meta">@Field("1")</span>
+  <span class="hljs-keyword">private</span> field1; 
+
+  <span class="hljs-meta">@Field("2")</span>
+  <span class="hljs-keyword">private</span> field2;
+}
+</code></pre>
+<p data-nodeid="1145">采用了此方式序列化后的数据如下所示：</p>
+<pre class="lang-json" data-nodeid="1146"><code data-language="json">{<span class="hljs-attr">"1"</span>:field1Value,<span class="hljs-attr">"2"</span>:field2Value}
+</code></pre>
+<p data-nodeid="1147">而没有采用此标识的数据如下所示：</p>
+<pre class="lang-json" data-nodeid="1148"><code data-language="json">{<span class="hljs-attr">"field1"</span>:field1Value,<span class="hljs-attr">"field2"</span>:field2Value}
+</code></pre>
+<p data-nodeid="1149">从上面的示例来看，虽然只节约了 field1 和 field2 两个 key 的长度，数据量并不大。但如果你要在缓存中存储上千万、上亿条类似的数据，整体数据量还是非常可观的。另外，当前主流的 JSON 序列化工具均已支持此技巧，比如 Java 里的 Gson、FastJSON 等。你可以去对应工具的官网查看具体如何使用。</p>
+<p data-nodeid="1150"><strong data-nodeid="1292">技巧二</strong>：<strong data-nodeid="1293">如果你使用的缓存是 Redis 且使用了其 Hash 结构存储数据。其 Hash 结构的 Field 字段，也可以使用和上述 JSON 标识一样的模式，使用一个较短的标识进行代替</strong>。在使用全量缓存时，节约的数据也是非常可观的。</p>
+<p data-nodeid="1151"><strong data-nodeid="1298">技巧三：使用全量缓存承接读服务所有的请求时，会出现无法感知缓存丢失的问题。</strong> 比如 Redis 等缓存实现虽然提供了持久化、主从备份等功能，但它为了性能，并没有提供类似数据库的 ACID 等功能，在极端情况下仍然会丢失数据。</p>
+<p data-nodeid="1152">为了保留全量缓存的优点同时解决此极端问题，可以采用异步校准加报警及自动化补齐的方式来应对。此方案的架构如下图 4 所示：</p>
+<p data-nodeid="1153"><img src="https://s0.lgstatic.com/i/image/M00/8E/18/CgqCHmABhX-ANvJRAAGJqu4p-N8813.png" alt="图片7.png" data-nodeid="1302"></p>
+<div data-nodeid="15441" class=""><p style="text-align:center">图 4：异步校准+自动化架构方案图</p></div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<p data-nodeid="1155">当读服务查询缓存中无数据后，会直接返回空数据给到调用方（见上图 4 中标记 1 处）。与此同时，它会通过 MQ 中间件发送一条消息（见上图的标记 2）。此消息的消费程序会异步查询数据库（见上图的标记 3），如果数据库确实存在数据，则会进行一次告警或者一次记录，并自动把数据刷新至缓存中去（见上图的标记 4）。</p>
+<p data-nodeid="1156">此方案是一个有损方案，如果数据在数据库中真实存在而在缓存中不存在，调用方第一次调用请求获取到的是空数据，那我们为什么还要使用此方案呢？</p>
+<p data-nodeid="1157">其实这种情况在现实场景中出现的概率极低。在我的实战经历里，在线上已经关闭了此异步校准方案，主要从以下 4 个方面来考虑。</p>
+<ol data-nodeid="1158">
+<li data-nodeid="1159">
+<p data-nodeid="1160">根据数据统计， 数据在数据库中存在而在缓存中不存在的概率几乎为零。</p>
+</li>
+<li data-nodeid="1161">
+<p data-nodeid="1162">对数据库大量无效的异步校准查询会导致数据库性能变差。</p>
+</li>
+<li data-nodeid="1163">
+<p data-nodeid="1164">即使缓存里数据丢失，只要此条数据存在变更，Binlog 都会把它再次刷新至缓存里。如果此条数据一直不存在变更，说明它是死数据，价值也不会太大。</p>
+</li>
+<li data-nodeid="1165">
+<p data-nodeid="1166">如果你将此方案应用到生产环境里，同时开启了异步校准，依然存在大量数据丢失的情况，那说明对于缓存中间件的使用和调优还有很大的提升空间。毕竟，此类数据丢失大多都是中间件自身导致的。我们不应该本末倒置，为了弥补缓存中间件的问题，而让业务团队做太多的补偿工作。</p>
+</li>
+</ol>
+<p data-nodeid="1167">虽然最后我们没有采用此有损补偿方案，但这个思考和论证过程非常值得你学习和参考。当你在工作中遇到类似的问题，需要决定是否采用某个技术方案时，你可以类比上述方法，通过推理和数据验证来做最终决定。</p>
+<h3 data-nodeid="1168">其他优化点</h3>
+<p data-nodeid="1169">在使用了 Binlog 的同步方案后，整个数据同步变得非常简单。数据同步模块接到 Binlog 的数据后，进行一定规则的数据转换后，便可直接写入缓存。</p>
+<h4 data-nodeid="1170">多机房实时热备</h4>
+<p data-nodeid="1171">为了提升性能和可用性，可以将数据同步模块写入的缓存由一个集群变成两个集群，此时的架构演化为如下图 5 的所示：</p>
+<p data-nodeid="1172"><img src="https://s0.lgstatic.com/i/image2/M01/06/8E/CgpVE2AFPfuAEYDbAAJhI8yG-E8905.png" alt="6.png" data-nodeid="1317"></p>
+<div data-nodeid="17605" class="te-preview-highlight"><p style="text-align:center">图 5：双缓存集群架构图</p></div>
+
+
+
+
+
+
+
+
+
+<p data-nodeid="1174">在部署上，如果资源允许，两套缓存集群可以分别部署到不同城市的机房或者同城市的不同分区。另外，读服务也相应地部署到不同城市或不同分区。在承接请求时，不同机房或分区的读服务只依赖同样属性的缓存集群。此方案有两个好处。</p>
+<p data-nodeid="1175"><strong data-nodeid="1323">第一：提升了性能</strong>。此方式和上一讲里提到的原则——读服务不要分层，服务要尽可能地和数据靠近其实是一个逻辑。</p>
+<p data-nodeid="1176"><strong data-nodeid="1328">第二：增加了可用性</strong>。当单机房出现故障时，可以无缝地将所有流量都切换至存活的机房或分区。此方案的切换时间可以达到分钟级或秒级，高可用毋庸置疑。</p>
+<p data-nodeid="1177">此方案虽然带来了性能和可用性的提升，但代价是资源成本的上升。</p>
+<h4 data-nodeid="1178">异步并行化</h4>
+<p data-nodeid="1179"><strong data-nodeid="1335">最简单的读服务场景是一次请求只和存储交互一次，但实际上很多时候交互都不止一次</strong>。对于需要多次和存储交互的场景，可以采用异步并行化的方式——接收到一次读请求后，在读服务内部，将串行与存储交互的模式改为异步并行与存储进行交互，形式如下图 6 所示：</p>
+<p data-nodeid="1180"><img src="https://s0.lgstatic.com/i/image2/M01/05/F6/Cip5yGABeWOAdnL0AAH9WGLDI5s542.png" alt="图片6.png" data-nodeid="1338"></p>
+<div data-nodeid="1181"><p style="text-align:center">图 6：异步并行化读取数据</p></div>
+<p data-nodeid="1182">如果一次读请求和存储需要交互三次，假设每次交互时间为 10ms，采用串行的方式总耗时为 30ms，而采用了异步并行的方式后，三次交互为并行执行，总耗时仍为 10ms。整体的性能提升了很多。但<strong data-nodeid="1344">异步并行也带来了一些问题和局限</strong>：</p>
+<ol data-nodeid="1183">
+<li data-nodeid="1184">
+<p data-nodeid="1185">首先，异步并行增加了线程的消耗，每一个异步并行都对应一个线程，进而带来 CPU 的消耗；</p>
+</li>
+<li data-nodeid="1186">
+<p data-nodeid="1187">其次，异步并行的多线程开发也带来的编程复杂度和维护难度；</p>
+</li>
+<li data-nodeid="1188">
+<p data-nodeid="1189">最后，异步并行化只能应用在每一次和存储交互都是独立的、无先后关系的场景里。</p>
+</li>
+</ol>
+<p data-nodeid="1190"><strong data-nodeid="1352">除了上述场景可以采用异步并行化外，对于一次请求查询一批数据的场景也可以进行异步并行化</strong>。当查询的一批次数据较多时，大部分性能都消耗在串行的等待网络传输上。可以将这个批次拆分成多个子批次，对每个子批次使用异步并行化的方式和存储交互，性能也会有很大的提升。具体子批次设置为多少，可以在实践中根据压测来决定。</p>
+<h3 data-nodeid="1191">总结</h3>
+<p data-nodeid="1192">在这一讲里，<strong data-nodeid="1363">介绍了一种能够解决毛刺和更新实时性问题的全量缓存的完整架构方案</strong>。<strong data-nodeid="1364">此方案提供的性能和高可用的能力，基本上可以满足各大互联网的业务场景里对于读服务的性能和容灾指标的要求</strong>。即使是近些年越来越热闹、流量瞬间并发非常大的电商大促活动，只要对方案稍加改造，也能够轻松应对。</p>
+<p data-nodeid="1193">但上述方案也带来了另外的问题，即成本的消耗。从上述的文字中，相信你也会有这样的感受——任何新的架构和应对方案都不是完美的，架构是解决问题的方案，也是取舍的艺术。这也是本讲所传达的另一个核心思想。</p>
+<p data-nodeid="1194" class=""><strong data-nodeid="1373">最后，留一道思考题给你，此整套的全量缓存的读服务方案是否完全适合你当前负责的读类型的业务</strong>？<strong data-nodeid="1374">如果不是完全适合，你会做怎样的裁剪？可以说一说你为什么这么做。</strong></p></div>
+
+</body></html>

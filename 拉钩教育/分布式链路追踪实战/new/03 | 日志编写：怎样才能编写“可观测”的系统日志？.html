@@ -1,0 +1,1426 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>03 | 日志编写：怎样才能编写“可观测”的系统日志？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>03 | 日志编写：怎样才能编写“可观测”的系统日志？</h1><p data-nodeid="1277" class="">在 02 课时，我带你重新认识了系统日志，介绍了日志在系统中的重要性。既然日志如此重要，那我们应该如何编写它呢？</p>
+<p data-nodeid="1278">这一节，我将带你从编写日志的工具、编写日志的方式，以及日志编写后的管理，就像是购物的售前、售中、售后，这 3 个方面来讲解，怎么样才可以写出更具有“可观测性”的日志内容。</p>
+<p data-nodeid="1279"><img src="https://s0.lgstatic.com/i/image/M00/3E/C0/CgqCHl8tHg-AR1niAABq5d5i1-4639.png" alt="2.png" data-nodeid="1401"></p>
+<h3 data-nodeid="1280">日志框架</h3>
+<p data-nodeid="2236" class="">在编写日志之前，咱们先来了解一下有哪些日志框架可以协助编写日志。</p>
+
+
+<p data-nodeid="2876" class="">在介绍日志框架之前，我需要说明一下，如果你仍在使用 System.out.println、Exception.printStackTrace 或类似的控制台输出日志的方式，我推荐你改用第三方日志框架编写。这种控制台输出的方式，可以从源码了解到它们是线程同步的，大量使用这种方式，会对程序性能造成严重的影响，因为它们同一时间只能有一个线程在进行执行。</p>
+
+<p data-nodeid="1283">日志框架在系统中一般分为 2 种类型：日志实现框架和日志接口框架。下面我会对它们分别说明。</p>
+<h4 data-nodeid="1284">日志实现框架</h4>
+<p data-nodeid="1285">顾名思义，就是日志的实现方，每个框架都提供自己的日志管理和写入的方式。Java 中的日志框架很不统一，这里我就以认知度最高的 3 个项目来说明。</p>
+<ol data-nodeid="6736">
+<li data-nodeid="6737">
+<p data-nodeid="6738" class=""><strong data-nodeid="6747">log4j 1.x</strong>：2001 年发布，后来成为 Apache 基金会的顶级项目。log4j 1.x 当年可以说是基本都在使用的日志实现框架，即便到了现在，仍有很多项目在使用它。log4j 1.x 使用起来确实很方便，但是 1.x 版本在高并发的情况下，存在比较严重的锁竞争关系，会导致性能不能得到有效的发挥。</p>
+</li>
+<li data-nodeid="6739">
+<p data-nodeid="6740"><strong data-nodeid="6752">logback</strong>：log4j 1.x 创始人的另一个项目。它提供了更加高效的写入性能，据官方说明是 log4j 1.x 性能的 10 倍，以及更多的功能，比如异步日志。</p>
+</li>
+<li data-nodeid="6741">
+<p data-nodeid="6742"><strong data-nodeid="6757">log4j 2.x</strong>：随着 logback 流行，log4j 1.x 的开发人员也想跟上步伐，于是推出了一套新的日志框架，号称比 logback 更快。log4j 2.x 借鉴了很多 logback 中的想法和功能，并解决了 log4j 1.x 架构上存在的一些问题。同时，它采用 Disruptor 来进行异步日志，相比较 Java 自带的队列，它提供了更高效且更完整的队列实现方案。</p>
+</li>
+</ol>
+
+
+<p data-nodeid="1293">对于这三种框架，目前市面上都有在用，但是大多是 logback 和 log4j 2.x。虽然异步日志的效率 logback 和 log4j 2.x 相差无几，但 log4j 2.x 仍有些微弱的优势。</p>
+<h4 data-nodeid="1294">日志接口框架</h4>
+<p data-nodeid="1295">可以看到，Java 中是存在多种不同日志框架的实现的，这就会造成 2 个问题：</p>
+<ol data-nodeid="8041">
+<li data-nodeid="8042">
+<p data-nodeid="8043" class="">多框架协作：在一个项目中，不光有你的代码，还有各种各样的框架代码，比如分布式协调会用到 ZooKeeper、Curator；RPC 通信会用到 Dubbo、Thrift。为了方便开发，业务系统中往往集成了许多第三方框架。我们需要日志来了解各个第三方框架之间的协作状态，这些第三方框架又依赖于各个日志框架进行输出。这时候如果直接使用像 logback、log4j 这样的日志框架，岂不是业务系统要接入每个日志框架？</p>
+</li>
+<li data-nodeid="8044">
+<p data-nodeid="8045">不同框架竞争：如果要引入多个日志框架，我们还需要考虑各个框架的输出位置。要是多个日志框架同时写入一个日志文件，还会涉及竞争问题，导致性能无法发挥。</p>
+</li>
+</ol>
+
+
+<p data-nodeid="1301">由此就出现了面向接口的日志框架，它提供了统一的 API。开发人员在编写代码的时候，直接使用这套面向接口的日志框架，当业务项目人员在使用时，只需要选择好实现框架，就可以统一日志实现框架。</p>
+<p data-nodeid="1302"><img src="https://s0.lgstatic.com/i/image/M00/3E/B5/Ciqc1F8tHjOAWiuMAAB_uuNhVnM257.png" alt="3.png" data-nodeid="1431"></p>
+<p data-nodeid="1303">目前使用最为广泛的日志接口框架是 SLF4J，出自 logback 的开发者，目前基本已经形成规范。SLF4J 提供了动态占位符的功能，大大提高了程序的性能，无须开发人员再对参数信息进行拼接。</p>
+<p data-nodeid="1304">比如默认情况下程序是 info 级别的，在原先的代码方式中想要进行日志输出需要自行拼接字符串：</p>
+<pre class="lang-java hljs" data-nodeid="1305"><code data-language="java">logger.debug(<span class="hljs-string">"用户"</span> + userId + <span class="hljs-string">"开始下单:"</span> + orderNo + <span class="hljs-string">",请求信息:"</span> + Gson.toJson(req));
+</code></pre>
+<p data-nodeid="1306">这会产生一个问题，系统中如果存在大量类似的代码，同时系统只输出 info 及 info 以上级别的日志，那么，在输出 debug 日志时会产生大量的字符串，而并不会输出 debug 日志，最后造成字符串不停地拼接，浪费系统性能。此时，SLF4J 就可以使用占位符的功能编写日志，比如像下面这样：</p>
+<pre class="lang-java hljs" data-nodeid="1307"><code data-language="java">logger.debug(<span class="hljs-string">"用户{}开始下单:{},请求信息:"</span>, userId, orderNo,  Gson.toJson(req));
+</code></pre>
+<p data-nodeid="1308">通过这样的形式，SLF4J 就可以根据日志等级判断，只对符合要求的日志进行数据拼接和打印。</p>
+<p data-nodeid="1309">有些时候日志输出需要进行数值计算，或者 JSON 转换，此时就需要一定的计算任务。但方法调用如果被当作参数传递的话一样会被执行，所以 Java8 中 SLF4J 还可以通过 Supplier 来传递。如下所示：</p>
+<pre class="lang-java hljs" data-nodeid="1310"><code data-language="java">logger.debug(<span class="hljs-string">"用户{}开始下单:{},请求信息:"</span>, userId, orderNo, () -&gt; Gson.toJson(req))
+</code></pre>
+<p data-nodeid="1311">可以看到，SLF4J 不仅为我们制定了一套面向接口开发的方式，还为我们明确了如何有效地编写日志。这也是为什么越来越多人喜欢用 SLF4J。</p>
+<h3 data-nodeid="1312">日志编写方式</h3>
+<p data-nodeid="5436" class="">在详细介绍了开发时需要使用的日志框架后，我将正式展开标题：“如何编写‘可观测’的日志？”我会从日志编写位置、写入性能、占位符、可读性、关键信息隐蔽、减少代码位置信息的输出、文件分类、和日志 review 这 8 个点来讲解，并将它们分成了 2 个方向：</p>
+
+
+
+
+<ul data-nodeid="1314">
+<li data-nodeid="1315">
+<p data-nodeid="1316">日志开发时（前 5 项）：怎么样写出更有效率的日志？</p>
+</li>
+<li data-nodeid="1317">
+<p data-nodeid="1318">日志完成后（后 3 项）：上线前后有哪些需要注意的？</p>
+</li>
+</ul>
+<p data-nodeid="1319"><img src="https://s0.lgstatic.com/i/image/M00/3E/B5/Ciqc1F8tHiCALdt1AACxdCqLBeM381.png" alt="4.png" data-nodeid="1444"></p>
+<h4 data-nodeid="1320">日志编写位置</h4>
+<p data-nodeid="1321">日志编写的位置可以说是重中之重，好的日志位置可以帮你解决问题，也可以让你更加了解代码的运行情况。我总结了几点比较重要的编写日志的位置，以供参考。</p>
+<ol data-nodeid="1322">
+<li data-nodeid="1323">
+<p data-nodeid="1324"><strong data-nodeid="1451">系统/应用启动和参数变更</strong>：当系统启动时，可以将相关的参数信息进行打印，以便出现问题时，更准确地查询原因；参数信息可能并不存储在本地，需要通过配置中心获取，而参数信息有变更时，也需要将变更后的内容输出在日志中。</p>
+</li>
+<li data-nodeid="1325">
+<p data-nodeid="1326"><strong data-nodeid="1464">关键操作节点</strong>：最典型的就是<strong data-nodeid="1465">在关键位置添加日志，记录用户进行的某个操作</strong>。当出现问题时，你可以通过这个位置的日志了解到用户的操作。同样你也可以<strong data-nodeid="1466">在系统进行某些操作时添加日志</strong>，比如你准备启动某个线程池来进行数据处理时，可以加上日志便于以后分析问题。</p>
+</li>
+<li data-nodeid="1327">
+<p data-nodeid="1328"><strong data-nodeid="1475">大型任务进度上报</strong>：当系统在处理某个比较大型的任务时，可以在这个过程中增加相关的日志来表明任务处理的进度，<strong data-nodeid="1476">防止因为长时间没有处理而无法得知程序执行的状态</strong>，比如在文件下载时，可以按照百分比来定时/定次地上报数据。</p>
+</li>
+<li data-nodeid="1329">
+<p data-nodeid="1330"><strong data-nodeid="1481">异常</strong>：当程序出现异常时，我们通常是通过 try-catch 来记录当时的情况，然后以日志的形式表现出来。如果是通过 try-catch 处理，你需要注意日志编写的位置。如果你需要将日志在本层抛出，则不需要进行日志记录，否则会出现日志重复的问题。如果你除了异常以外还需要记录其他的内容，则可以通过定制异常信息来实现。</p>
+</li>
+</ol>
+<h4 data-nodeid="1331">写入性能</h4>
+<p data-nodeid="1332">日志的写入性能则会受到如下 5 个因素的影响：</p>
+<ol data-nodeid="1333">
+<li data-nodeid="1334">
+<p data-nodeid="1335"><strong data-nodeid="1488">日志编写位置</strong>：日志编写的位置在程序中十分重要，如果在 for 循环中编写，因为这个循环会持续很多次，那么就会产生大量的日志记录。此时可以考虑一下，这个日志的记录是否有必要。</p>
+</li>
+<li data-nodeid="1336">
+<p data-nodeid="1337"><strong data-nodeid="1493">日志数量</strong>：如果你大量地编写日志，那么日志的质量一定会降低。同时，大量的日志会让你很难去查看问题，反而成了一种负担。在高访问量时，过多的日志也会影响程序的执行效率。</p>
+</li>
+<li data-nodeid="1338">
+<p data-nodeid="1339"><strong data-nodeid="1498">日志编写等级</strong>：我在上一节中讲过，日志等级很容易被滥用，不正确的日志等级会导致我们查询问题的时间增加。</p>
+</li>
+<li data-nodeid="1340">
+<p data-nodeid="1341"><strong data-nodeid="1503">日志输出级别</strong>：这里指的是对于配置日志输出级别的选择。在线上环境，不建议使用 debug 级别，因为线上一直有请求，debug 级别会输出大量的基础和请求信息，极其浪费资源，因此建议开启 info 或者以上。</p>
+</li>
+<li data-nodeid="1342">
+<p data-nodeid="1343"><strong data-nodeid="1508">无用输出参数</strong>：不对大字段、无用字段输出，因为这很影响程序执行效率和日志的内容。我曾遇到一个案例，A 同学在线上打印了一个完整的 HTML 内容，导致当日的部分日志内容错乱，部分日志无法检索，原因就在于 HTML 存在多行内容导致无法解析的问题。当开发人员到线上服务器上查看时，日志文件的大小已经扩大了 3 倍。</p>
+</li>
+</ol>
+<p data-nodeid="1344"><strong data-nodeid="1513">好的日志一定是便于你去排查问题的</strong>。在编写日志时你一定要思考这个日志可以帮你做什么。</p>
+<h4 data-nodeid="1345">占位符</h4>
+<p data-nodeid="1346">在介绍日志接口框架时我提到过，在日志编写时尽可能地选择基于占位符的编写方式。这里我会告诉你为什么要用占位符：</p>
+<ol data-nodeid="1347">
+<li data-nodeid="1348">
+<p data-nodeid="1349"><strong data-nodeid="1520">节约性能</strong>。在生成较高级别的日志时，低级别的日志会不停叠加字符串而占用过多的内存、CPU 资源，导致性能浪费。</p>
+</li>
+<li data-nodeid="1350">
+<p data-nodeid="1351"><strong data-nodeid="1525">便于编写</strong>。先确认日志所想要表达的内容，再确认你所需要编写的参数，这样在写日志时，目的也会更加明确。</p>
+</li>
+<li data-nodeid="1352">
+<p data-nodeid="1353"><strong data-nodeid="1530">便于查看</strong>。在代码 review 时，更方便查看日志想表达的意思，而不会被日志的参数打乱。</p>
+</li>
+</ol>
+<h4 data-nodeid="1354">可读性</h4>
+<p data-nodeid="1355">日志的可读性也是日志编写的关键之一。一个好的日志就像一篇好的文章，能让你很快了解到这个日志中的关键信息。我在工作中发现很多人写的日志都是无意义的，根本无法帮你定位问题的根源，比如像下面的这段代码：</p>
+<pre class="lang-java hljs" data-nodeid="1356"><code data-language="java"><span class="hljs-keyword">boolean</span> success = doSomeThing(); 
+<span class="hljs-keyword">if</span> (success) { 
+    logger.info(<span class="hljs-string">"数据保存成功！"</span>); 
+}
+</code></pre>
+<p data-nodeid="1357">这段代码乍一看似乎没什么问题，但是运行后系统会大量地输出“数据保存成功！”的消息，这个输出和没有是一样的，起不到任何的作用。</p>
+<p data-nodeid="1358">我总结了几点在日志中容易遗漏的信息：</p>
+<ol data-nodeid="1359">
+<li data-nodeid="1360">
+<p data-nodeid="1361"><strong data-nodeid="1539">会话标识</strong>：当前操作的用户和与当前请求相关的信息，类似 Session。当出现问题/查看行为时，可以根据这个值来快速识别到相关的日志。</p>
+</li>
+<li data-nodeid="1362">
+<p data-nodeid="1363"><strong data-nodeid="1544">请求标识</strong>：每个请求都拥有一个唯一的标识，这样在查看问题时，我们只需要查看这一个请求中的所有日志即可。一般我们会配合链路追踪系统一同使用，因为后者可以实现跨应用的日志追踪，从而帮助我们过滤掉不相关的信息。</p>
+</li>
+<li data-nodeid="1364">
+<p data-nodeid="1365"><strong data-nodeid="1549">参数信息</strong>：在日志中增加参数信息能帮你了解到，是什么情况下产生的问题，这样你也很容易复现问题，以及辨别错误的原因。</p>
+</li>
+<li data-nodeid="1366">
+<p data-nodeid="1367"><strong data-nodeid="1554">发生数据的结果</strong>：和参数信息相互对应，一个是执行前，一个是执行后。发生数据的结果可以帮你了解程序执行的结果，出错时也是很重要的参考条件。</p>
+</li>
+</ol>
+<h4 data-nodeid="1368">关键信息隐蔽</h4>
+<p data-nodeid="1369">对于关键的信息不显示或者进行掩码显示，以免信息被盗取后出现数据内容泄漏。推特在 2018 年曾将用户的密码打印在日志中，这一行为泄露了 3.3 亿人的密码。</p>
+<h4 data-nodeid="1370">减少代码位置信息的输出</h4>
+<p data-nodeid="1371">如果不是必要，尽量不要在日志格式中输出当前日志所在的代码行和方法名称信息。如果你看过 logback，log4j 的源码你就知道，这都是通过获取当前线程堆栈快照信息来进行实现的，这种实现方式会极大地影响程序执行的效率。</p>
+<p data-nodeid="42270" class="">在 log4j 的文档中有这样一段话：“使用同步方式进行获取位置信息会慢 1.3 到 5 倍，如果是使用异步日志，因为会涉及跨线程获取位置信息，会慢 30 到 100 倍。</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<p data-nodeid="1373">所以，关闭代码位置信息的输出可以节省系统资源的使用，提升性能。</p>
+<h4 data-nodeid="1374">文件分类</h4>
+<p data-nodeid="1375">文件分类可以帮助你提高检索日志信息时的效率。将不同的业务逻辑按照不同的日志文件来分类，可以保证你看到的信息都是和这个功能相关的，不会被其他的日志干扰。这也是在大型系统中经常会使用到的功能。</p>
+<p data-nodeid="1376">比如拉勾的单点登录系统，就会将用户的极验验证功能和登录验证功能拆成两个单独的日志文件，当出现问题时，可以根据相关功能的日志来快速筛查问题，减少了筛选所需的时间。</p>
+<h4 data-nodeid="1377">日志 review</h4>
+<p data-nodeid="1378">每一次功能上线后，除了要对业务功能进行回归，还要对日志进行观察，确认日志内容的输出情况，比如日志内容是否符合预期，会不会有不合适的地方？</p>
+<p data-nodeid="1379">好的日志不是一次就能写好的，一定是要和代码一样不停地迭代，才能写出更方便处理问题，也更具有可读性的日志。</p>
+<h3 data-nodeid="1380">日志管理</h3>
+<p data-nodeid="1381">就像店家在卖出商品后还要负责其售后，编写完日志，对于它的管理也是十分重要的。好的日志管理方式可以提高阅读日志的效率，而这需要开发人员和运维人员共同协作。</p>
+<h4 data-nodeid="1382">日志格式</h4>
+<p data-nodeid="1383">日志的格式布局会影响运维人员将这些日志内容收集与管理的效率。如果编写者和管理者能够通过协商，规定出一套完整的日志格式，这样就能在排查问题时事半功倍。</p>
+<p data-nodeid="1384">我会简单介绍几点在日志编写时需要注意的事项：</p>
+<ol data-nodeid="1385">
+<li data-nodeid="1386">
+<p data-nodeid="1387"><strong data-nodeid="1580">系统之间格式保持一致</strong>：每个应用在日志格式上尽量保持统一，这样，运维人员在进行日志收集时，就可以采用统一的日志模板来收集和格式化内容，减少双方的沟通成本。</p>
+</li>
+<li data-nodeid="1388">
+<p data-nodeid="1389"><strong data-nodeid="1585">不编写多行的日志内容</strong>：除了异常堆栈信息，不对日志内容进行多行的输出，多行的内容十分不便于数据解析，可能会出现生成多条日志的情况。</p>
+</li>
+<li data-nodeid="1390">
+<p data-nodeid="1391"><strong data-nodeid="1590">不要使用日志中的常见内容来分割</strong>：如果采用日志中常见的内容来分割，会在格式解析时出现问题，比如用户 ID 中的空格就是比较常见的内容。</p>
+</li>
+</ol>
+<h4 data-nodeid="1392">日志归档</h4>
+<p data-nodeid="1393">日志归档是一件很重要的事情。如果你将日志内容全部写到一个文件中，这个日志文件会变得越来越烦冗，不利于日志的收集和查看。</p>
+<p data-nodeid="1394">一般情况下，我们会对日志按照日期来归档，每天生成一个日志文件，这样在日志备份和恢复时，可以按照日期来进行。如果感觉天级别的日志仍然太大了，可以考虑按照小时细分。</p>
+<h3 data-nodeid="1395">总结</h3>
+<p data-nodeid="115124" class="">这节课，我带你了解了日志编写的工具、日志编写需要注意的 8 个事项以及日志管理的方式。它们是日志编写整个流程，需要你从开始就注意。</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<p data-nodeid="129230" class="">在编写日志时，有哪些是你原来犯过的错误，又有哪些是你原来没有想到的呢？欢迎你在留言区分享与讨论。</p></div>
+
+</body></html>

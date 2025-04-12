@@ -1,0 +1,1016 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>22 | 引擎进阶（下）：如何理解 Process.nextTick 的原理？</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>22 | 引擎进阶（下）：如何理解 Process.nextTick 的原理？</h1><p data-nodeid="665" class="">上一讲我们讨论了宏任务和微任务的运行机制和原理，我在最后提到了 Process.nextTick 是微任务的其中一个，那么这一讲我们就来深挖一下 Process.nextTick 的相关知识。</p>
+<p data-nodeid="666">这一讲我除了结合上一讲说的究宏任务和微任务的运行机制外，还将通过一些代码片段来带你研究 Process.nextick 的执行逻辑，帮你把这块知识点重新梳理。在日常开发中，Process.nextick 在浏览器端代码中很少使用，但在 Node.js 开发种却极为常见，所以你要好好掌握。</p>
+<p data-nodeid="667">那么，为了方便你更好地理解本讲的内容，在课程开始前请你先思考：</p>
+<ol data-nodeid="668">
+<li data-nodeid="669">
+<p data-nodeid="670">Process.nextick 和其他微任务方法在一起的时候，执行顺序是怎么样的？</p>
+</li>
+<li data-nodeid="671">
+<p data-nodeid="672">Vue 也有个 nextick，它的逻辑又是什么样的？</p>
+</li>
+</ol>
+<p data-nodeid="673">带着疑问，我们先来了解一下 Process.nextick。</p>
+<h3 data-nodeid="674">基本语法</h3>
+<p data-nodeid="675">Process.nextick 的语法有两个参数：</p>
+<blockquote data-nodeid="676">
+<p data-nodeid="677">process.nextTick(callback[, ...args])</p>
+</blockquote>
+<p data-nodeid="678">其中，第一个参数是 callback 回调函数，第二个参数是 args 调用 callback 时额外传的参数，是可选参数。</p>
+<p data-nodeid="679">再来看下 Process.nextick 的运行逻辑：</p>
+<ol data-nodeid="680">
+<li data-nodeid="681">
+<p data-nodeid="682">Process.nextick 会将 callback 添加到“next tick queue”；</p>
+</li>
+<li data-nodeid="683">
+<p data-nodeid="684">“next tick queue”会在当前 JavaScript stack 执行完成后，下一次 event loop 开始执行前按照 FIFO 出队；</p>
+</li>
+<li data-nodeid="685">
+<p data-nodeid="686">如果递归调用 Process.nextick 可能会导致一个无限循环，需要去适时终止递归。</p>
+</li>
+</ol>
+<p data-nodeid="687">可能你已经注意到 Process.nextick 其实是微任务，同时也是异步 API 的一部分。但是从技术上来说 Process.nextick 并不是事件循环（eventloop）的一部分，相反地，“next tick queue”将会在当前操作完成之后立即被处理，而不管当前处于事件循环的哪个阶段。</p>
+<p data-nodeid="688">思考一下上面的逻辑，如果任何时刻你在一个给定的阶段调用 Process.nextick，则所有被传入 Process.nextick 的回调将在事件循环继续往下执行前被执行。这可能会导致一些很糟的情形，因为它允许用户递归调用 Process.nextick 来挂起 I/O 进程的进行，这会导致事件循环永远无法到达轮询阶段。</p>
+<h3 data-nodeid="689">为什么使用 Process.nextTick()</h3>
+<p data-nodeid="690">那么为什么 Process.nextick 这样的 API 会被允许出现在 Node.js 中呢？一部分原因是设计理念，Node.js 中的 API 应该总是异步的，即使是那些不需要异步的地方。下面的代码片段展示了一个例子：</p>
+<pre class="lang-javascript" data-nodeid="691"><code data-language="javascript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">apiCall</span>(<span class="hljs-params">arg, callback</span>) </span>{
+  <span class="hljs-keyword">if</span> (<span class="hljs-keyword">typeof</span> arg !== <span class="hljs-string">'string'</span>)
+  <span class="hljs-keyword">return</span> process.nextTick(callback, <span class="hljs-keyword">new</span> <span class="hljs-built_in">TypeError</span>(<span class="hljs-string">'argument should be     string'</span>));
+}
+</code></pre>
+<p data-nodeid="692">通过上面的代码检查参数，如果检查不通过，它将一个错误对象传给回调。Node.js API 最近进行了更新，其已经允许向 Process.nextick 中传递参数来作为回调函数的参数，而不必写嵌套函数。</p>
+<p data-nodeid="693">我们所做的就是将一个错误传递给用户，但这只允许在用户代码被执行完毕后执行。使用 Process.nextick 我们可以保证 apicall() 的回调总是在用户代码被执行后，且在事件循环继续工作前被执行。为了达到这一点，JS 调用栈被允许展开，然后立即执行所提供的回调。该回调允许用户对 Process.nextick 进行递归调用，而不会达到 RangeError，即 V8 调用栈的最大值。</p>
+<p data-nodeid="694">这种设计理念会导致一些潜在的问题，观察下面的代码片段：</p>
+<pre class="lang-javascript" data-nodeid="695"><code data-language="javascript"><span class="hljs-keyword">let</span> bar;
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">someAsyncApiCall</span>(<span class="hljs-params">callback</span>) </span>{ callback(); }
+someAsyncApiCall(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+  <span class="hljs-built_in">console</span>.log(<span class="hljs-string">'bar'</span>, bar);   <span class="hljs-comment">// undefined</span>
+});
+bar = <span class="hljs-number">1</span>;
+</code></pre>
+<p data-nodeid="696">用户定义函数 someAsyncApiCall() 有一个异步签名，但实际上它是同步执行的。当它被调用时，提供给 someAsyncApiCall() 的回调函数会在执行 someAsyncApiCall() 本身的同一个事件循环阶段被执行，因为 someAsyncApiCall() 实际上并未执行任何异步操作。结果就是，即使回调函数尝试引用变量 bar，但此时在作用域中并没有改变量。因为程序还没运行到对 bar 赋值的部分。</p>
+<p data-nodeid="697">将回调放到 Process.nextick 中，程序依然可以执行完毕，且所有的变量、函数等都在执行回调之前被初始化，它还具有不会被事件循环打断的优点。以下是将上面的例子改用 Process.nextick 的代码：</p>
+<pre class="lang-javascript" data-nodeid="698"><code data-language="javascript"><span class="hljs-keyword">let</span> bar;
+&nbsp;
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">someAsyncApiCall</span>(<span class="hljs-params">callback</span>) </span>{
+  process.nextTick(callback);
+}
+&nbsp;
+someAsyncApiCall(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+  <span class="hljs-built_in">console</span>.log(<span class="hljs-string">'bar'</span>, bar); <span class="hljs-comment">// 1</span>
+});
+&nbsp;
+bar = <span class="hljs-number">1</span>;
+</code></pre>
+<p data-nodeid="699">通过这个例子，你就可以体会到 Process.nextick 的作用了。其实在日常的 Node.js 开发中，这样的情况也经常会遇见，之前在“<a href="https://kaiwu.lagou.com/course/courseInfo.htm?courseId=601#/detail/pc?id=6189&amp;fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="789">16 | 进阶练习（上）：怎样轻松实现一个 EventEmitter</a>”中我有讲过 EventEmitter，那么我们看下 EventEmitter 在 Node.js 的使用的一个例子。</p>
+<p data-nodeid="700">因为 Node.js 直接有 event 模块，其实就是一个 EventEmitter，下面代码是在造函数中触发一个事件：</p>
+<pre class="lang-javascript" data-nodeid="701"><code data-language="javascript"><span class="hljs-keyword">const</span> EventEmitter = <span class="hljs-built_in">require</span>(<span class="hljs-string">'events'</span>);
+<span class="hljs-keyword">const</span> util = <span class="hljs-built_in">require</span>(<span class="hljs-string">'util'</span>);
+&nbsp;
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">MyEmitter</span>(<span class="hljs-params"></span>) </span>{
+EventEmitter.call(<span class="hljs-keyword">this</span>);
+<span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'event'</span>);
+}
+util.inherits(MyEmitter, EventEmitter);
+&nbsp;
+<span class="hljs-keyword">const</span> myEmitter = <span class="hljs-keyword">new</span> MyEmitter();
+myEmitter.on(<span class="hljs-string">'event'</span>, () =&gt; {
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">'an event occurred!'</span>);
+});
+</code></pre>
+<p data-nodeid="702">你无法在构造函数中立即触发一个事件，因为此时程序还未运行到将回调赋值给事件的那段代码。因此，在构造函数内部，你可以使用 Process.nextick 设置一个回调以在构造函数执行完毕后触发事件，下面的代码满足了我们的预期。</p>
+<pre class="lang-javascript" data-nodeid="703"><code data-language="javascript"><span class="hljs-keyword">const</span> EventEmitter = <span class="hljs-built_in">require</span>(<span class="hljs-string">'events'</span>);
+<span class="hljs-keyword">const</span> util = <span class="hljs-built_in">require</span>(<span class="hljs-string">'util'</span>);
+&nbsp;
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">MyEmitter</span>(<span class="hljs-params"></span>) </span>{
+EventEmitter.call(<span class="hljs-keyword">this</span>);
+process.nextTick(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+  <span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'event'</span>);
+});
+}
+util.inherits(MyEmitter, EventEmitter);
+&nbsp;
+<span class="hljs-keyword">const</span> myEmitter = <span class="hljs-keyword">new</span> MyEmitter();
+  myEmitter.on(<span class="hljs-string">'event'</span>, () =&gt; {
+  <span class="hljs-built_in">console</span>.log(<span class="hljs-string">'an event occurred!'</span>);
+});
+</code></pre>
+<p data-nodeid="704">通过上面的改造可以看出，使用 Process.nextick 就可以解决问题了，即使 event 事件还没进行绑定，但也可以让代码在前面进行触发，因为根据代码执行顺序，Process.nextick 是在每一次的事件循环最后执行的。因此这样写，代码也不会报错，同样又保持了代码的逻辑。</p>
+<p data-nodeid="705">通过这两个例子你应该对 Process.nextick 这个知识有了更好的理解了吧？下面我们再来看看浏览器端 Vue 框架的 nextick 是干什么用的，注意不要将二者混淆了，前面讲的是 Node.js 服务端的事情，而下面要说的是浏览器端 Vue 框架的知识。</p>
+<h3 data-nodeid="706">Vue 的 nextick 又是什么意思？</h3>
+<p data-nodeid="707">我们看下 Vue 官网最直白的解释：</p>
+<blockquote data-nodeid="708">
+<p data-nodeid="709">Vue 异步执行 DOM 的更新。当数据发生变化时，Vue 会开启一个队列，用于缓冲在同一事件循环中发生的所有数据改变的情况。如果同一个 watcher 被多次触发，只会被推入到队列中一次。这种在缓冲时去除重复数据对于避免不必要的计算和 DOM 操作上非常重要。然后在下一个的事件循环“tick”中。例如：当你设置 vm.someData = 'new value'，该组件不会立即重新渲染。当刷新队列时，组件会在事件循环队列清空时的下一个“tick”更新。多数情况我们不需要关心这个过程，但是如果你想在 DOM 状态更新后做点什么，这就可能会有些棘手。</p>
+</blockquote>
+<p data-nodeid="710">我们细细地根据 Vue 的官网理解一下，其实是不是有点像 EventLoop 的味道，这里只不过是 Vue 开启了一个队列，当你在 nextick 方法中改变数据的时候，视图层不会立马更新，而是要在下次的时间循环队列中更新。</p>
+<p data-nodeid="711">这点是不是类似上面讲的 Node.js 的 Process.nextick 的意思？虽然运行的环境不一样，但是这个意思你可以细细品味一下。这里我们再来看一段 Vue 代码，让你理解 Vue 的 nextick 的作用。</p>
+<pre class="lang-xml" data-nodeid="712"><code data-language="xml"><span class="hljs-tag">&lt;<span class="hljs-name">template</span>&gt;</span>
+  <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">class</span>=<span class="hljs-string">"app"</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">ref</span>=<span class="hljs-string">"msg"</span>&gt;</span>{{msg}}<span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">v-if</span>=<span class="hljs-string">"msg1"</span>&gt;</span>Message got outside $nextTick: {{msg1}}<span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">v-if</span>=<span class="hljs-string">"msg2"</span>&gt;</span>Message got inside $nextTick: {{msg2}}<span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">button</span> @<span class="hljs-attr">click</span>=<span class="hljs-string">"changeMsg"</span>&gt;</span>
+      Change the Message
+    <span class="hljs-tag">&lt;/<span class="hljs-name">button</span>&gt;</span>
+  <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">template</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">script</span>&gt;</span><span class="javascript">
+<span class="hljs-keyword">new</span> Vue({
+  <span class="hljs-attr">el</span>: <span class="hljs-string">'.app'</span>,
+  <span class="hljs-attr">data</span>: {
+    <span class="hljs-attr">msg</span>: <span class="hljs-string">'Vue'</span>,
+    <span class="hljs-attr">msg1</span>: <span class="hljs-string">''</span>,
+    <span class="hljs-attr">msg2</span>: <span class="hljs-string">''</span>,
+  },
+  <span class="hljs-attr">methods</span>: {
+    changeMsg() {
+      <span class="hljs-keyword">this</span>.msg = <span class="hljs-string">"Hello world."</span>
+      <span class="hljs-keyword">this</span>.msg1 = <span class="hljs-keyword">this</span>.$refs.msg.innerHTML
+      <span class="hljs-keyword">this</span>.$nextTick(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+        <span class="hljs-keyword">this</span>.msg2 = <span class="hljs-keyword">this</span>.$refs.msg.innerHTML
+      })
+    }
+  }
+})
+</span><span class="hljs-tag">&lt;/<span class="hljs-name">script</span>&gt;</span>
+</code></pre>
+<p data-nodeid="713">你可以将这一段代码放到自己的 Vue 的项目里执行一下，看看通过按钮点击之后，div 里面的 msg1 和 msg2 的变化情况。你会发现第一次点击按钮调用 changeMsg 方法时，其实 msg2 并没有变化，因为 msg2 的变化是在下一个 tick 才进行执行的。</p>
+<p data-nodeid="714">最后我们再来看下 Vue 中 nextick 的源码。在 Vue 2.5+ 之后的版本中，有一个单独的 JS 文件来维护，路径是在 src/core/util/next-tick.js 中，源码如下：</p>
+<pre class="lang-javascript" data-nodeid="715"><code data-language="javascript"><span class="hljs-comment">/* @flow */</span>
+	<span class="hljs-comment">/* globals MutationObserver */</span>
+	
+	<span class="hljs-keyword">import</span> { noop } <span class="hljs-keyword">from</span> <span class="hljs-string">'shared/util'</span>
+	<span class="hljs-keyword">import</span> { handleError } <span class="hljs-keyword">from</span> <span class="hljs-string">'./error'</span>
+	<span class="hljs-keyword">import</span> { isIE, isIOS, isNative } <span class="hljs-keyword">from</span> <span class="hljs-string">'./env'</span>
+	
+	<span class="hljs-keyword">export</span> <span class="hljs-keyword">let</span> isUsingMicroTask = <span class="hljs-literal">false</span>
+	
+	<span class="hljs-keyword">const</span> callbacks = []
+	<span class="hljs-keyword">let</span> pending = <span class="hljs-literal">false</span>
+	
+	<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">flushCallbacks</span> (<span class="hljs-params"></span>) </span>{
+	  pending = <span class="hljs-literal">false</span>
+	  <span class="hljs-keyword">const</span> copies = callbacks.slice(<span class="hljs-number">0</span>)
+	  callbacks.length = <span class="hljs-number">0</span>
+	  <span class="hljs-keyword">for</span> (<span class="hljs-keyword">let</span> i = <span class="hljs-number">0</span>; i &lt; copies.length; i++) {
+	    copies[i]()
+	  }
+	}
+	
+	<span class="hljs-comment">// Here we have async deferring wrappers using microtasks.</span>
+	<span class="hljs-comment">// In 2.5 we used (macro) tasks (in combination with microtasks).</span>
+	<span class="hljs-comment">// However, it has subtle problems when state is changed right before repaint</span>
+	<span class="hljs-comment">// (e.g. #6813, out-in transitions).</span>
+	<span class="hljs-comment">// Also, using (macro) tasks in event handler would cause some weird behaviors</span>
+	<span class="hljs-comment">// that cannot be circumvented (e.g. #7109, #7153, #7546, #7834, #8109).</span>
+	<span class="hljs-comment">// So we now use microtasks everywhere, again.</span>
+	<span class="hljs-comment">// A major drawback of this tradeoff is that there are some scenarios</span>
+	<span class="hljs-comment">// where microtasks have too high a priority and fire in between supposedly</span>
+	<span class="hljs-comment">// sequential events (e.g. #4521, #6690, which have workarounds)</span>
+	<span class="hljs-comment">// or even between bubbling of the same event (#6566).</span>
+	<span class="hljs-keyword">let</span> timerFunc
+	
+	<span class="hljs-comment">// The nextTick behavior leverages the microtask queue, which can be accessed</span>
+	<span class="hljs-comment">// via either native Promise.then or MutationObserver.</span>
+	<span class="hljs-comment">// MutationObserver has wider support, however it is seriously bugged in</span>
+	<span class="hljs-comment">// UIWebView in iOS &gt;= 9.3.3 when triggered in touch event handlers. It</span>
+	<span class="hljs-comment">// completely stops working after triggering a few times... so, if native</span>
+	<span class="hljs-comment">// Promise is available, we will use it:</span>
+	<span class="hljs-comment">/* istanbul ignore next, $flow-disable-line */</span>
+	<span class="hljs-keyword">if</span> (<span class="hljs-keyword">typeof</span> <span class="hljs-built_in">Promise</span> !== <span class="hljs-string">'undefined'</span> &amp;&amp; isNative(<span class="hljs-built_in">Promise</span>)) {
+	  <span class="hljs-keyword">const</span> p = <span class="hljs-built_in">Promise</span>.resolve()
+	  timerFunc = <span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+	    p.then(flushCallbacks)
+	    <span class="hljs-comment">// In problematic UIWebViews, Promise.then doesn't completely break, but</span>
+	    <span class="hljs-comment">// it can get stuck in a weird state where callbacks are pushed into the</span>
+	    <span class="hljs-comment">// microtask queue but the queue isn't being flushed, until the browser</span>
+	    <span class="hljs-comment">// needs to do some other work, e.g. handle a timer. Therefore we can</span>
+	    <span class="hljs-comment">// "force" the microtask queue to be flushed by adding an empty timer.</span>
+	     <span class="hljs-keyword">if</span> (isIOS) setTimeout(noop)
+	  }
+	  isUsingMicroTask = <span class="hljs-literal">true</span>
+	} <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (!isIE &amp;&amp; <span class="hljs-keyword">typeof</span> MutationObserver !== <span class="hljs-string">'undefined'</span> &amp;&amp; (
+	  isNative(MutationObserver) ||
+	  <span class="hljs-comment">// PhantomJS and iOS 7.x</span>
+	  MutationObserver.toString() === <span class="hljs-string">'[object MutationObserverConstructor]'</span>
+	)) {
+	  <span class="hljs-comment">// Use MutationObserver where native Promise is not available,</span>
+	  <span class="hljs-comment">// e.g. PhantomJS, iOS7, Android 4.4</span>
+	  <span class="hljs-comment">// (#6466 MutationObserver is unreliable in IE11)</span>
+	  <span class="hljs-keyword">let</span> counter = <span class="hljs-number">1</span>
+	  <span class="hljs-keyword">const</span> observer = <span class="hljs-keyword">new</span> MutationObserver(flushCallbacks)
+	  <span class="hljs-keyword">const</span> textNode = <span class="hljs-built_in">document</span>.createTextNode(<span class="hljs-built_in">String</span>(counter))
+	  observer.observe(textNode, {
+	    <span class="hljs-attr">characterData</span>: <span class="hljs-literal">true</span>
+	  })
+	  timerFunc = <span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+	    counter = (counter + <span class="hljs-number">1</span>) % <span class="hljs-number">2</span>
+	    textNode.data = <span class="hljs-built_in">String</span>(counter)
+	  }
+	  isUsingMicroTask = <span class="hljs-literal">true</span>
+	} <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (<span class="hljs-keyword">typeof</span> setImmediate !== <span class="hljs-string">'undefined'</span> &amp;&amp; isNative(setImmediate)) {
+	  <span class="hljs-comment">// Fallback to setImmediate.</span>
+	  <span class="hljs-comment">// Technically it leverages the (macro) task queue,</span>
+	  <span class="hljs-comment">// but it is still a better choice than setTimeout.</span>
+	  timerFunc = <span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+	    setImmediate(flushCallbacks)
+	  }
+	} <span class="hljs-keyword">else</span> {
+	  <span class="hljs-comment">// Fallback to setTimeout.</span>
+	  timerFunc = <span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+	    setTimeout(flushCallbacks, <span class="hljs-number">0</span>)
+	  }
+	}
+	
+	<span class="hljs-keyword">export</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">nextTick</span> (<span class="hljs-params">cb?: Function, ctx?: Object</span>) </span>{
+	  <span class="hljs-keyword">let</span> _resolve
+	  callbacks.push(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+	    <span class="hljs-keyword">if</span> (cb) {
+	      <span class="hljs-keyword">try</span> {
+	        cb.call(ctx)
+	      } <span class="hljs-keyword">catch</span> (e) {
+	        handleError(e, ctx, <span class="hljs-string">'nextTick'</span>)
+	      }
+	    } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (_resolve) {
+	      _resolve(ctx)
+	    }
+	  })
+	  <span class="hljs-keyword">if</span> (!pending) {
+	    pending = <span class="hljs-literal">true</span>
+	    timerFunc()
+	  }
+	  <span class="hljs-comment">// $flow-disable-line</span>
+	  <span class="hljs-keyword">if</span> (!cb &amp;&amp; <span class="hljs-keyword">typeof</span> <span class="hljs-built_in">Promise</span> !== <span class="hljs-string">'undefined'</span>) {
+	    <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Promise</span>(<span class="hljs-function"><span class="hljs-params">resolve</span> =&gt;</span> {
+	      _resolve = resolve
+	    })
+	  }
+	}
+</code></pre>
+<p data-nodeid="716">整体代码不是太多，注释比较多，其核心部分代码比较精简，主要在 40~80 行之间，核心在于 timerFunc 这个函数的逻辑实现，timerFunc 这个函数采用了好几种处理方式，主要是针对系统以及 Promise 的支持几个情况同时进行兼容性处理。处理逻辑情况是这样的：</p>
+<ol data-nodeid="717">
+<li data-nodeid="718">
+<p data-nodeid="719">首先判断是否原生支持 Promise，支持的话，利用 promise 来触发执行回调函数；</p>
+</li>
+<li data-nodeid="720">
+<p data-nodeid="721">如果不支持 Promise，再判断是否支持 MutationObserver，如果支持，那么生成一个对象来观察文本节点发生的变化，从而实现触发执行所有回调函数；</p>
+</li>
+<li data-nodeid="722">
+<p data-nodeid="723">如果 Promise 和 MutationObserver 都不支持，那么使用 setTimeout 设置延时为 0。</p>
+</li>
+</ol>
+<p data-nodeid="724">关于 Promise 以及 MutationObserver 的相关知识我已经在前面的课时中都讲过，因此这些方法你只要理解的话，那么再去理解这一讲 nextick 的 timerFunc 这个函数的逻辑就会比较轻松了。这里主要是一些兼容性的判断，即使你之前不清楚，但是看一下源码也就能很容易理解了，只要你的基础知识足够牢靠，学习这些并不复杂。</p>
+<h3 data-nodeid="725">总结</h3>
+<p data-nodeid="726">最后，针对 Process.nextick() 和 Vue 的 nextick 这两种不同的 tick ，我总结了下面这个表格，方便你深入理解。</p>
+<p data-nodeid="831" class="te-preview-highlight"><img src="https://s0.lgstatic.com/i/image6/M01/25/22/CioPOWBZZXWAct2kAAFSwK67cM8982.png" alt="图片4.png" data-nodeid="834"></p>
+
+<p data-nodeid="755">那么关于这部分知识，你如果有不理解的地方可以多学习几遍。我们的专栏主课内容到这里也就告一段落了，很高兴你能坚持到最后，也希望我的分享可以为你带来帮助。</p>
+<p data-nodeid="756" class="">别着急走开，之后我们将进入彩蛋环节，一来是帮你梳理前端面试中经常考察的知识点，二来要给你传递学习算法的思路，我想这些也是你前端进阶的必要内容，我们下一讲再见。</p></div>
+
+</body></html>

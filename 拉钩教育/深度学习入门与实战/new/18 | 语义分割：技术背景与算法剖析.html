@@ -1,0 +1,1276 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>18 | 语义分割：技术背景与算法剖析</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>18 | 语义分割：技术背景与算法剖析</h1><p data-nodeid="1773" class="">上两讲，我向你介绍了图片分类的原理与实践。这一讲，我将向你介绍“语义分割”，它与图片分类都是计算机视觉中的重要任务。</p>
+<h3 data-nodeid="1774">图像语义分割任务介绍</h3>
+<p data-nodeid="1775">在图像分类任务中，我们要做的是从图片中提取丰富的特征信息。通常我们会通过 Softmax 或者 Sigmoid 函数，将提取到的特征信息转换为对应的类别。</p>
+<p data-nodeid="1776">例如一张卧室的图片，我们通过卷积层从图片中提取特征信息后，如果是多分类，可以使用 Softmax 函数获得这张图最有可能所属的几种类别（卧室、床、台灯等）；如果是二分类，可以通过 Sigmoid 函数获得这张图所属的类别（卧室还是床）。</p>
+<p data-nodeid="1777"><img src="https://s0.lgstatic.com/i/image2/M01/01/21/Cip5yF_YI-uAQuXuADLaCOWWbXk832.png" alt="Drawing 0.png" data-nodeid="1934"></p>
+<div data-nodeid="1778"><p style="text-align:center">图 1：卧室</p></div>
+<p data-nodeid="1779">在语义分割中，我们同样要提取图片中的特征信息，只不过不是对图片的整体分类，而是对图像中的每一个像素分类，确定每一个像素所属的类别。</p>
+<p data-nodeid="1780">当我们对上图进行语义分割，不同的颜色代表不同的类别，属于同一个物体的会被分为同一个类别：台灯所在的区域被分为蓝色，床所在的区域被分为墨绿色。</p>
+<p data-nodeid="1781"><img src="https://s0.lgstatic.com/i/image/M00/89/44/Ciqc1F_YI_iAb2pRAAC9d-5i6iY807.png" alt="Drawing 1.png" data-nodeid="1939"></p>
+<div data-nodeid="1782"><p style="text-align:center">图 2：语义分割后的卧室</p></div>
+<blockquote data-nodeid="1783">
+<p data-nodeid="1784">图 1、图 2 来源 <a href="http://people.csail.mit.edu/bzhou/publication/scene-parse-camera-ready.pdf" data-nodeid="1943">Scene Parsing through ADE20K Dataset</a> 和 <a href="https://arxiv.org/pdf/1608.05442.pdf" data-nodeid="1947">Semantic Understanding of Scenes through ADE20K Dataset</a>。</p>
+</blockquote>
+<p data-nodeid="1785">深度学习崛起之前，在计算机视觉领域进行图像分割还是一个难题。但随着深度学习的发展，图像分割中涌现出相当多的优秀算法和模型，使得图像分割在越来越多的领域中得到应用，例如自动驾驶、人机交互、医学影像处理，如下所示：</p>
+<p data-nodeid="1786"><img src="https://s0.lgstatic.com/i/image2/M01/01/21/Cip5yF_YJBqAEcpEABjzcmAbpLM206.png" alt="Drawing 2.png" data-nodeid="1952"></p>
+<div data-nodeid="1787"><p style="text-align:center">图 3：自动驾驶</p></div>
+<blockquote data-nodeid="1788">
+<p data-nodeid="1789">图 3 来源 <a href="https://www.cityscapes-dataset.com/wordpress/wp-content/papercite-data/pdf/cordts2016cityscapes.pdf" data-nodeid="1956">The Cityscapes Dataset for Semantic Urban Scene Understanding</a>。</p>
+</blockquote>
+<p data-nodeid="1790"><strong data-nodeid="1961">语义分割算法与图像分类算法</strong></p>
+<p data-nodeid="1791">在图像分类问题中，输入的图片会通过卷积神经网络转换成相应的特征信息。通常这些特征信息会通过一个或者几个全连接层转换为一个标量，这个标量就是我们分类的标签。就像下面这个手写字体识别的例子：</p>
+<p data-nodeid="1792"><img src="https://s0.lgstatic.com/i/image2/M01/01/22/CgpVE1_YJCKAREihAAMPv28rg_g652.png" alt="Drawing 3.png" data-nodeid="1965"></p>
+<div data-nodeid="1793"><p style="text-align:center">图 4：手写字体识别</p></div>
+<p data-nodeid="1794">在最后的全连接层，会将前面的信息转换为一个维度为 10 的标量，最后一层中每一个神经元的输出就是输入图片所属的类别。</p>
+<p data-nodeid="1795">语义分割的任务中，需要输出 1 张二维的特征，分割图中的每个像素代表的是输入图片对应像素的类别。那如何将最后的输出变成 1 张二维的特征图呢？<strong data-nodeid="1972">丢弃全连接层，换上全卷积层</strong>。</p>
+<p data-nodeid="1796">通过下面这张图我们再解释一下两者的区别。</p>
+<p data-nodeid="1797"><img src="https://s0.lgstatic.com/i/image2/M01/01/21/Cip5yF_YJCqAUzwGAAQfFLUIAI8588.png" alt="Drawing 4.png" data-nodeid="1976"></p>
+<div data-nodeid="1798"><p style="text-align:center">图 5：含全连接层的 CNN 与全卷积的 CNN</p></div>
+<p data-nodeid="1799">假设我们要将 1 张图片分为 1000 类和分割成 1000 个类别。</p>
+<p data-nodeid="1800">图中的上半部分要将提取信息后，通过有 1000 个节点的全连接层，计算出每个类别的概率。tabby cat 这个类别的概率最高，我们就可以判断这张图为 tabby cat。</p>
+<p data-nodeid="1801">那分割时呢？我们需要推断出每个像素所属的类别，最后的全连接层换成有 1000 个卷积核的卷积层，输出的特征图就会有 1000 个通道，在这 1000 个通道每个像素点的位置上计算 argmax 就可以获得对应类别。</p>
+<p data-nodeid="1802">那如何构建这样的分割网络呢？最简单的办法就是堆叠卷积层，通过控制 padding 的大小保证每一层输出的特征图的大小都是相同的，如图所示：</p>
+<p data-nodeid="1803"><img src="https://s0.lgstatic.com/i/image/M00/89/44/Ciqc1F_YJDWARGToAAdH4AXS684142.png" alt="Drawing 5.png" data-nodeid="1983"></p>
+<div data-nodeid="1804"><p style="text-align:center">图 6：简单语义分割网络示意图</p></div>
+<p data-nodeid="1805">1 张 3 通道的图片，高、宽分别为 H、W。将图片作为输入，经过一系列的卷积操作，获得（C，H，W）的特征图，然后再计算每一个像素对应的类别。</p>
+<p data-nodeid="1806">通常最终会输出宽高与原图相同的二维数组，二维数组的每个值记录了原图中对应像素的类别。这个二维数组可视化后就是上图最右侧的 Predictions。</p>
+<p data-nodeid="1807">这种方式很简单，但会造成了 2 个问题：</p>
+<ul data-nodeid="1808">
+<li data-nodeid="1809">
+<p data-nodeid="1810"><strong data-nodeid="1991">感受野维持不变</strong>。我讲过池化（pooling）可以扩大感受野，感受野越大可以使分割网络越精细。但在上面的网络中，不会用到池化，所以它的感受野也不会发生变化。</p>
+</li>
+<li data-nodeid="1811">
+<p data-nodeid="1812"><strong data-nodeid="1996">计算量大，网络难以优化</strong>。</p>
+</li>
+</ul>
+<p data-nodeid="1813">在这里，我们面临了与图像分类的同样问题，网络该如何设计？解决方案与图像分类相同：采用业界高手为我们设计好的经典分割算法。因此，下面我会向你介绍 2 种经典的语义分割模型， FCN 与 U-Net。</p>
+<h3 data-nodeid="1814">经典语义分割模型</h3>
+<p data-nodeid="1815">在介绍之前，我们再回顾一下训练一个模型必不可少的 4 个元素。</p>
+<ul data-nodeid="1816">
+<li data-nodeid="1817">
+<p data-nodeid="1818">数据：主要是训练集与评估集，用来训练与评估我们的模型。</p>
+</li>
+<li data-nodeid="1819">
+<p data-nodeid="1820">网络结构：也就是我们模型的主体。</p>
+</li>
+<li data-nodeid="1821">
+<p data-nodeid="1822">损失函数：更新模型参数的核心。</p>
+</li>
+<li data-nodeid="1823">
+<p data-nodeid="1824">优化方法：更新模型参数的方法。</p>
+</li>
+</ul>
+<p data-nodeid="1825">语义分割模型的数据如何标注，我会在下一讲介绍。</p>
+<p data-nodeid="1826">我们之前讲过的损失函数与优化方法也适用于语义分割模型训练。语义分割模型与图像分割模型在训练角度上看，唯一区别就是网络结构。</p>
+<h4 data-nodeid="1827">FCN</h4>
+<p data-nodeid="1828">FCN 算是卷积神经网络在语义分割中的开山之作。你可以点击<a href="https://www.cv-foundation.org/openaccess/content_cvpr_2015/papers/Long_Fully_Convolutional_Networks_2015_CVPR_paper.pdf" data-nodeid="2010">链接</a>查看 FCN 的论文。</p>
+<p data-nodeid="1829">FCN 主要有 3 个创新点：</p>
+<ol data-nodeid="1830">
+<li data-nodeid="1831">
+<p data-nodeid="1832">采用全卷积神经网络，解决了像素级别的预测问题；</p>
+</li>
+<li data-nodeid="1833">
+<p data-nodeid="1834">使用上采样操作恢复图像原有尺寸，实现像素级预测；</p>
+</li>
+<li data-nodeid="1835">
+<p data-nodeid="1836">通过跨层连接融合了网络的浅层与深层次的信息。</p>
+</li>
+</ol>
+<p data-nodeid="1837">为什么采用全卷积神经网络刚才已经介绍了，我们直接来看一下创新点 2 与创新点 3。</p>
+<p data-nodeid="1838"><strong data-nodeid="2020">上采样</strong></p>
+<p data-nodeid="1839">创新点 2 是“使用上采样操作恢复图像原有尺寸，实现像素级预测”，那什么是上采样呢？</p>
+<p data-nodeid="1840">利用卷积与池化提取特征的过程中会让特征图逐渐变小。为了能进行像素级别的预测，我们需要将提取到的信息放大到原始的尺寸。放大特征图的方式就是上采样。上采样通常有 3 种方式：</p>
+<ul data-nodeid="1841">
+<li data-nodeid="1842">
+<p data-nodeid="1843">Resize，双线性插值；</p>
+</li>
+<li data-nodeid="1844">
+<p data-nodeid="1845">转置卷积；</p>
+</li>
+<li data-nodeid="1846">
+<p data-nodeid="1847">反池化。</p>
+</li>
+</ul>
+<p data-nodeid="1848">双线性插值属于图像相关的操作，反池化非常简单，用得也比较少。因此，这里我主要介绍转置卷积。</p>
+<p data-nodeid="1849">转置卷积是一种比较特殊的卷积操作，它会先按照一定的方式对输入的特征图补 0 来扩大尺寸，然后再进行卷积操作。</p>
+<p data-nodeid="1850">我们先复习一下原始的卷积操作。</p>
+<p data-nodeid="1851">下图蓝色部分为一个 4x4 的特征图，在这个特征图上应用 3x3 的卷积（深蓝色部分），padding=0，stride=1，输出为一个 2x2 的特征图。</p>
+<p data-nodeid="1852"><img src="https://s0.lgstatic.com/i/image2/M01/01/22/CgpVE1_YJGSAJeWDAAAvgGRRJik963.png" alt="Drawing 6.png" data-nodeid="2032"></p>
+<div data-nodeid="1853"><p style="text-align:center">图 7</p></div>
+<blockquote data-nodeid="1854">
+<p data-nodeid="1855">图片来源于 <a href="https://github.com/vdumoulin/conv_arithmetic" data-nodeid="2036">GitHub</a>。</p>
+</blockquote>
+<p data-nodeid="1856">我们学过卷积的计算方式，可以知道输入值和输出值之间存在位置上的连接关系。输入特征图左上方的数据会影响到输出矩阵的左上方的值，一个卷积操作是一个多对一的映射关系。</p>
+<p data-nodeid="1857">上图中，输入特征图中的 9 个元素应用卷积操作后会生成输出特征图中的一个数值。而转置卷积则是与正常卷积相反的一个操作，是一对多的关系：它需要<strong data-nodeid="2044">将输入特征图中的一个元素经过卷积操作后，生成输出特征图中的多个数值</strong>。</p>
+<p data-nodeid="1858">我们将上图中的卷积操作进行矩阵化处理，输入的特征图为 X，卷积为 K，输出为 Y。</p>
+<p data-nodeid="4778" class=""><img src="https://s0.lgstatic.com/i/image/M00/8B/D0/CgqCHl_gWLaAWC9fAACZydIpZ3E145.png" alt="图片3.png" data-nodeid="4781"><br>
+<img src="https://s0.lgstatic.com/i/image/M00/8B/D0/CgqCHl_gWMCAXj1zAABp0HZ_hUA228.png" alt="图片4.png" data-nodeid="4785"><br>
+<img src="https://s0.lgstatic.com/i/image/M00/8B/C5/Ciqc1F_gWMiAZlheAAA1onFg--w777.png" alt="图片5.png" data-nodeid="4789"></p>
+
+
+
+
+
+
+
+<p data-nodeid="1862">Y=K*X，*代表卷积操作。我们将 K 转换为一个矩阵 C，矩阵的每一行代表一个卷积操作，定义如下：</p>
+<p data-nodeid="5652" class=""><img src="https://s0.lgstatic.com/i/image/M00/8B/D0/CgqCHl_gWNqACxiEAAEXvcPl758759.png" alt="图片2.png" data-nodeid="5655"></p>
+
+<p data-nodeid="1864">为了将卷积操作转换为矩阵计算，我们还需要将输入 X 转换为向量的模式，我们定义为 X'：</p>
+<p data-nodeid="6518" class=""><img src="https://s0.lgstatic.com/i/image/M00/8B/D0/CgqCHl_gWOKANulTAABfKyOZVaY065.png" alt="图片1.png" data-nodeid="6521"></p>
+
+<p data-nodeid="1866">这样的话，输入的特征图为 X'，卷积矩阵为 C，输出的特征图为 Y。卷积变换可以转换为如下的矩阵计算 Y=CX'：</p>
+<p data-nodeid="7384" class=""><img src="https://s0.lgstatic.com/i/image/M00/8B/C5/Ciqc1F_gWO2AOWTmAAEZezef3_U767.png" alt="图片6.png" data-nodeid="7387"></p>
+
+<p data-nodeid="1868">根据矩阵的计算方式可以知道，矩阵 C 的维度是 4x16，我们可以把一个 4x4 的特征转换为 2x2 的特征。那如果我们有一个 16x4 的卷积矩阵，是不是就可以把 2x2 的特征，恢复到 4x4 了？</p>
+<p data-nodeid="1869">我们将卷积矩阵求转置，获得维度为 16x4 的转置矩阵 C<sup>T</sup>。</p>
+<p data-nodeid="1870">用 16x4 的 C<sup>T</sup> 对 4x1 的 Y 的列向量进行矩阵计算，就可以获得一个 16x1 的向量，将这个列向量展开就可以获得一个 4x4 的特征图。这就是转置卷积的原理。</p>
+<p data-nodeid="1871">不过希望你注意一下，<strong data-nodeid="2097">转置卷积的参数是通过学习获得到的，只能恢复到原有特征图的形状，不能获得原有特征图的内容</strong>。你可以到<a href="https://github.com/vdumoulin/conv_arithmetic" data-nodeid="2095">网站</a>上看到更多有关卷积与转置卷积的动态说明图片。</p>
+<p data-nodeid="1872"><strong data-nodeid="2101">跨层连接</strong></p>
+<p data-nodeid="1873">创新点 3 是跨层连接，它“通过跨层连接融合了网络的浅层与深层次的信息”。</p>
+<p data-nodeid="1874">我们先来看 FCN 的结构：</p>
+<p data-nodeid="1875"><img src="https://s0.lgstatic.com/i/image2/M01/01/22/Cip5yF_YJJyAGsirAAJ96jlATxI100.png" alt="Drawing 13.png" data-nodeid="2106"></p>
+<div data-nodeid="1876"><p style="text-align:center">图 8：FCN 结构</p></div>
+<p data-nodeid="1877">第一行直接对 pool5 的输出做 32 倍的上采样，然后对上采样中的每个像素点做 Softmax 预测，就得到了 32x upsampled prediction（FCN-32s）。这样一步到位的恢复到原始输入，会损失过多信息，效果非常不准。</p>
+<p data-nodeid="1878">为了解决上面的问题，FCN 的作者先将 pool5 进行 2 倍的上采样，2 倍上采样后的大小与 pool4 相同。然后他将上采样后的结果与 pool4 相加，再进行 16 倍的上采样，再对每个像素做 Softmax 预测，就得到了 FCN-16s，效果有所提升，但仍然一般。</p>
+<p data-nodeid="1879">因此，作者再次将上采样的倍数减少，对 pool5 与 pool4 先做上采样，使得它们的尺寸与 pool3 相同，然后将特征图相加。这时只需要做 8 倍的上采样就可以了。</p>
+<p data-nodeid="1880">下面是 FCN-32s、FCN-16s、FCN-8s 的对比图：</p>
+<p data-nodeid="1881"><img src="https://s0.lgstatic.com/i/image2/M01/01/23/CgpVE1_YJKOATjmWAAEhGaK8OGY552.png" alt="Drawing 14.png" data-nodeid="2113"></p>
+<div data-nodeid="1882"><p style="text-align:center">图 9：FCN-32s、FCN-16s、FCN-8s 的对比图</p></div>
+<h4 data-nodeid="1883">U-Net</h4>
+<p data-nodeid="1884">我再来介绍一个经典的语义分割网络，U-Net。</p>
+<p data-nodeid="1885">U-Net 可以说是非常精简且高效的语义分割模型，无论在服务器端还是移动终端，都取得了非常好的效果。你可以点击<a href="https://arxiv.org/pdf/1505.04597.pdf" data-nodeid="2119">链接</a>查看 U-Net 的论文。</p>
+<p data-nodeid="1886">U-Net 是基于 Encoder-Decoder 架构开发的，因此，我们通过 U-Net 分割网络来了解 Encoder-Decoder 架构。</p>
+<p data-nodeid="1887">首先我们来看看 U-Net 的网络结构：</p>
+<p data-nodeid="1888"><img src="https://s0.lgstatic.com/i/image2/M01/01/22/Cip5yF_YJK-AQeYGAADKHS2STjU887.png" alt="Drawing 15.png" data-nodeid="2125"></p>
+<div data-nodeid="1889"><p style="text-align:center">图 10：U-Net 的网络结构</p></div>
+<p data-nodeid="1890">U-Net 的网络结构呈现的是一个“U”型，U 的左侧是一个收缩的过程，就是我们刚才所说的 Encoder 过程；U 的右边是一个扩张过程，即 Decoder 过程。</p>
+<p data-nodeid="1891">Decoder 过程是为了让我们的特征图渐渐转换成一副一定尺寸的二维特征图，这个二维特征图中包含着每一个像素的类别，它的尺寸（宽与高）取决于具体业务要求，大多数情况下会与输入的图片保持一致。</p>
+<p data-nodeid="1892">在 U-Net 中主要有 3x3 的 conv+ReLU、2x2 的 pooling、2x2 的 Up-conv、copy and crop</p>
+<p data-nodeid="1893">以及 1x1 的 conv 这 4 种操作。下面让我们来看看它们具体有什么作用。</p>
+<ul data-nodeid="1894">
+<li data-nodeid="1895">
+<p data-nodeid="1896"><strong data-nodeid="2134">3x3 conv + ReLU</strong>（图中蓝色的剪头）：在这个网络中，蓝色的长条代表网络中的特征图，每 3 个蓝色的长条可以看作一个单元，在每个单元中，由 2 个 3x3 的卷积层和 RelU 完成特征提取。</p>
+</li>
+<li data-nodeid="1897">
+<p data-nodeid="1898"><strong data-nodeid="2139">2x2 的 pooling</strong>（图中红色向下的剪头）：在 Encoder 阶段中，每个单元通过一个 2x2、stride=2 的 pooling 操作来完成一个下采样操作。</p>
+</li>
+<li data-nodeid="1899">
+<p data-nodeid="1900"><strong data-nodeid="2144">2x2 的 up-conv</strong>（绿色向上的剪头）：在 Decoder 阶段，通过一个 2x2 的上采样操作完成一个上采样操作。</p>
+</li>
+<li data-nodeid="1901">
+<p data-nodeid="1902"><strong data-nodeid="2149">copy and crop</strong>：参考 ResNet，U-Net 中也采用了跳层连接，以保证前面学习到的内容也可以很好地传播到后面的层中。</p>
+</li>
+<li data-nodeid="1903">
+<p data-nodeid="1904"><strong data-nodeid="2154">1x1 的 conv</strong>：在最后一层，将 64 个特征图映射为一个我们需要的分割结果。在这一操作过程中，我们分割类别的数量会决定最后输出特征图的通道数。</p>
+</li>
+</ul>
+<p data-nodeid="1905">这就是 UNet 的网络架构，是不是很简单？在后面的学习中，我会带你用 U-Net 来做一个实际的分割项目。</p>
+<h3 data-nodeid="1906">常用数据集</h3>
+<p data-nodeid="1907">我们如果想训练一个语义分割的模型，必须要有数据。语义分割需要的数据相对图像分割来说比较难获得到，需要人工使用 Labelme 等软件进行标注，在下一讲我会告诉你如何标注数据。</p>
+<p data-nodeid="1908">不过业界也有几个比较知名的公开数据集，你可以使用这些数据来进行试验，通常发论文也是综合对比模型在这些数据集上的效果如何的。</p>
+<h4 data-nodeid="1909">COCO 数据集</h4>
+<p data-nodeid="1910">COCO 是一个大规模物体检测、图像分割的数据集。图像分割部分的数据一共有 80 个类别。下载地址为<a href="https://cocodataset.org/#download" data-nodeid="2163">https://cocodataset.org/#download</a>。</p>
+<h4 data-nodeid="1911">PASCAL-Context Dataset</h4>
+<p data-nodeid="1912">PASCAL-Context Dataset 在 PASCAL 数据的基础上补充了数据，训练和验证集包含 10,103 张图像，测试集包含 9,637 张图像。下载地址为<a href="https://cs.stanford.edu/~roozbeh/pascal-context/" data-nodeid="2171">https://cs.stanford.edu/~roozbeh/pascal-context/</a>。</p>
+<p data-nodeid="1913"><img src="https://s0.lgstatic.com/i/image2/M01/01/22/Cip5yF_YJLqAJXv9AA3Wk64H6xw932.png" alt="Drawing 16.png" data-nodeid="2175"></p>
+<div data-nodeid="1914"><p style="text-align:center">图 11：PASCAL-Context Dataset</p></div>
+<h4 data-nodeid="1915">MIT Scene Parsing Benchark</h4>
+<p data-nodeid="1916">用场景解析的数据集。共有 150 个类别，共有 20000 张图片。下载地址为<a href="http://sceneparsing.csail.mit.edu/" data-nodeid="2180">http://sceneparsing.csail.mit.edu/</a>。</p>
+<h4 data-nodeid="1917">CitySpace</h4>
+<p data-nodeid="1918">有来自 50 个城市的街景数据，一共有 50 个类别。5000 张图片被精准标记过，20000 张图片被粗糙的标记过。下载地址为<a href="https://www.cityscapes-dataset.com/" data-nodeid="2186">https://www.cityscapes-dataset.com/</a>。</p>
+<p data-nodeid="1919"><img src="https://s0.lgstatic.com/i/image2/M01/01/23/CgpVE1_YJMWAU8i9AA1vXpaBcP8803.png" alt="Drawing 17.png" data-nodeid="2190"></p>
+<div data-nodeid="1920"><p style="text-align:center">图 12：CitySpace</p></div>
+<h3 data-nodeid="1921">结语</h3>
+<p data-nodeid="1922">这一讲我介绍了计算机视觉领域中一个非常重要的应用，语义分割。同时还介绍了语义分割中两个相对简单的算法，FCN 与 U-Net。FCN 算是卷积神经网络在语义分割领域中的开山之作，U-Net 虽然简单，但非常高效。</p>
+<p data-nodeid="1923">那么我想提一个小问题：<strong data-nodeid="2199">假如一张图片的尺寸是 1024*720，语义分割网络输出的特征图是 80x80 可不可以呢？如果可以的话会有什么弊端呢？</strong></p>
+<p data-nodeid="1924" class="">下一讲，我将带你使用 U-Net 训练一个人像分割模型。</p>
+<p data-nodeid="8250" class="te-preview-highlight"><img src="https://s0.lgstatic.com/i/image/M00/8B/C5/Ciqc1F_gWQeAVblhAAUYUTZTR6M316.png" alt="金句18.png" data-nodeid="8253"></p></div>
+
+</body></html>

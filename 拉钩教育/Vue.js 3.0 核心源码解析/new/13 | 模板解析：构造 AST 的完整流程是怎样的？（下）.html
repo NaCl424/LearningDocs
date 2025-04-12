@@ -1,0 +1,1365 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>13 | 模板解析：构造 AST 的完整流程是怎样的？（下）</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>13 | 模板解析：构造 AST 的完整流程是怎样的？（下）</h1><p data-nodeid="328">这一节课我们依然要<strong data-nodeid="346">解析 template 生成 AST 背后的实现原理</strong>，上节课，我们知道了baseParse 主要就做三件事情：<strong data-nodeid="347">创建解析上下文</strong>，<strong data-nodeid="348">解析子节点</strong>，<strong data-nodeid="349">创建 AST 根节点</strong>。</p>
+
+
+
+<p data-nodeid="4">我们讲到了解析子节点，主要有四种情况，分别是注释节点的解析、插值的解析、普通文本的解析，以及元素节点的解析，这节课我们就到了最后的元素节点。</p>
+<h3 data-nodeid="5">解析子节点</h3>
+<ul data-nodeid="6">
+<li data-nodeid="7">
+<p data-nodeid="8">元素节点的解析</p>
+</li>
+</ul>
+<p data-nodeid="9">最后，我们来看元素节点的解析过程，它会解析模板中的标签节点，举个例子：</p>
+<pre class="lang-js hljs" data-nodeid="1404"><code data-language="js">&lt;div <span class="hljs-class"><span class="hljs-keyword">class</span></span>=<span class="hljs-string">"app"</span>&gt;
+  <span class="xml"><span class="hljs-tag">&lt;<span class="hljs-name">hello</span> <span class="hljs-attr">:msg</span>=<span class="hljs-string">"msg"</span>&gt;</span><span class="hljs-tag">&lt;/<span class="hljs-name">hello</span>&gt;</span></span>
+&lt;/div&gt;
+</code></pre>
+
+
+
+
+
+<p data-nodeid="11">相对于前面三种类型的解析过程，元素节点的解析过程应该是最复杂的了，即当前代码 s 是以 &lt; 开头，并且后面跟着字母，说明它是一个标签的开头，则走到元素节点的解析处理逻辑，我们来看 parseElement 的实现：</p>
+<pre class="lang-java hljs" data-nodeid="1615"><code data-language="java"><span class="hljs-function">function <span class="hljs-title">parseElement</span><span class="hljs-params">(context, ancestors)</span> </span>{
+  <span class="hljs-comment">// 是否在 pre 标签内</span>
+  <span class="hljs-keyword">const</span> wasInPre = context.inPre
+  <span class="hljs-comment">// 是否在 v-pre 指令内</span>
+  <span class="hljs-keyword">const</span> wasInVPre = context.inVPre
+  <span class="hljs-comment">// 获取当前元素的父标签节点</span>
+  <span class="hljs-keyword">const</span> parent = last(ancestors)
+  <span class="hljs-comment">// 解析开始标签，生成一个标签节点，并前进代码到开始标签后</span>
+  <span class="hljs-keyword">const</span> element = parseTag(context, <span class="hljs-number">0</span> <span class="hljs-comment">/* Start */</span>, parent)
+  <span class="hljs-comment">// 是否在 pre 标签的边界</span>
+  <span class="hljs-keyword">const</span> isPreBoundary = context.inPre &amp;&amp; !wasInPre
+  <span class="hljs-comment">// 是否在 v-pre 指令的边界</span>
+  <span class="hljs-keyword">const</span> isVPreBoundary = context.inVPre &amp;&amp; !<span class="hljs-function">wasInVPre
+  <span class="hljs-title">if</span> <span class="hljs-params">(element.isSelfClosing || context.options.isVoidTag(element.tag)</span>) </span>{
+    <span class="hljs-comment">// 如果是自闭和标签，直接返回标签节点</span>
+    <span class="hljs-keyword">return</span> element
+  }
+  <span class="hljs-comment">// 下面是处理子节点的逻辑</span>
+  <span class="hljs-comment">// 先把标签节点添加到 ancestors，入栈</span>
+  ancestors.push(element)
+  <span class="hljs-keyword">const</span> mode = context.options.getTextMode(element, parent)
+  <span class="hljs-comment">// 递归解析子节点，传入 ancestors</span>
+  <span class="hljs-keyword">const</span> children = parseChildren(context, mode, ancestors)
+  <span class="hljs-comment">// ancestors 出栈</span>
+  ancestors.pop()
+  <span class="hljs-comment">// 添加到 children 属性中</span>
+  element.children = children
+  <span class="hljs-comment">// 结束标签</span>
+  <span class="hljs-keyword">if</span> (startsWithEndTagOpen(context.source, element.tag)) {
+    <span class="hljs-comment">// 解析结束标签，并前进代码到结束标签后</span>
+    parseTag(context, <span class="hljs-number">1</span> <span class="hljs-comment">/* End */</span>, parent)
+  }
+  <span class="hljs-keyword">else</span> {
+    emitError(context, <span class="hljs-number">24</span> <span class="hljs-comment">/* X_MISSING_END_TAG */</span>, <span class="hljs-number">0</span>, element.loc.start);
+    <span class="hljs-keyword">if</span> (context.source.length === <span class="hljs-number">0</span> &amp;&amp; element.tag.toLowerCase() === <span class="hljs-string">'script'</span>) {
+      <span class="hljs-keyword">const</span> first = children[<span class="hljs-number">0</span>];
+      <span class="hljs-keyword">if</span> (first &amp;&amp; startsWith(first.loc.source, <span class="hljs-string">'&lt;!--'</span>)) {
+        emitError(context, <span class="hljs-number">8</span> <span class="hljs-comment">/* EOF_IN_SCRIPT_HTML_COMMENT_LIKE_TEXT */</span>)
+      }
+    }
+  }
+  <span class="hljs-comment">// 更新标签节点的代码位置，结束位置到结束标签后</span>
+  element.loc = getSelection(context, element.loc.start)
+  <span class="hljs-keyword">if</span> (isPreBoundary) {
+    context.inPre = <span class="hljs-keyword">false</span>
+  }
+  <span class="hljs-keyword">if</span> (isVPreBoundary) {
+    context.inVPre = <span class="hljs-keyword">false</span>
+  }
+  <span class="hljs-keyword">return</span> element
+}
+</code></pre>
+
+<p data-nodeid="2037">可以看到，这个过程中 parseElement 主要做了三件事情：解析开始标签，解析子节点，解析闭合标签。</p>
+<p data-nodeid="2038">首先，我们来看解析开始标签的过程。主要通过 parseTag 方法来解析并创建一个标签节点，来看它的实现原理：</p>
+
+<pre class="lang-java hljs" data-nodeid="1826"><code data-language="java"><span class="hljs-function">function <span class="hljs-title">parseTag</span><span class="hljs-params">(context, type, parent)</span> </span>{
+  <span class="hljs-comment">// 标签打开</span>
+  <span class="hljs-keyword">const</span> start = getCursor(context)
+  <span class="hljs-comment">// 匹配标签文本结束的位置</span>
+  <span class="hljs-keyword">const</span> match = /^&lt;\/?([a-z][^\t\r\n\f /&gt;]*)/i.exec(context.source);
+  <span class="hljs-keyword">const</span> tag = match[<span class="hljs-number">1</span>];
+  <span class="hljs-keyword">const</span> ns = context.options.getNamespace(tag, parent);
+  <span class="hljs-comment">// 前进代码到标签文本结束位置</span>
+  advanceBy(context, match[<span class="hljs-number">0</span>].length);
+  <span class="hljs-comment">// 前进代码到标签文本后面的空白字符后</span>
+  advanceSpaces(context);
+  <span class="hljs-comment">// 保存当前状态以防我们需要用 v-pre 重新解析属性</span>
+  <span class="hljs-keyword">const</span> cursor = getCursor(context);
+  <span class="hljs-keyword">const</span> currentSource = context.source;
+  <span class="hljs-comment">// 解析标签中的属性，并前进代码到属性后</span>
+  let props = parseAttributes(context, type);
+  <span class="hljs-comment">// 检查是不是一个 pre 标签</span>
+  <span class="hljs-keyword">if</span> (context.options.isPreTag(tag)) {
+    context.inPre = <span class="hljs-keyword">true</span>;
+  }
+  <span class="hljs-comment">// 检查属性中有没有 v-pre 指令</span>
+  <span class="hljs-keyword">if</span> (!context.inVPre &amp;&amp;
+    props.some(p =&gt; p.type === <span class="hljs-number">7</span> <span class="hljs-comment">/* DIRECTIVE */</span> &amp;&amp; p.name === <span class="hljs-string">'pre'</span>)) {
+    context.inVPre = <span class="hljs-keyword">true</span>;
+    <span class="hljs-comment">// 重置 context</span>
+    extend(context, cursor);
+    context.source = currentSource;
+    <span class="hljs-comment">// 重新解析属性，并把 v-pre 过滤了</span>
+    props = parseAttributes(context, type).filter(p =&gt; p.name !== <span class="hljs-string">'v-pre'</span>);
+  }
+  <span class="hljs-comment">// 标签闭合</span>
+  let isSelfClosing = <span class="hljs-keyword">false</span>;
+  <span class="hljs-keyword">if</span> (context.source.length === <span class="hljs-number">0</span>) {
+    emitError(context, <span class="hljs-number">9</span> <span class="hljs-comment">/* EOF_IN_TAG */</span>);
+  }
+  <span class="hljs-keyword">else</span> {
+    <span class="hljs-comment">// 判断是否自闭合标签</span>
+    isSelfClosing = startsWith(context.source, <span class="hljs-string">'/&gt;'</span>);
+    <span class="hljs-keyword">if</span> (type === <span class="hljs-number">1</span> <span class="hljs-comment">/* End */</span> &amp;&amp; isSelfClosing) {
+      <span class="hljs-comment">// 结束标签不应该是自闭和标签</span>
+      emitError(context, <span class="hljs-number">4</span> <span class="hljs-comment">/* END_TAG_WITH_TRAILING_SOLIDUS */</span>);
+    }
+    <span class="hljs-comment">// 前进代码到闭合标签后</span>
+    advanceBy(context, isSelfClosing ? <span class="hljs-number">2</span> : <span class="hljs-number">1</span>);
+  }
+  let tagType = <span class="hljs-number">0</span> <span class="hljs-comment">/* ELEMENT */</span>;
+  <span class="hljs-keyword">const</span> options = context.options;
+  <span class="hljs-comment">// 接下来判断标签类型，是组件、插槽还是模板</span>
+  <span class="hljs-keyword">if</span> (!context.inVPre &amp;&amp; !options.isCustomElement(tag)) {
+    <span class="hljs-comment">// 判断是否有 is 属性</span>
+    <span class="hljs-keyword">const</span> hasVIs = props.some(p =&gt; p.type === <span class="hljs-number">7</span> <span class="hljs-comment">/* DIRECTIVE */</span> &amp;&amp; p.name === <span class="hljs-string">'is'</span>);
+    <span class="hljs-keyword">if</span> (options.isNativeTag &amp;&amp; !hasVIs) {
+      <span class="hljs-keyword">if</span> (!options.isNativeTag(tag))
+        tagType = <span class="hljs-number">1</span> <span class="hljs-comment">/* COMPONENT */</span>;
+    }
+    <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (hasVIs ||
+      isCoreComponent(tag) ||
+      (options.isBuiltInComponent &amp;&amp; options.isBuiltInComponent(tag)) ||
+      /^[A-Z]/.test(tag) ||
+      tag === <span class="hljs-string">'component'</span>) {
+      tagType = <span class="hljs-number">1</span> <span class="hljs-comment">/* COMPONENT */</span>;
+    }
+    <span class="hljs-keyword">if</span> (tag === <span class="hljs-string">'slot'</span>) {
+      tagType = <span class="hljs-number">2</span> <span class="hljs-comment">/* SLOT */</span>;
+    }
+    <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (tag === <span class="hljs-string">'template'</span> &amp;&amp;
+      props.some(p =&gt; {
+        <span class="hljs-keyword">return</span> (p.type === <span class="hljs-number">7</span> <span class="hljs-comment">/* DIRECTIVE */</span> &amp;&amp; isSpecialTemplateDirective(p.name));
+      })) {
+      tagType = <span class="hljs-number">3</span> <span class="hljs-comment">/* TEMPLATE */</span>;
+    }
+  }
+  <span class="hljs-keyword">return</span> {
+    type: <span class="hljs-number">1</span> <span class="hljs-comment">/* ELEMENT */</span>,
+    ns,
+    tag,
+    tagType,
+    props,
+    isSelfClosing,
+    children: [],
+    loc: getSelection(context, start),
+    codegenNode: undefined
+  };
+}
+</code></pre>
+
+<p data-nodeid="2251">parseTag 首先匹配标签文本结束的位置，并前进代码到标签文本后面的空白字符后，然后解析标签中的属性，比如 class、style 和指令等，parseAttributes 函数的实现我就不多说了，感兴趣的同学可以自己去看，它最终会解析生成一个 props 的数组，并前进代码到属性后。</p>
+<p data-nodeid="2252">接着去检查是不是一个 pre 标签，如果是则设置 context.inPre 为 true；再去检查属性中有没有 v-pre 指令，如果有则设置 context.inVPre 为 true，并重置上下文 context 和重新解析属性；接下来再去判断是不是一个自闭和标签，并前进代码到闭合标签后；最后判断标签类型，是组件、插槽还是模板。</p>
+
+<p data-nodeid="16">parseTag 最终返回的值就是一个描述标签节点的对象，其中 type 表示它是一个标签节点，tag 表示标签名，tagType 表示标签的类型，content 表示文本的内容，isSelfClosing 表示是否是一个闭合标签，loc 表示文本的代码开头和结束的位置信息，children 是标签的子节点数组，会先初始化为空。</p>
+<p data-nodeid="17">解析完开始标签后，再回到 parseElement，接下来第二步就是解析子节点，它把解析好的 element 节点添加到 ancestors 数组中，然后执行 parseChildren 去解析子节点，并传入 ancestors。</p>
+<p data-nodeid="18">如果有嵌套的标签，那么就会递归执行 parseElement，可以看到，在 parseElement 的一开始，我们能获取 ancestors 数组的最后一个值拿到父元素的标签节点，这个就是我们在执行 parseChildren 前添加到数组尾部的。</p>
+<p data-nodeid="19">解析完子节点后，我们再把 element 从 ancestors 中弹出，然后把 children 数组添加到 element.children 中，同时也把代码前进到子节点的末尾。</p>
+<p data-nodeid="20">最后，就是解析结束标签，并前进代码到结束标签后，然后更新标签节点的代码位置。parseElement 最终返回的值就是这样一个标签节点 element。</p>
+<p data-nodeid="21">其实 HTML 的嵌套结构的解析过程，就是一个递归解析元素节点的过程，为了维护父子关系，当需要解析子节点时，我们就把当前节点入栈，子节点解析完毕后，我们就把当前节点出栈，因此 ancestors 的设计就是一个栈的数据结构，整个过程是一个不断入栈和出栈的过程。</p>
+<p data-nodeid="22">通过不断地递归解析，我们就可以完整地解析整个模板，并且标签类型的 AST 节点会保持对子节点数组的引用，这样就构成了一个树形的数据结构，所以整个解析过程构造出的 AST 节点数组就能很好地映射整个模板的 DOM 结构。</p>
+<h3 data-nodeid="23">空白字符管理</h3>
+<p data-nodeid="24">在前面的解析过程中，有些时候我们会遇到空白字符的情况，比如前面的例子：</p>
+<pre class="lang-js hljs" data-nodeid="2887"><code data-language="js">&lt;div <span class="hljs-class"><span class="hljs-keyword">class</span></span>=<span class="hljs-string">"app"</span>&gt;
+  <span class="xml"><span class="hljs-tag">&lt;<span class="hljs-name">hello</span> <span class="hljs-attr">:msg</span>=<span class="hljs-string">"msg"</span>&gt;</span><span class="hljs-tag">&lt;/<span class="hljs-name">hello</span>&gt;</span></span>
+&lt;/div&gt;
+</code></pre>
+
+
+<p data-nodeid="26">div 标签到下一行会有一个换行符，hello 标签前面也有空白字符，这些空白字符在解析的过程中会被当作文本节点解析处理。但这些空白节点显然是没有什么意义的，所以我们需要移除这些节点，减少后续对这些没用意义的节点的处理，以提高编译效率。</p>
+<p data-nodeid="27">我们先来看一下空白字符管理相关逻辑代码：</p>
+<pre class="lang-java hljs" data-nodeid="2676"><code data-language="java"><span class="hljs-function">function <span class="hljs-title">parseChildren</span><span class="hljs-params">(context, mode, ancestors)</span> </span>{
+  <span class="hljs-keyword">const</span> parent = last(ancestors)
+  <span class="hljs-keyword">const</span> ns = parent ? parent.ns : <span class="hljs-number">0</span> <span class="hljs-comment">/* HTML */</span>
+  <span class="hljs-keyword">const</span> nodes = []
+  
+  <span class="hljs-comment">// 自顶向下分析代码，生成 nodes</span>
+  
+  let removedWhitespace = <span class="hljs-function"><span class="hljs-keyword">false</span>
+  <span class="hljs-title">if</span> <span class="hljs-params">(mode !== <span class="hljs-number">2</span> <span class="hljs-comment">/* RAWTEXT */</span>)</span> </span>{
+    <span class="hljs-keyword">if</span> (!context.inPre) {
+      <span class="hljs-keyword">for</span> (let i = <span class="hljs-number">0</span>; i &lt; nodes.length; i++) {
+        <span class="hljs-keyword">const</span> node = nodes[i]
+        <span class="hljs-keyword">if</span> (node.type === <span class="hljs-number">2</span> <span class="hljs-comment">/* TEXT */</span>) {
+          <span class="hljs-keyword">if</span> (!/[^\t\r\n\f ]/.test(node.content)) {
+            <span class="hljs-comment">// 匹配空白字符</span>
+            <span class="hljs-keyword">const</span> prev = nodes[i - <span class="hljs-number">1</span>]
+            <span class="hljs-keyword">const</span> next = nodes[i + <span class="hljs-number">1</span>] 
+            <span class="hljs-comment">// 如果空白字符是开头或者结尾节点</span>
+            <span class="hljs-comment">// 或者空白字符与注释节点相连</span>
+            <span class="hljs-comment">// 或者空白字符在两个元素之间并包含换行符</span>
+            <span class="hljs-comment">// 那么这些空白字符节点都应该被移除</span>
+            <span class="hljs-keyword">if</span> (!prev ||
+              !next ||
+              prev.type === <span class="hljs-number">3</span> <span class="hljs-comment">/* COMMENT */</span> ||
+              next.type === <span class="hljs-number">3</span> <span class="hljs-comment">/* COMMENT */</span> ||
+              (prev.type === <span class="hljs-number">1</span> <span class="hljs-comment">/* ELEMENT */</span> &amp;&amp;
+                next.type === <span class="hljs-number">1</span> <span class="hljs-comment">/* ELEMENT */</span> &amp;&amp;
+                /[\r\n]/.test(node.content))) {
+              removedWhitespace = <span class="hljs-keyword">true</span>
+              nodes[i] = <span class="hljs-keyword">null</span>
+            }
+            <span class="hljs-keyword">else</span> {
+              <span class="hljs-comment">// 否则压缩这些空白字符到一个空格</span>
+              node.content = <span class="hljs-string">' '</span>
+            }
+          }
+          <span class="hljs-keyword">else</span> {
+            <span class="hljs-comment">// 替换内容中的空白空间到一个空格</span>
+            node.content = node.content.replace(/[\t\r\n\f ]+/g, <span class="hljs-string">' '</span>)
+          }
+        }
+        <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (!(process.env.NODE_ENV !== <span class="hljs-string">'production'</span>) &amp;&amp; node.type === <span class="hljs-number">3</span> <span class="hljs-comment">/* COMMENT */</span>) {
+          <span class="hljs-comment">// 生产环境移除注释节点</span>
+          removedWhitespace = <span class="hljs-keyword">true</span>
+          nodes[i] = <span class="hljs-keyword">null</span>
+        }
+      }
+    }
+    <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (parent &amp;&amp; context.options.isPreTag(parent.tag)) {
+      <span class="hljs-comment">// 根据 HTML 规范删除前导换行符</span>
+      <span class="hljs-keyword">const</span> first = nodes[<span class="hljs-number">0</span>]
+      <span class="hljs-keyword">if</span> (first &amp;&amp; first.type === <span class="hljs-number">2</span> <span class="hljs-comment">/* TEXT */</span>) {
+        first.content = first.content.replace(/^\r?\n/, <span class="hljs-string">''</span>)
+      }
+    }
+  }
+  
+  <span class="hljs-comment">// 过滤空白字符节点</span>
+  <span class="hljs-keyword">return</span> removedWhitespace ? nodes.filter(Boolean) : nodes
+}
+</code></pre>
+
+<p data-nodeid="29">这段代码逻辑很简单，主要就是遍历 nodes，拿到每一个 AST 节点，判断是否为一个文本节点，如果是则判断它是不是空白字符；如果是则进一步判断空白字符是开头或还是结尾节点，或者空白字符与注释节点相连，或者空白字符在两个元素之间并包含换行符，如果满足上述这些情况，这些空白字符节点都应该被移除。</p>
+<p data-nodeid="30">此外，不满足这三种情况的空白字符都会被压缩成一个空格，非空文本中间的空白字符也会被压缩成一个空格，在生产环境下注释节点也会被移除。</p>
+<p data-nodeid="31">在 parseChildren 函数的最后，会过滤掉这些被标记清除的节点并返回过滤后的 AST 节点数组。</p>
+<h3 data-nodeid="32">创建 AST 根节点</h3>
+<p data-nodeid="33">子节点解析完毕，baseParse 过程就剩最后一步创建 AST 根节点了，我们来看一下 createRoot 的实现：</p>
+<pre class="lang-java hljs" data-nodeid="3098"><code data-language="java"><span class="hljs-function">function <span class="hljs-title">createRoot</span><span class="hljs-params">(children, loc = locStub)</span> </span>{
+  <span class="hljs-keyword">return</span> {
+    type: <span class="hljs-number">0</span> <span class="hljs-comment">/* ROOT */</span>,
+    children,
+    helpers: [],
+    components: [],
+    directives: [],
+    hoists: [],
+    imports: [],
+    cached: <span class="hljs-number">0</span>,
+    temps: <span class="hljs-number">0</span>,
+    codegenNode: undefined,
+    loc
+  }
+}
+</code></pre>
+
+<p data-nodeid="35">createRoot 的实现非常简单，它就是返回一个 JavaScript 对象，作为 AST 根节点。其中 type 表示它是一个根节点类型，children 是我们前面解析的子节点数组。除此之外，这个根节点还添加了其它的属性，当前我们并不需要搞清楚每一个属性代表的含义，这些属性我们在分析后续的处理流程中会介绍。</p>
+<h3 data-nodeid="36">总结</h3>
+<p data-nodeid="37">好的，到这里我们这一节的学习也要结束啦，通过这节课的学习，你应该掌握 Vue.js 编译过程的第一步，即<strong data-nodeid="100">把 template 解析生成 AST 对象</strong>，整个解析过程是一个自顶向下的分析过程，也就是从代码开始，通过语法分析，找到对应的解析处理逻辑，创建 AST 节点，处理的过程中也在不断前进代码，更新解析上下文，最终根据生成的 AST 节点数组创建 AST 根节点。</p>
+<p data-nodeid="38">最后，给你留一道思考题目，在 parseTag 的过程中，如果解析的属性有 v-pre 标签，为什么要回到之前的 context，重新解析一次？欢迎你在留言区与我分享。</p>
+<blockquote data-nodeid="39">
+<p data-nodeid="40"><strong data-nodeid="109">本节课的相关代码在源代码中的位置如下：</strong><br>
+packages/compiler-core/src/parse.ts<br>
+packages/compiler-core/src/ast.ts</p>
+</blockquote></div>
+
+</body></html>

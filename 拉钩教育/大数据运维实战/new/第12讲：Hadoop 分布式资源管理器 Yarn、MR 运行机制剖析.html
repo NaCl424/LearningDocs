@@ -1,0 +1,1255 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第12讲：Hadoop 分布式资源管理器 Yarn、MR 运行机制剖析</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>第12讲：Hadoop 分布式资源管理器 Yarn、MR 运行机制剖析</h1><p>本课时主要剖析 Hadoop 分布式资源管理器 Yarn 和 MR 运行机制。</p>
+<h3>Yarn 的整体架构</h3>
+<p>Yarn 是 Hadoop2.x 版本提出的一种全新的资源管理架构，此架构不仅支持 MapReduce 计算，还方便管理，比如 HBase、Spark、Storm、Tez/Impala 等应用。这种新的架构设计能够使各种类型的计算引擎运行在 Hadoop 上面，并通过 Yarn 从系统层面进行统一的管理。也就是说，通过 Yarn 资源管理器，各种应用就可以互不干扰地运行在同一个 Hadoop 系统中了，来共享整个集群资源。</p>
+<p>Yarn 的架构设计基于<strong>主从（Master-Slave）模式</strong>，主要由 ResourceManager（RM）和NodeManager（NM）两大部分组成。除此之外，还有 ApplicationMaster（AM）、Application Manager、Scheduler 及 Container 等组件辅助实现所有功能。</p>
+<p>Yarn 的基本架构如下图所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/19/3A/CgqCHl7aDLOAbvmyAAEkxIivjh4535.png" alt="1.png"></p>
+<h3>Yarn 中的组件解读</h3>
+<p>Yarn 中有两大组件，即 ResourceManager（RM）和 NodeManager（NM），其中 ResourceManager 由 ApplicationManager 和 Scheduler 组成。当用户提交 job 或 application 到 Yarn 上时，还会出现一个 ApplicationMaster 组件，此组件是应用程序级别的，用来管理运行在 Yarn 上的应用程序。这些 job 或 application 最终是在一个或多个 Container 中运行，而 Container 的资源则是通过 NodeManager 来分配。</p>
+<p>下面分别介绍一下这些组件的功能及应用场景。</p>
+<h4>1. ResourceManager（RM）</h4>
+<p>RM 是一个全局的资源管理器，集群里只有一个。它负责整个 Hadoop 系统的资源管理和分配，包括处理客户端请求、启动监控 ApplicationMaster、监控 NodeManager、资源的分配与调度等。它主要由两个组件构成，即<strong>调度器（Scheduler）<strong>和</strong>应用程序管理器 （ApplicationsManager，AsM）</strong>。</p>
+<p>Scheduler 是一个集群资源调度器，根据集群的容量、队列等限制条件，将集群中的资源分配给各个正在运行的应用程序，以保障整个集群高效、合理地使用资源。</p>
+<p>需要注意的是：Scheduler 是一个纯粹的资源调度器，它只负责调度 Containers，不用关心任何与具体应用程序相关的工作。例如，它不会监控或者跟踪应用的执行状态，也不会去重启因程序失败或者其他错误而运行失败的任务。调度器仅根据每个应用程序的资源需求进行合理分配，而资源分配的单位用 Container（容器）表示。Container 是一个动态资源分配单位，它将 CPU 和内存封装起来，从而限定每个任务使用的资源量。</p>
+<p>在 Hadoop 中，Yarn 提供了多种直接可用的调度器，常用的 Scheduler 主要有两种，即 Capacity Scheduler 和 Fair Scheduler。第一个是基于容量的资源调度，而第二个是基于公平的资源调度，具体资源调度细节，我将在后面的课时中进行深入介绍。</p>
+<p>ApplicationsManager 负责管理整个集群中所有的应用程序，包括应用程序的提交、与调度器协商资源、启动 ApplicationMaster、监控 ApplicationMaster 运行状态并在失败时重新启动它等。它的主要功能总结如下：</p>
+<ul>
+<li>负责接收用户提交的任务请求，为应用分配第一个 Container，此 Container 用来运行 ApplicationMaster；</li>
+<li>负责监控 ApplicationMaster 的状态，如果发现 ApplicationMaster 失败，会自动重启 ApplicationMaster 运行的 Container。</li>
+</ul>
+<p>从这里可以看出，Container 是最底层的计算单元，所有应用程序都是在 Container 中执行计算任务的。</p>
+<h4>2. ApplicationMaster</h4>
+<p>当用户提交一个分析任务时，ApplicationMaster 进程首先启动。接着，它向 ResourceManager 申请资源并和 NodeManager 协同工作来运行此任务；同时，它还会跟踪监视任务的执行状态。当遇到失败的任务时自动重启它；当任务执行完成后，ApplicationMaster 会关闭自己并释放自己的容器。</p>
+<p>可以看出，ApplicationMaster 就像一个全职保姆，它负责任务执行的始末，全程保障任务的执行效果。</p>
+<p>总体来说，ApplicationMaster 执行过程是按照如下顺序进行的：</p>
+<p>（1）ApplicationMaster 切分数据，对任务进行分片；</p>
+<p>（2）ApplicationMaster 向 ResourceManager 申请资源，然后把申请下来的资源交给 NodeManager；</p>
+<p>（3）监控任务的运行，并对错误任务进行重启；</p>
+<p>（4）通过 NodeManager 监视任务的执行和资源使用情况。</p>
+<h4>3. NodeManager</h4>
+<p>NodeManager 进程运行在集群中的多个计算节点上，与 HDFS 分布式文件系统中 Datande 的角色类似，每个计算节点都运行一个 NodeManager 服务。</p>
+<p>NodeManager 负责每个节点上资源（CPU 和内存）的使用，它主要实现如下功能：</p>
+<ul>
+<li>接收并处理来自 ApplicationMaster 的 Container 启动、停止等请求；</li>
+<li>NodeManager 管理着本节点上 Container 的使用（Container 的分配、启动、停止等操作）；</li>
+<li>NodeManager 定时向 ResourceManager 汇报本节点上的资源使用情况以及各个 Container 的运行状态（CPU 和内存等资源）。</li>
+</ul>
+<p>需要注意的是：NodeManager 只负责管理自身的 Container，不会去关注 Container 中运行的任务。</p>
+<h4>4. Container</h4>
+<p>Container 是 Yarn 资源管理器中最底层的计算单元，是执行计算任务的基本单位，比如 Map task、Reduce task 都在 Container 中执行。</p>
+<p>一个节点根据资源的不同，可以运行多个 Container，一个 Container 就是一组分配的系统资源。现阶段 Container 的系统资源只包含 <strong>CPU 和内存</strong>两种，未来可能会增加磁盘、网络等资源。</p>
+<p>在 Yarn 中，ApplicationMaster 会跟 ResourceManager 申请系统资源，而 ResourceManager 只会告诉 ApplicationMaster 哪些 Containers 可以用。若要使用这些资源，ApplicationMaster 还需要去找 NodeManager 请求分配具体的 Container。任何一个 job 或 application 最终都是在一个或多个 Container 中完成分析计算任务的。</p>
+<h3>Yarn 应用提交过程分析</h3>
+<p>当用户向 Yarn 提交一个请求时，Yarn 会执行一系列动作来响应用户的请求，那么 Yarn 具体执行了哪些动作呢？如下图所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/19/3A/CgqCHl7aDMKADJ7yAANXiOOOkUE459.png" alt="2.png"></p>
+<p>上图展示了用户提交一个应用程序到 Yarn 集群时，ResourceManager、Scheduler、Applicationmanager、ApplicationMaster、NodeManager 和容器如何相互交互的过程。</p>
+<p>对上图过程的 7 个步骤分析如下：</p>
+<p>（1）Client 向 Yarn 提交一个应用程序，接着 ResourceManager 就会响应用户的请求；</p>
+<p>（2）ResourceManager 开启一个 Container，在 Container 中运行一个 ApplicationManager，然后 ApplicationManager 为该应用分配第一个 Container，并选取一个 NodeManager 进行通信，并要求此 NodeManager 在这个 Container 中启动应用程序的 ApplicationMaster；</p>
+<p>（3）ApplicationMaster 向 ResourceManager 注册，并向 ResourceManager 申请运行应用程序所需的系统资源；</p>
+<p>（4）Scheduler 将资源封装好发送给 ApplicationMaster；</p>
+<p>（5）ApplicationMaster 申请到资源后，便与对应的 NodeManager 通信，要求它启动 Container，各个 NodeManager 分配完成资源后，就开始在 Container 中执行 Map task、Reduce task 等具体任务；</p>
+<p>（6）各个任务通过 RPC 协议向 ApplicationMaster 汇报自己的状态和进度，以此方式让ApplicationMaster 随时掌握各个任务的运行状态，从而可以在任务失败时重新启动任务；</p>
+<p>（7）ApplicationMaster 将任务执行结果返回给 ApplicationManager，并在应用程序运行完成后向 ApplicationManager 注销并关闭自己。</p>
+<h3>Yarn 中 shell 的使用</h3>
+<p>Yarn 中 shell 的使用与 HDFS 中的 shell 类似，Yarn 中也提供了一些 shell 命令（注意是 Yarn 命令），通过这些命令可以对 job 或 application 进行管理，还可以查看节点状态、队列状态、分析任务日志、重载刷新 Yarn 配置等。下面依次介绍。</p>
+<h4>1. Yarn application 管理命令</h4>
+<p>通过 Yarn application 可以对运行的任务进行状态查看、关闭 application 或启动 application 等操作，看下图这个例子：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/19/04/Ciqc1F7Z5AeARCrmAAF9NAhxDlw904.png" alt="image3.png"></p>
+<p>由上图可知，目前 Yarn 集群有三个 application 正在运行，application 的类型、名称、ID、用户、队列、状态、进度等都显示的很清楚，要查看某个 application 的状态信息，可执行如下命令：</p>
+<pre><code data-language="java" class="lang-java hljs">[hdfs<span class="hljs-meta">@Yarnserver</span> ~]$ Yarn application  -status application_1578297910271_66111
+        Application-Id : application_1578297910271_66111
+        Application-Name : Spark shell
+        Application-Type : SPARK
+        User : vbs1
+        Queue : root.vbs
+        Application Priority : <span class="hljs-number">0</span>
+        Start-Time : <span class="hljs-number">1589181370705</span>
+        Finish-Time : <span class="hljs-number">0</span>
+        Progress : <span class="hljs-number">10</span>%
+        State : RUNNING
+        Final-State : UNDEFINED
+        Tracking-URL : http:<span class="hljs-comment">//Hadoopgateway:4041</span>
+        RPC Port : <span class="hljs-number">0</span>
+        AM Host : <span class="hljs-number">172.16</span><span class="hljs-number">.21</span><span class="hljs-number">.8</span>
+        Aggregate Resource Allocation : <span class="hljs-number">671814190</span> MB-seconds, <span class="hljs-number">282004</span> vcore-seconds
+        Aggregate Resource Preempted : <span class="hljs-number">0</span> MB-seconds, <span class="hljs-number">0</span> vcore-seconds
+        Log Aggregation Status : NOT_START
+        Diagnostics : 
+        Unmanaged Application : <span class="hljs-keyword">false</span>
+        Application Node Label Expression : &lt;Not set&gt;
+        AM container Node Label Expression : &lt;Not set&gt;
+        TimeoutType : LIFETIME  ExpiryTime : UNLIMITED  RemainingTime : -<span class="hljs-number">1</span>seconds
+</code></pre>
+<p>从这个输出，可以发现，此 application 的所有状态信息，例如，AM 所在节点、应用程序分配的聚合内存量以及分配的聚合 vcores 数。其中，MB-seconds 是应用程序分配的聚合内存量（以兆字节为单位）乘以应用程序运行的秒数得到的结果，而 vcore-seconds 是应用程序分配的聚合 vcores 数乘以应用程序运行的秒数得到的结果。</p>
+<p>如果发现某个 application 占用大量集群资源，可以通过命令方式把它 kill 掉，kill 方式如下：</p>
+<pre><code data-language="js" class="lang-js hljs">[hdfs@Yarnserver ~]$ Yarn application  -kill application_1578297910271_66111
+</code></pre>
+<p>kill 掉这个 application 后，它占用的资源也就释放了。要获取应用程序尝试的列表，可执行如下命令：</p>
+<pre><code data-language="java" class="lang-java hljs">[hdfs<span class="hljs-meta">@Yarnserver</span> ~]$ Yarn applicationattempt -list application_1578297910271_66111
+ApplicationAttempt-Id    State                        AM-Container-Id                            Tracking-URL
+appattempt_1578297910271_66111_000001           RUNNING       container_e55_1578297910271_66111_01_000001 http:<span class="hljs-comment">//Yarnserver:8088/proxy/application_1578297910271_66111/</span>
+</code></pre>
+<p>从上图可以找到 application 下面的 container，接着看这个 container 的状态，执行如下图所示命令：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/19/10/CgqCHl7Z5DWAXBPTAAF9NAhxDlw433.png" alt="image3.png"></p>
+<p>从这个输出可以看到 container 的启动时间、运行状态、所在主机及端口等。</p>
+<h4>2. Yarn node 命令</h4>
+<p>Yarn node 可以获取集群节点状态，执行如下命令，查看集群活跃节点：</p>
+<pre><code data-language="java" class="lang-java hljs">[Hadoop<span class="hljs-meta">@Yarnserver</span> ~]$ Yarn node -list
+<span class="hljs-number">2020</span>-<span class="hljs-number">05</span>-<span class="hljs-number">12</span> <span class="hljs-number">10</span>:<span class="hljs-number">12</span>:<span class="hljs-number">59</span>,<span class="hljs-number">133</span> INFO client.RMProxy: Connecting to ResourceManager at Yarnserver/<span class="hljs-number">172.16</span><span class="hljs-number">.213</span><span class="hljs-number">.41</span>:<span class="hljs-number">8032</span>
+Total Nodes:<span class="hljs-number">3</span>
+           Node-Id             Node-State  Node-Http-Address       Number-of-Running-Containers
+  slave003:<span class="hljs-number">45117</span>                RUNNING     slave003:<span class="hljs-number">8042</span>                                  <span class="hljs-number">0</span>
+  slave001:<span class="hljs-number">43761</span>                RUNNING     slave001:<span class="hljs-number">8042</span>                                  <span class="hljs-number">0</span>
+  slave002:<span class="hljs-number">36604</span>                RUNNING     slave002:<span class="hljs-number">8042</span>                                  <span class="hljs-number">0</span>
+</code></pre>
+<p>Yarn node 也可以单独查看某个节点状态，执行如下命令：</p>
+<pre><code data-language="java" class="lang-java hljs">[Hadoop<span class="hljs-meta">@Yarnserver</span> ~]$ Yarn node -status slave003:<span class="hljs-number">45117</span>
+<span class="hljs-number">2020</span>-<span class="hljs-number">05</span>-<span class="hljs-number">12</span> <span class="hljs-number">10</span>:<span class="hljs-number">13</span>:<span class="hljs-number">39</span>,<span class="hljs-number">097</span> INFO client.RMProxy: Connecting to ResourceManager at Yarnserver/<span class="hljs-number">172.16</span><span class="hljs-number">.213</span><span class="hljs-number">.41</span>:<span class="hljs-number">8032</span>
+<span class="hljs-number">2020</span>-<span class="hljs-number">05</span>-<span class="hljs-number">12</span> <span class="hljs-number">10</span>:<span class="hljs-number">13</span>:<span class="hljs-number">39</span>,<span class="hljs-number">688</span> INFO conf.Configuration: resource-types.xml not found
+<span class="hljs-number">2020</span>-<span class="hljs-number">05</span>-<span class="hljs-number">12</span> <span class="hljs-number">10</span>:<span class="hljs-number">13</span>:<span class="hljs-number">39</span>,<span class="hljs-number">688</span> INFO resource.ResourceUtils: Unable to find <span class="hljs-string">'resource-types.xml'</span>.
+Node Report : 
+        Node-Id : slave003:<span class="hljs-number">45117</span>
+        Rack : /<span class="hljs-keyword">default</span>-rack
+        Node-State : RUNNING
+        Node-Http-Address : slave003:<span class="hljs-number">8042</span>
+        Last-Health-Update : 星期二 <span class="hljs-number">12</span>/五月/<span class="hljs-number">20</span> <span class="hljs-number">10</span>:<span class="hljs-number">12</span>:<span class="hljs-number">01</span>:<span class="hljs-number">69</span>CST
+        Health-Report : 
+        Containers : <span class="hljs-number">0</span>
+        Memory-Used : <span class="hljs-number">0</span>MB
+        Memory-Capacity : <span class="hljs-number">20480</span>MB
+        CPU-Used : <span class="hljs-number">0</span> vcores
+        CPU-Capacity : <span class="hljs-number">8</span> vcores
+        Node-Labels : 
+        Node Attributes : 
+        Resource Utilization by Node : PMem:<span class="hljs-number">5587</span> MB, VMem:<span class="hljs-number">7094</span> MB, VCores:<span class="hljs-number">0.0066644456</span>
+        Resource Utilization by Containers : PMem:<span class="hljs-number">0</span> MB, VMem:<span class="hljs-number">0</span> MB, VCores:<span class="hljs-number">0.0</span>
+</code></pre>
+<p>从这个输出可以看出此节点的运行状态、运行的 Containers 数、内存占用、内存总量、CPU 占用、CPU 总量等信息。</p>
+<h4>3. Yarn queue 命令</h4>
+<p>通过 Yarn queue 命令可以查看 Yarn 集群中的队列资源信息，看下面操作输出：</p>
+<pre><code data-language="java" class="lang-java hljs">[hdfs<span class="hljs-meta">@Yarnserver</span> ~]$  Yarn queue -status dev
+Queue Information : 
+Queue Name : dev
+        State : RUNNING
+        Capacity : <span class="hljs-number">21.5</span>%
+        Current Capacity : <span class="hljs-number">31.1</span>%
+        Maximum Capacity : -<span class="hljs-number">100.0</span>%
+        Default Node Label expression : &lt;DEFAULT_PARTITION&gt;
+        Accessible Node Labels :
+</code></pre>
+<p>这个输出的是 dev 队列的状态。可以看到，dev 队列占用集群总容量的 21.5%，目前已经使用的容量是 31.1%。注意，31.1% 是针对 21.5% 容量来说的，假如集群总容量的 21.5% 是 100GB，那么目前已经使用了 31.1GB。Maximum Capacity 是 Capacity Scheduler 调度策略的参数，在这里无效，此队列我使用的是 Fair Scheduler 调度。</p>
+<h4>4. Yarn rmadmin 命令</h4>
+<p>Yarn rmadmin 是 Yarn 中的管理类命令，如果对资源队列做了修改，或者新增了计算节点，或修改了 Yarn 配置文件，那么要在不重启 Yarn 服务的前提下，可以通过 Yarn rmadmin 来刷新配置，使其立刻生效。</p>
+<p>此命令常用的参数有如下几个：</p>
+<ul>
+<li>-refreshQueues，重载队列的 ACL、状态和调度器等属性，ResourceManager 将重新加载 queues 配置文件；</li>
+<li>-refreshNodes，用来刷新 dfs.hosts 和 dfs.hosts.exclude 配置文件，这种方式无须重启集群服务；</li>
+<li>-refreshSuperUserGroupsConfiguration，刷新用户组的配置；</li>
+<li>-refreshUserToGroupsMappings，刷新用户到组的映射配置；</li>
+<li>-getGroups [username] ，获取指定用户所属的组。</li>
+</ul>
+<p>看下面几个例子：</p>
+<pre><code data-language="java" class="lang-java hljs">[Hadoop<span class="hljs-meta">@Yarnserver</span> ~]$ Yarn rmadmin -refreshQueues
+[Hadoop<span class="hljs-meta">@Yarnserver</span> ~]$ Yarn rmadmin -refreshNodes
+[Hadoop<span class="hljs-meta">@Yarnserver</span> ~]$ Yarn rmadmin -getGroups Hadoop
+</code></pre>
+<p>如果你修改了队列配置或者其他配置，可通过执行这些刷新命令，使其立刻生效，而无须重启集群服务。</p>
+<h4>5. Yarn logs 命令</h4>
+<p>Yarn logs 命令可以用来查询 application、container 的运行日志，看下面操作实例：</p>
+<pre><code data-language="java" class="lang-java hljs">[Yarn<span class="hljs-meta">@Yarnserver</span> ~]$Yarn logs -applicationId application_1578297910271_66666
+</code></pre>
+<p>上面这个是查看 application_1578297910271_66666 的运行日志。要查看 application 下某个容器的运行日志，可执行如下命令：</p>
+<pre><code data-language="java" class="lang-java hljs">[Yarn<span class="hljs-meta">@Yarnserver</span> ~]$Yarn logs -applicationId application_1578297910271_66666 -containerId  container_e55_1578297910271_66666_01_000001
+</code></pre>
+<p>Yarn 下常用的 shell 命令还有很多，记住上面这些基础操作，对运维来说基本足够了，这些 shell 对于我们写监控脚本非常有帮助。例如，要监控队列资源状态，就可以利用 Yarn 下的 shell 写个监控脚本，当队列资源占用异常时进行告警。</p>
+<h3>总结</h3>
+<p>本课时主要讲解了分布式资源管理器 Yarn、MR 运行机制，以及 Yarn 相关的 shell 命令，对于 Yarn 资源运行机制的了解有助于对 Hadoop 集群进行调优和故障排查，这部分内容非常重要，要求我们能熟练掌握。</p></div>
+
+</body></html>

@@ -1,0 +1,895 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>15 | 数据磐石：APM 收集端的存储模型</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>15 | 数据磐石：APM 收集端的存储模型</h1><p data-nodeid="981" class="">分布式监控的重要设计就是数据存储模型，而 SkyWalking 的分布式追踪数据模型就是一个经典代表，这也是它会在 APM 领域脱颖而出的原因。</p>
+<p data-nodeid="982">所以今天我就以 SkyWalking 为例，结合明细模型中的分布式追踪模型、指标明细中的稳定性模型、采样数据模型中的数据慢查采样模型，通过对这三个典型模型的横向对比学习，纵向了解<strong data-nodeid="1092">收集端计算存储模型</strong>的详细过程。</p>
+<p data-nodeid="983"><img src="https://s0.lgstatic.com/i/image6/M00/3F/EB/CioPOWCiL-yAZUXkAACQtA8ELOs406.png" alt="image.png" data-nodeid="1095"></p>
+<h3 data-nodeid="984">四大存储模型</h3>
+<p data-nodeid="985">SkyWalking 的数据存储也是通过微内核和插件形式实现的：数据存储模型是在收集端经过各个插件计算而出，所有插件存放在 oap-server/server-receiver-plugin。</p>
+<p data-nodeid="986">目前收集端的插件主要会构建以下四个存储模型。</p>
+<ul data-nodeid="987">
+<li data-nodeid="988">
+<p data-nodeid="989">为了优化传输效率和存储能力，SkyWalking 会使用注册发现模式去构建<strong data-nodeid="1107">注册模型</strong>，但注册模型天生会在异步收集场景和客户端内存空间上存在劣势。所以 8.x 版本 SkyWalking 去掉了注册模型，取而代之的是<strong data-nodeid="1108">通过 Base64 编码计算注册的唯一值。</strong></p>
+</li>
+</ul>
+<blockquote data-nodeid="990">
+<p data-nodeid="991">虽然这在网络传输上带来了性能损失，但内存优化和异步场景带来的体验上却有了极大提升。显然在当今的内部集群都是万兆网卡的硬件资源下，这样的利是大于弊的，所以注册存储模型我就略讲了。</p>
+</blockquote>
+<ul data-nodeid="992">
+<li data-nodeid="993">
+<p data-nodeid="994">存储模型中数据量最大的就是<strong data-nodeid="1115">明细模型</strong>，在存储优化上，收集端会在构建数据索引时，忽略部分不需要索引的数据，以优化存储性能。</p>
+</li>
+<li data-nodeid="995">
+<p data-nodeid="996">对于<strong data-nodeid="1121">指标数据</strong>，多数的指标数据都是通过脚本语言构建出来了，SkyWalking 通过 OAL 脚本进行指标明细构建。</p>
+</li>
+<li data-nodeid="997">
+<p data-nodeid="998"><strong data-nodeid="1126">采样模型</strong>通过自定义排序，在一定的时间窗口内采样数据，计算 TOP 指标来完成采样数据的记录，典型的场景是对 DB 执行延迟进行采样，监控出对数据库造成慢查的 SQL。</p>
+</li>
+</ul>
+<p data-nodeid="999">所以接下来，我会以分布式链路追踪的明细数据、稳定性的指标数据、数据库采样的采样模型为重点逐一进行讲解。</p>
+<h3 data-nodeid="1000">分布式追踪的明细数据</h3>
+<p data-nodeid="1001">SkyWalking 有多种明细数据（Record）模型，如报警明细数据模型，通过定义报警规则的配置来完成报警；又如 JaegerSpan 或 ZipkinSpan 明细模型，通过收集其他 APM 数据来完成全局的 Span 数据追踪。</p>
+<p data-nodeid="1002">但在明细模型数据中，最通用的就是分布式链路追踪（SegmentRecord）的明细追踪模型，它是计算其他各个存储模型的基础数据，其重要属性有以下五点。</p>
+<h4 data-nodeid="1003">1.原始数据流（data_binary）</h4>
+<p data-nodeid="1004">任务线程监控数据，通过 Base 64 对数据对象进行编码，并存储到 Elasticsearch 索引中。由于原始数据流字段中包含所有以任务线程为监控维度的数据，所以该字段的容量明显高于其他字段好几个维度（而其他字段是从任务线程监控数据中，根据指定属性取出），从而原始数据流的数据也就被设计为不需要查询的资源（对应存储中就是不需要索引）。</p>
+<p data-nodeid="1005">在 Elasticsearch 的索引中，索引的名称为 {cluster}<em data-nodeid="1142">segment</em>{time_bucket}，可以看出索引的名称包括了三个部分。</p>
+<ul data-nodeid="1006">
+<li data-nodeid="1007">
+<p data-nodeid="1008">cluster 为 SkyWalking 收集端的集群标识。我们真实的线上应用集群非常复杂，在网络或跨机房等情况下，能难尽搭建一套 SkyWalking 集群就面面俱到，因此真实场景是往往需要多个集群才能适配应用服务集群的复杂架构。但如果需要跨网段定位问题时，我们就可以通过 Elasticsearch 的跨集群查询配置，通过 SkyWalking 收集端的集群标识，打破隔离带来的束缚。</p>
+</li>
+<li data-nodeid="1009">
+<p data-nodeid="1010">segment 标识了此索引为分布式追踪数据的存储模型。</p>
+</li>
+<li data-nodeid="1011">
+<p data-nodeid="1012">time_bucket 为以时间切分存储模型的标识。因为 APM 数据是海量级别的，通过一定的时间窗口规则，比如以“天”来划分表，这样存储模型就有了时序。通过时序查询，可以实现海量数据的快速插入和检索；通过时序删除指定的索引，可以避免索引碎片带来的性能问题。</p>
+</li>
+</ul>
+<h4 data-nodeid="1013">2.时间</h4>
+<p data-nodeid="1014">分布式追踪数据中，一共有 3 个时间相关的属性：开始时间（start_time）、结束时间（end_time）、延迟。时间使用 LongTime 类型记录，避免了时区和空间占用的问题。</p>
+<ul data-nodeid="1015">
+<li data-nodeid="1016">
+<p data-nodeid="1017">在同步模式，开始时间是任务线程被监控的起始，结束时间是退出任务线程监控时间的时刻，延迟为两个时间的差值。</p>
+</li>
+<li data-nodeid="1018">
+<p data-nodeid="1019">但在异步模式下，分布式监控数据会由多个任务线程的监控数据组成。在发生异步时，当前任务线程的开始，监控时间会传递到接下来的任务线程；而当前任务线程的监控数据，为了防止内存泄漏会被回收掉，并且不会发送到收集端。<br>
+所以开始时间和结束时间会在异步模式相互关联的任务线程中被持续覆盖，直到真正的<strong data-nodeid="1162">发送监控数据任务线程</strong>完成数据汇总后，才发送给收集端。</p>
+</li>
+</ul>
+<h4 data-nodeid="1020">3.端点（endpoint）</h4>
+<p data-nodeid="1021">在存储模型中，端点信息包括以下两个属性。</p>
+<ul data-nodeid="1022">
+<li data-nodeid="1023">
+<p data-nodeid="1024"><strong data-nodeid="1168">入口服务的端点名称</strong></p>
+</li>
+</ul>
+<p data-nodeid="1226">规则的实现逻辑是：第一个 Span 的操作名称就是入口服务的端点名称。那为什么会用这一规则呢？</p>
+
+<p data-nodeid="1026">在我看来，APM 的分布式链路追踪的记录粒度，是记录对端调用的 Span 粒度，也就是支持记录调用过程中内部 Span 粒度。所以记录入口服务的端点名称是最合理的。</p>
+<ul data-nodeid="1027">
+<li data-nodeid="1028">
+<p data-nodeid="1029"><strong data-nodeid="1176">端点 ID</strong></p>
+</li>
+</ul>
+<p data-nodeid="1030">在 8.x 版本前，SkyWalking 通过注册模式记录，并生成入口服务的端点名称对应的端点 ID。但我们发现 APM 注册的端点名称是海量级的，并在未归类的 RESTful API 场景下更为突出。</p>
+<p data-nodeid="1031">这不仅会给收集端存储注册模型带来性能压力，更会由于需要缓存端点注册信息，给客户端也带来较大的空间压力。这个问题是 APM 注册发现模式的通病，它不仅在端点模型中存在，更在网络地址模型、服务实例模型中存在。</p>
+<p data-nodeid="1032">所以在 8.x 后的版本中 SkyWalking 摒弃了注册发现模型，全部通过 Base 64 编码对端点名称进行压缩：在服务端，为各个组件提供归类端点名称支持；在客户端，取消缓存端点的空间。</p>
+<blockquote data-nodeid="1033">
+<p data-nodeid="1034">关于具体的实现设计，你可以查看<a href="https://github.com/apache/skywalking/pull/3299?fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="1183">“在探针侧配置支持操作名称分组的规则”</a>，去了解 SkyWalking 是如何实现端点名称归类的。</p>
+</blockquote>
+<h4 data-nodeid="1035">4.监控数据标识</h4>
+<p data-nodeid="1036">存储模型有两个关于监控标识的属性。</p>
+<ul data-nodeid="1037">
+<li data-nodeid="1038">
+<p data-nodeid="1039">SegmentID：监控数据模型的唯一 ID，在任务线程的第一个监控点，使用雪花算法实现。</p>
+</li>
+<li data-nodeid="1040">
+<p data-nodeid="1041">TraceID：全局分布式追踪 ID，消息队列、分布式事务等批处理框架存在多个 TraceID。</p>
+</li>
+</ul>
+<blockquote data-nodeid="1042">
+<p data-nodeid="1043">这两个重要属性在前文中已有很多介绍，这里就不过多赘述。</p>
+</blockquote>
+<h4 data-nodeid="1044">5.标记数据</h4>
+<p data-nodeid="1045">为描述当前追踪数据的特征，SkyWalking 的追踪存储模型提供了很多标记属性，按照粗、细进行分类。</p>
+<ul data-nodeid="1046">
+<li data-nodeid="1047">
+<p data-nodeid="1048">细分类：我们想更精细地描述一个 Span 时，可以通过数组类型 Tags 的字段，来存储个性化的标记数据，从而实现精细描述。如在数据组件中，tags 会存储 db.type 和 db.instance，来分别标识数据库类型和数据库实例标识。这只是数据库组件的 Tags 细分类。</p>
+</li>
+<li data-nodeid="1049">
+<p data-nodeid="1050">粗分类：每个分布式链路存储数据都有 statement 和 is_error 字段，前者 statement 用于标记当前组件的执行语句，后者标记当前组件执行正常与否。</p>
+</li>
+</ul>
+<h3 data-nodeid="1051">稳定性指标数据</h3>
+<p data-nodeid="1052">指标存储（Metric）模型的计算是通过 OAL 脚本聚合分析得出，如稳定性指标语句：</p>
+<p data-nodeid="1053">service_instance_sla = from(ServiceInstance.*).percent(status == true)。</p>
+<p data-nodeid="1054">这个语句的释义：服务的稳定性，通过服务实例状态的健康百分比程度进行计算，从而得到衡量和表达。</p>
+<ul data-nodeid="1055">
+<li data-nodeid="1056">
+<p data-nodeid="1057">from 代表数据的挖掘来源，ServiceInstance.* 代表挖掘数据为服务实例的全部数据；</p>
+</li>
+<li data-nodeid="1058">
+<p data-nodeid="1059">使用百分比运算（percent）规则，根据服务实例健康度（也就是 status 属性），为 true 计算全部服务实例的稳定程度。</p>
+</li>
+</ul>
+<p data-nodeid="1060">百分比指标数据模型（PercentMetrics）的重要属性有如下四点。</p>
+<ul data-nodeid="1061">
+<li data-nodeid="1062">
+<p data-nodeid="1063">总量（total）：计算时间窗口中流式数据的总量。</p>
+</li>
+<li data-nodeid="1064">
+<p data-nodeid="1065">匹配量（match）：计算时间窗口中流式数据匹配到的数据总量。</p>
+</li>
+<li data-nodeid="1066">
+<p data-nodeid="1067">百分比（percentage）：根据匹配量和总量，计算出当前时间窗口的百分比。</p>
+</li>
+<li data-nodeid="1068">
+<p data-nodeid="1069">时间窗口（timeBucket）：当前计算的时间窗口。</p>
+</li>
+</ul>
+<h3 data-nodeid="1070">数据库延迟采样数据</h3>
+<p data-nodeid="1071">采样模型（TopN）通过一定的时间窗口，对具有一定规则的数据进行采样收集；并根据分布式追踪明细数据中的延迟字段窗口数据进行排序：耗时长的进行保存，耗时短的进行淘汰；最后经过一定的时间积累，计算出采样数据。</p>
+<p data-nodeid="1072">值得考虑的是，由于数据收集的客户端是分布式集群，所以明细数据会打到不同的收集节点上，所以收集节点的采样窗口会存在分布式带来的数据误差。也就是，悲观数据都打到一个节点上的这种情况，造成其他收集节点的采样数据不具备采样的数据意义。采样模型针对 DB 组件进行监控，用于发现慢查并进行优化。</p>
+<p data-nodeid="1073">主要的属性有以下四点。</p>
+<ul data-nodeid="1074">
+<li data-nodeid="1075">
+<p data-nodeid="1076">延迟（latency）：用于存储采样数据的延迟属性，根据实现的排序算法，在一定的时间窗口内得到延迟较高的采样数据。</p>
+</li>
+<li data-nodeid="1077">
+<p data-nodeid="1078">访问 DB 的执行语句（statement）：用户描述采样数据的访问数据库的语句信息，比如关系型数据库的 SQL 语句、访问内存数据库的操作命令。</p>
+</li>
+<li data-nodeid="1079">
+<p data-nodeid="1080">链路 ID 属性：用于描述采样数据的分布式链路 ID，通过链路 ID 可以快速关联出分布式追踪的明细属性，从而进行分布式链路的慢查询诊断。</p>
+</li>
+<li data-nodeid="1081">
+<p data-nodeid="1082">应用服务 ID（serviceId）：用于存储采样数据的应用服务 ID，来进行对指标的采样，一旦采样到异常数据时，便可观测出采样对服务的影响。</p>
+</li>
+</ul>
+<h3 data-nodeid="1083">小结与思考</h3>
+<p data-nodeid="1084">今天，我带你回顾了 APM 的存储模型设计。以 SkyWalking 为例，收集端有三个重要的存储模型：明细数据、指标数据、采样数据。通过各个存储模型的典型示例，我们展开讲解了各个存储模型的每个字段的细节实现。</p>
+<p data-nodeid="1085" class="">那么你在生产环境中，分析过那些数据存储模型的案例呢？欢迎在评论区写下你的思考，期待与你讨论。</p></div>
+
+</body></html>

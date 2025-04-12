@@ -1,0 +1,985 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>19 | 如何根治慢 SQL？</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>19 | 如何根治慢 SQL？</h1><p data-nodeid="745" class="">上节课带你学习了 MySQL 优化的整体思路，我们将优化策略逐渐进到了索引层面，性能优化其实也是这样，一般大处着眼，小处着手。这节课我将从更多的实例出发诊断 SQL 相关的问题，你可以认为是第 18 讲的补充和进阶。</p>
+<h3 data-nodeid="746">show&nbsp;full&nbsp;processlist</h3>
+<p data-nodeid="747">上一讲已经提到过在你诊断 SQL 之前，首先要知道的是如何获取这些有问题的 SQL，一般有两种方式可以获取：</p>
+<ul data-nodeid="748">
+<li data-nodeid="749">
+<p data-nodeid="750">从慢日志文件中获取，上一讲也描述过配置方法；</p>
+</li>
+<li data-nodeid="751">
+<p data-nodeid="752">通过 show&nbsp;full&nbsp;processlist 实时获取交互的 SQL。</p>
+</li>
+</ul>
+<p data-nodeid="753">有同学留言说不知道具体应该如何使用 show&nbsp;full&nbsp;processlist，所以这里我演示下该命令的具体用法。show&nbsp;full&nbsp;processlist 可以显示哪些 SQL 线程正在运行，也可以在 MySQL 交互行下直接运行，来看下这个命令会给你展现哪些信息。</p>
+<pre class="lang-java" data-nodeid="754"><code data-language="java">mysql&gt;&nbsp;show&nbsp;full&nbsp;processlist;
++--------+---------+---------------------+----------------+---------+------+----------+-----------------------+
+|&nbsp;Id&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;User&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;Host&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;db&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;Command&nbsp;|&nbsp;Time&nbsp;|&nbsp;State&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;Info&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|
++--------+---------+---------------------+----------------+---------+------+----------+-----------------------+
+|&nbsp;<span class="hljs-number">121553</span>&nbsp;|&nbsp;root&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;localhost&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;mall&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;Sleep&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;<span class="hljs-number">48</span>&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;NULL&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|
+|&nbsp;<span class="hljs-number">139421</span>&nbsp;|&nbsp;netdata&nbsp;|&nbsp;localhost&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;NULL&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;Sleep&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-number">1</span>&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;NULL&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|
+|&nbsp;<span class="hljs-number">140236</span>&nbsp;|&nbsp;root&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;localhost&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;cctester&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;Sleep&nbsp;&nbsp;&nbsp;|&nbsp;<span class="hljs-number">1778</span>&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;NULL
+</code></pre>
+<p data-nodeid="755">我们来解释下信息中每列的含义。</p>
+<ul data-nodeid="756">
+<li data-nodeid="757">
+<p data-nodeid="758">ID：作为一个标识&nbsp;ID，如果你打算 kill 一个 SQL，可以根据 ID 来进行。</p>
+</li>
+<li data-nodeid="759">
+<p data-nodeid="760">User：当前正在执行 SQL 的用户，只显示你登录账号权限范围内能够看到的用户。</p>
+</li>
+<li data-nodeid="761">
+<p data-nodeid="762">Host：显示这个语句是从哪个 ID 和端口上发出的。</p>
+</li>
+<li data-nodeid="763">
+<p data-nodeid="764">db：当前线程使用的库名。</p>
+</li>
+<li data-nodeid="765">
+<p data-nodeid="766">Command：连接执行的命令状态，一般是 Sleep、Query、Connect 等。</p>
+</li>
+<li data-nodeid="767">
+<p data-nodeid="768">Time：状态持续的时间（单位是秒）。</p>
+</li>
+<li data-nodeid="769">
+<p data-nodeid="770">State：显示当前 SQL 语句的状态，这是一个非常重要的判断标识，比如多次刷新命令时，发现 SQL 常处于 Sending&nbsp;data，那么这条 SQL 大概率是存在问题的。</p>
+</li>
+<li data-nodeid="771">
+<p data-nodeid="772">Info：显示正在执行的 SQL 语句，这也是你能直接拿到慢 SQL 的方式。</p>
+</li>
+</ul>
+<h3 data-nodeid="773">实例对比：索引对性能的影响</h3>
+<p data-nodeid="774">关于索引的基本作用通过《18 | 如何才能优化 MySQL 性能？》的内容相信你已经了解，而在性能层面更直观的影响，我想通过对比实验结果也许会更清晰一点。</p>
+<p data-nodeid="775">我们新建了一个 user 表，表结构如下：</p>
+<pre class="lang-java" data-nodeid="776"><code data-language="java">mysql&gt;&nbsp;desc&nbsp;user;
++-------------+--------------+------+-----+---------+-------+
+|&nbsp;Field&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;Type&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;Null&nbsp;|&nbsp;Key&nbsp;|&nbsp;Default&nbsp;|&nbsp;Extra&nbsp;|
++-------------+--------------+------+-----+---------+-------+
+|&nbsp;id&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;<span class="hljs-keyword">int</span>(<span class="hljs-number">11</span>)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;NO&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;NULL&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|
+|&nbsp;Name&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;varchar(<span class="hljs-number">18</span>)&nbsp;&nbsp;|&nbsp;YES&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;NULL&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|
+|&nbsp;password&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;varchar(<span class="hljs-number">20</span>)&nbsp;&nbsp;|&nbsp;YES&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;NULL&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|
+|&nbsp;description&nbsp;|&nbsp;varchar(<span class="hljs-number">100</span>)&nbsp;|&nbsp;YES&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;NULL&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|
++-------------+--------------+------+-----+---------+-------+
+</code></pre>
+<p data-nodeid="1306">通过查看表信息，你可以发现我并没有添加索引，接着我使用 10 个线程测试一条SQL，其中SQL内容是通过 ID 号来查看数据，性能结果表现如下：</p>
+<p data-nodeid="2831" class=""><img src="https://s0.lgstatic.com/i/image6/M00/18/E5/CioPOWBJizKAXev8AACKgyKRQ_I971.png" alt="1.png" data-nodeid="2834"></p>
+
+
+
+
+
+
+
+
+<p data-nodeid="3211">在 ID 列添加索引后继续基于同一条 SQL ，进行 10 线程压测，结果数据如下：</p>
+<p data-nodeid="3973" class=""><img src="https://s0.lgstatic.com/i/image6/M00/18/E8/Cgp9HWBJi0qAOoq4AACHu1HrBXk996.png" alt="2.png" data-nodeid="3976"></p>
+
+
+
+
+
+
+<p data-nodeid="781">从测试结果来看，在未添加索引的情况下，TPS 是 109.4，而添加逐渐索引后，同等压力下 TPS 达到了 240.2。</p>
+<p data-nodeid="4353">CPU 资源占用如下所示：</p>
+<p data-nodeid="5116" class="te-preview-highlight"><img src="https://s0.lgstatic.com/i/image6/M00/18/E8/Cgp9HWBJi16ADQXTAADIxOO_FtM589.png" alt="3.png" data-nodeid="5120"></p>
+<div data-nodeid="5117"><p style="text-align:center">CPU 使用率图</p></div>
+
+
+
+
+
+
+
+
+<blockquote data-nodeid="785">
+<p data-nodeid="786">红线：Total<br>
+黄线：User<br>
+蓝色：Iowait<br>
+绿线：System</p>
+</blockquote>
+<p data-nodeid="787">在未添加索引的情况下，在 18:05 之前有 CPU 使用飙高，在添加索引后我在 18:10 基于同一场景测试，你会发现服务端资源使用率较低，而且 TPS 还翻了一倍以上。</p>
+<p data-nodeid="788">通过这样一段对比，相信你能非常直观地感觉到索引带来的性能差别。</p>
+<p data-nodeid="789">那我们是不是添加了索引就万事大吉呢，其实不是这样的，索引也有效率之分，也会存在索引失效等情况，接下来我就结合上一节课讲的执行计划来判断索引使用是否合理。有了执行计划我认为绝大多数 SQL 的问题你都可以找到优化的方向，而且对于我来说<strong data-nodeid="872">执行计划带来的直接好处是并不需要进行专门的性能测试就可以提前发现慢 SQL</strong>。</p>
+<h3 data-nodeid="790">继续通过执行计划来看索引的使用技巧</h3>
+<h4 data-nodeid="791">1.索引覆盖</h4>
+<p data-nodeid="792"><strong data-nodeid="878">什么是索引覆盖？</strong></p>
+<p data-nodeid="793">走索引查询数据时，如果该索引已经包含需要的数据，则称之为索引覆盖。若索引中不能拿到想要的数据，则需要通过主键拿一整行数据，这个过程叫回表，需要一次 IO 操作，所以我们写 SQL 时尽量使用索引覆盖，降低 IO 开销。</p>
+<p data-nodeid="794"><strong data-nodeid="883">如何判断是否是索引覆盖？</strong></p>
+<p data-nodeid="795">通过 extra 判断是否显示 Using&nbsp;index，如下示例所示：</p>
+<pre class="lang-java" data-nodeid="796"><code data-language="java">mysql&gt;&nbsp;show&nbsp;create&nbsp;table&nbsp;cctester&nbsp;\G;
+***************************&nbsp;<span class="hljs-number">1</span>.&nbsp;row&nbsp;***************************
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Table:&nbsp;cctester
+Create&nbsp;Table:&nbsp;CREATE&nbsp;TABLE&nbsp;\`cctester\`&nbsp;(
+&nbsp;&nbsp;\`id\`&nbsp;<span class="hljs-keyword">int</span>(<span class="hljs-number">11</span>)&nbsp;NOT&nbsp;NULL,
+&nbsp;&nbsp;\`name\`&nbsp;varchar(<span class="hljs-number">11</span>)&nbsp;DEFAULT&nbsp;NULL,
+&nbsp;&nbsp;\`mobile\`&nbsp;bigint(<span class="hljs-number">20</span>)&nbsp;DEFAULT&nbsp;NULL,
+&nbsp;&nbsp;\`score\`&nbsp;<span class="hljs-keyword">int</span>(<span class="hljs-number">11</span>)&nbsp;DEFAULT&nbsp;NULL,
+&nbsp;&nbsp;\`subject\`&nbsp;varchar(<span class="hljs-number">20</span>)&nbsp;DEFAULT&nbsp;NULL,
+&nbsp;&nbsp;<span class="hljs-function">PRIMARY&nbsp;<span class="hljs-title">KEY</span>&nbsp;<span class="hljs-params">(\`id\`)</span>,
+&nbsp;&nbsp;KEY&nbsp;\`idx_name\`&nbsp;<span class="hljs-params">(\`name\`)</span>,
+&nbsp;&nbsp;KEY&nbsp;\`idx_subject\`&nbsp;<span class="hljs-params">(\`subject\`)</span>
+)&nbsp;ENGINE</span>=InnoDB&nbsp;DEFAULT&nbsp;CHARSET=utf8mb4
+<span class="hljs-number">1</span>&nbsp;<span class="hljs-function">row&nbsp;in&nbsp;<span class="hljs-title">set</span>&nbsp;<span class="hljs-params">(<span class="hljs-number">0.21</span>&nbsp;sec)</span>
+<span class="hljs-comment">//上述这是表结构</span>
+mysql&gt;&nbsp;desc&nbsp;select&nbsp;name&nbsp;from&nbsp;cctester&nbsp;where&nbsp;name&nbsp;</span>=<span class="hljs-string">"cc"</span>;
++----+-------------+----------+------------+------+---------------+----------+---------+-------+------+----------+-------------+
+|&nbsp;id&nbsp;|&nbsp;select_type&nbsp;|&nbsp;table&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;partitions&nbsp;|&nbsp;type&nbsp;|&nbsp;possible_keys&nbsp;|&nbsp;key&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;key_len&nbsp;|&nbsp;ref&nbsp;&nbsp;&nbsp;|&nbsp;rows&nbsp;|&nbsp;filtered&nbsp;|&nbsp;Extra&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|
++----+-------------+----------+------------+------+---------------+----------+---------+-------+------+----------+-------------+
+|&nbsp;&nbsp;<span class="hljs-number">1</span>&nbsp;|&nbsp;SIMPLE&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;cctester&nbsp;|&nbsp;NULL&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;ref&nbsp;&nbsp;|&nbsp;idx_name&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;idx_name&nbsp;|&nbsp;<span class="hljs-number">47</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;<span class="hljs-keyword">const</span>&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-number">1</span>&nbsp;|&nbsp;&nbsp;&nbsp;<span class="hljs-number">100.00</span>&nbsp;|&nbsp;Using&nbsp;index&nbsp;|
++----+-------------+----------+------------+------+---------------+----------+---------+-------+------+----------+-------------+
+<span class="hljs-number">1</span>&nbsp;row&nbsp;in&nbsp;set,&nbsp;<span class="hljs-number">1</span>&nbsp;warning&nbsp;(<span class="hljs-number">0.01</span>&nbsp;sec)
+<span class="hljs-comment">//上述是第一段执行计划</span>
+mysql&gt;&nbsp;desc&nbsp;select&nbsp;name,score&nbsp;from&nbsp;cctester&nbsp;where&nbsp;name&nbsp;=<span class="hljs-string">"cc"</span>;
++----+-------------+----------+------------+------+---------------+----------+---------+-------+------+----------+-------+
+|&nbsp;id&nbsp;|&nbsp;select_type&nbsp;|&nbsp;table&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;partitions&nbsp;|&nbsp;type&nbsp;|&nbsp;possible_keys&nbsp;|&nbsp;key&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;key_len&nbsp;|&nbsp;ref&nbsp;&nbsp;&nbsp;|&nbsp;rows&nbsp;|&nbsp;filtered&nbsp;|&nbsp;Extra&nbsp;|
++----+-------------+----------+------------+------+---------------+----------+---------+-------+------+----------+-------+
+|&nbsp;&nbsp;<span class="hljs-number">1</span>&nbsp;|&nbsp;SIMPLE&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;cctester&nbsp;|&nbsp;NULL&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;ref&nbsp;&nbsp;|&nbsp;idx_name&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;idx_name&nbsp;|&nbsp;<span class="hljs-number">47</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;<span class="hljs-keyword">const</span>&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-number">1</span>&nbsp;|&nbsp;&nbsp;&nbsp;<span class="hljs-number">100.00</span>&nbsp;|&nbsp;NULL&nbsp;&nbsp;|
++----+-------------+----------+------------+------+---------------+----------+---------+-------+------+----------+-------+
+<span class="hljs-number">1</span>&nbsp;row&nbsp;in&nbsp;set,&nbsp;<span class="hljs-number">1</span>&nbsp;warning&nbsp;(<span class="hljs-number">0.00</span>&nbsp;sec)
+<span class="hljs-comment">//上述是第二段执行计划</span>
+</code></pre>
+<p data-nodeid="797">首先看下 cctester 表的结构，再观察下面两个 SQL 的执行计划对比，第一个 SQL 走 name 字段，只拿 name 字段内容，第一段执行计划显示了 Using&nbsp;index，说明索引覆盖了；而第二个 SQL 需要额外取 mobile 字段，所以需要回表，你也可以发现第二段执行计划 Extra 列返回的 NULL，所以没有用到索引覆盖，这些细小的差别都可以通过执行计划捕捉到。</p>
+<h4 data-nodeid="798">2.联合索引</h4>
+<p data-nodeid="799"><strong data-nodeid="893">联合索引就是多个字段组成联合索引</strong>，在上一讲我们也讲过基本的作用和最左前缀规则。不过我发现一个误区，同样还是这样的一个示例 SQL，索引规则同样是 index_name(c1,c2,c3)，下面这样的示例一定是符合最左前缀规则的：</p>
+<pre class="lang-java" data-nodeid="800"><code data-language="java">SELECT&nbsp;*&nbsp;FROM&nbsp;table&nbsp;WHERE&nbsp;c1=<span class="hljs-string">"1"</span>&nbsp;AND&nbsp;c2=<span class="hljs-string">"2"</span>&nbsp;AND&nbsp;c3=<span class="hljs-string">"3"</span>
+</code></pre>
+<p data-nodeid="801">那么，我改变下 SQL 的查询顺序，如下所示：</p>
+<pre class="lang-java" data-nodeid="802"><code data-language="java">SELECT&nbsp;*&nbsp;FROM&nbsp;table&nbsp;WHERE&nbsp;c2=<span class="hljs-string">"2"</span>&nbsp;AND&nbsp;c3=<span class="hljs-string">"3"</span>&nbsp;AND&nbsp;c1=<span class="hljs-string">"1"</span>
+</code></pre>
+<p data-nodeid="803">请问这样还满足最左前缀规则吗？对于 AND 这样的情况，可能很多同学觉得这个顺序和索引列不一致，应该是不满足最左前缀了，事实上不是这样的。</p>
+<p data-nodeid="804">不管你是使用 (c1,c2,c3) 或者是 (c2,c3,c1)，都是使用了联合索引，虽然表面上 (c2,c3,c1) 不符合最左前缀规则，但是 MySQL 本身是有<strong data-nodeid="901">查询优化器</strong>，它会确定这条 SQL 根据联合索引的字段顺序，最后再确定执行计划。所以说在查询字段满足条件的情况下字段顺序查询优化器是可以帮助你“纠正”的，在你项目实操过程中，对最左前缀的理解不要只局限于字面，如果你不确定可以通过执行计划来判断。</p>
+<p data-nodeid="805">上面我举的例子是 SQL 中查询条件进行 AND 连接，看上去比较简单，我再讲一个联合索引的常用场景，看下面这样一个案例：</p>
+<pre class="lang-java" data-nodeid="806"><code data-language="java">mysql&gt;&nbsp;&nbsp;desc&nbsp;select&nbsp;name,subject,score&nbsp;&nbsp;from&nbsp;cctester&nbsp;where&nbsp;subject&nbsp;=&nbsp;<span class="hljs-string">'english'</span>&nbsp;order&nbsp;by&nbsp;score;
++----+-------------+----------+------------+------+---------------+------+---------+------+------+----------+-----------------------------+
+|&nbsp;id&nbsp;|&nbsp;select_type&nbsp;|&nbsp;table&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;partitions&nbsp;|&nbsp;type&nbsp;|&nbsp;possible_keys&nbsp;|&nbsp;key&nbsp;&nbsp;|&nbsp;key_len&nbsp;|&nbsp;ref&nbsp;&nbsp;|&nbsp;rows&nbsp;|&nbsp;filtered&nbsp;|&nbsp;Extra&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|
++----+-------------+----------+------------+------+---------------+------+---------+------+------+----------+-----------------------------+
+|&nbsp;&nbsp;<span class="hljs-number">1</span>&nbsp;|&nbsp;SIMPLE&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;cctester&nbsp;|&nbsp;NULL&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;ALL&nbsp;&nbsp;|&nbsp;idx_subject&nbsp;&nbsp;&nbsp;|&nbsp;NULL&nbsp;|&nbsp;NULL&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;NULL&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-number">6</span>&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-number">50.00</span>&nbsp;|&nbsp;Using&nbsp;where;&nbsp;Using&nbsp;filesort&nbsp;|
++----+-------------+----------+------------+------+---------------+------+---------+------+------+----------+-----------------------------+
+<span class="hljs-number">1</span>&nbsp;row&nbsp;in&nbsp;set,&nbsp;<span class="hljs-number">1</span>&nbsp;warning&nbsp;(<span class="hljs-number">0.02</span>&nbsp;sec)
+<span class="hljs-comment">//以上是第一段执行计划</span>
+mysql&gt;&nbsp;<span class="hljs-function">alter&nbsp;table&nbsp;cctester&nbsp;add&nbsp;index&nbsp;<span class="hljs-title">idx_subject_score_name</span><span class="hljs-params">(subject,score,name)</span></span>;
+Query&nbsp;OK,&nbsp;<span class="hljs-number">0</span>&nbsp;<span class="hljs-function">rows&nbsp;<span class="hljs-title">affected</span>&nbsp;<span class="hljs-params">(<span class="hljs-number">0.15</span>&nbsp;sec)</span>
+<span class="hljs-comment">//以上添加联合索引</span>
+mysql&gt;&nbsp;desc&nbsp;select&nbsp;name,subject,score&nbsp;&nbsp;from&nbsp;cctester&nbsp;where&nbsp;subject&nbsp;</span>=&nbsp;<span class="hljs-string">'english'</span>&nbsp;order&nbsp;by&nbsp;score;
++----+-------------+----------+------------+------+------------------------------------+------------------------+---------+-------+------+----------+--------------------------+
+|&nbsp;id&nbsp;|&nbsp;select_type&nbsp;|&nbsp;table&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;partitions&nbsp;|&nbsp;type&nbsp;|&nbsp;possible_keys&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;key&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;key_len&nbsp;|&nbsp;ref&nbsp;&nbsp;&nbsp;|&nbsp;rows&nbsp;|&nbsp;filtered&nbsp;|&nbsp;Extra&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|
++----+-------------+----------+------------+------+------------------------------------+------------------------+---------+-------+------+----------+--------------------------+
+|&nbsp;&nbsp;<span class="hljs-number">1</span>&nbsp;|&nbsp;SIMPLE&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;cctester&nbsp;|&nbsp;NULL&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;ref&nbsp;&nbsp;|&nbsp;idx_subject,idx_subject_score_name&nbsp;|&nbsp;idx_subject_score_name&nbsp;|&nbsp;<span class="hljs-number">83</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;<span class="hljs-keyword">const</span>&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-number">3</span>&nbsp;|&nbsp;&nbsp;&nbsp;<span class="hljs-number">100.00</span>&nbsp;|&nbsp;Using&nbsp;where;&nbsp;Using&nbsp;index&nbsp;|
++----+-------------+----------+------------+------+------------------------------------+------------------------+---------+-------+------+----------+--------------------------+
+<span class="hljs-comment">//以上是第二段执行计划</span>
+</code></pre>
+<p data-nodeid="807">这里还是基于 cctester 的表结构，根据 where 条件 subject 查询之后再根据 score 排序，第一段执行计划可以看到 SQL 没有用到索引且需要额外的排序，而第二段执行计划中 SQL 使用了联合索引且不用再排序。在原理上解释就是，(subject,score,name) 索引中根据 subject 定位到的数据已经根据 score 排好顺序了，不需要再排序，这种 order&nbsp;by 的场景是联合索引使用最经典的案例。</p>
+<h4 data-nodeid="808">3.索引失效的场景</h4>
+<p data-nodeid="809">索引虽好，但不代表你建了这条索引就一定会被使用，下面我列举了常用的索引失效的情况，也是日常工作中常见的一些情况。</p>
+<p data-nodeid="810"><strong data-nodeid="909">隐式类型转换</strong></p>
+<p data-nodeid="811">表结构中类型是 varchar，SQL 中用的 int，这是开发最常忽略的问题，如下示例所示：</p>
+<pre class="lang-java" data-nodeid="812"><code data-language="java">(root<span class="hljs-meta">@localhost</span>)&nbsp;[t]&gt;&nbsp;show&nbsp;create&nbsp;table&nbsp;t\G
+***************************&nbsp;<span class="hljs-number">1</span>.&nbsp;row&nbsp;***************************
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Table:&nbsp;t
+Create&nbsp;Table:&nbsp;CREATE&nbsp;TABLE&nbsp;\`t\`&nbsp;(
+&nbsp;&nbsp;\`id\`&nbsp;<span class="hljs-keyword">int</span>(<span class="hljs-number">11</span>)&nbsp;NOT&nbsp;NULL,
+&nbsp;&nbsp;\`name\`&nbsp;varchar(<span class="hljs-number">11</span>)&nbsp;DEFAULT&nbsp;NULL,
+&nbsp;&nbsp;\`score\`&nbsp;varchar(<span class="hljs-number">11</span>)&nbsp;DEFAULT&nbsp;NULL,
+&nbsp;&nbsp;<span class="hljs-function">PRIMARY&nbsp;<span class="hljs-title">KEY</span>&nbsp;<span class="hljs-params">(\`id\`)</span>,
+&nbsp;&nbsp;KEY&nbsp;\`idx_name\`&nbsp;<span class="hljs-params">(\`name\`)</span>,
+&nbsp;&nbsp;KEY&nbsp;\`idx_score\`&nbsp;<span class="hljs-params">(\`score\`)</span>
+)&nbsp;ENGINE</span>=InnoDB&nbsp;DEFAULT&nbsp;CHARSET=utf8mb4
+<span class="hljs-number">1</span>&nbsp;<span class="hljs-function">row&nbsp;in&nbsp;<span class="hljs-title">set</span>&nbsp;<span class="hljs-params">(<span class="hljs-number">0.00</span>&nbsp;sec)</span>
+<span class="hljs-comment">//以上是建表语句</span>
+<span class="hljs-params">(root<span class="hljs-meta">@localhost</span>)</span>&nbsp;[t]&gt;&nbsp;desc&nbsp;select&nbsp;*&nbsp;from&nbsp;t&nbsp;where&nbsp;socre&nbsp;</span>=&nbsp;<span class="hljs-string">'99'</span>;
++----+-------------+-------+------------+------+---------------+------------+---------+-------+------+----------+-------+
+|&nbsp;id&nbsp;|&nbsp;select_type&nbsp;|&nbsp;table&nbsp;|&nbsp;partitions&nbsp;|&nbsp;type&nbsp;|&nbsp;possible_keys&nbsp;|&nbsp;key&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;key_len&nbsp;|&nbsp;ref&nbsp;&nbsp;&nbsp;|&nbsp;rows&nbsp;|&nbsp;filtered&nbsp;|&nbsp;Extra&nbsp;|
++----+-------------+-------+------------+------+---------------+------------+---------+-------+------+----------+-------+
+|&nbsp;&nbsp;<span class="hljs-number">1</span>&nbsp;|&nbsp;SIMPLE&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;t&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;NULL&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;ref&nbsp;&nbsp;|&nbsp;idx_score&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;idx_score&nbsp;&nbsp;&nbsp;|&nbsp;<span class="hljs-number">47</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;<span class="hljs-keyword">const</span>&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-number">2</span>&nbsp;|&nbsp;&nbsp;&nbsp;<span class="hljs-number">100.00</span>&nbsp;|&nbsp;NULL&nbsp;&nbsp;|
++----+-------------+-------+------------+------+---------------+------------+---------+-------+------+----------+-------+
+<span class="hljs-number">1</span>&nbsp;row&nbsp;in&nbsp;set,&nbsp;<span class="hljs-number">1</span>&nbsp;warning&nbsp;(<span class="hljs-number">0.00</span>&nbsp;sec)
+(root<span class="hljs-meta">@localhost</span>)&nbsp;[t]&gt;&nbsp;desc&nbsp;select&nbsp;*&nbsp;from&nbsp;t&nbsp;where&nbsp;socre&nbsp;=&nbsp;<span class="hljs-number">99</span>;
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-------------+
+|&nbsp;id&nbsp;|&nbsp;select_type&nbsp;|&nbsp;table&nbsp;|&nbsp;partitions&nbsp;|&nbsp;type&nbsp;|&nbsp;possible_keys&nbsp;|&nbsp;key&nbsp;&nbsp;|&nbsp;key_len&nbsp;|&nbsp;ref&nbsp;&nbsp;|&nbsp;rows&nbsp;|&nbsp;filtered&nbsp;|&nbsp;Extra&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-------------+
+|&nbsp;&nbsp;<span class="hljs-number">1</span>&nbsp;|&nbsp;SIMPLE&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;t&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;NULL&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;ALL&nbsp;&nbsp;|&nbsp;idx_score&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;NULL&nbsp;|&nbsp;NULL&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;NULL&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-number">4</span>&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-number">25.00</span>&nbsp;|&nbsp;Using&nbsp;where&nbsp;|
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-------------+
+<span class="hljs-number">1</span>&nbsp;row&nbsp;in&nbsp;set,&nbsp;<span class="hljs-number">3</span>&nbsp;warnings&nbsp;(<span class="hljs-number">0.00</span>&nbsp;sec)
+</code></pre>
+<p data-nodeid="813">观察上面例子可以发现，score 字段是 varchar 类型，当 SQL 中忘写单引号则走不到索引，接下来我继续讲解实例，我举的例子你不用过多考虑业务特性，单纯看索引问题即可。</p>
+<p data-nodeid="814"><strong data-nodeid="915">模糊匹配开头</strong></p>
+<p data-nodeid="815">由于 MySQL 最左匹配原则，所以查询条件模糊开头无法命中索引，如下所示：</p>
+<pre class="lang-java" data-nodeid="816"><code data-language="java">(root<span class="hljs-meta">@localhost</span>)&nbsp;[t]&gt;&nbsp;desc&nbsp;select&nbsp;*&nbsp;from&nbsp;t&nbsp;where&nbsp;score&nbsp;&nbsp;like&nbsp;<span class="hljs-string">'%9'</span>;
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-------------+
+|&nbsp;id&nbsp;|&nbsp;select_type&nbsp;|&nbsp;table&nbsp;|&nbsp;partitions&nbsp;|&nbsp;type&nbsp;|&nbsp;possible_keys&nbsp;|&nbsp;key&nbsp;&nbsp;|&nbsp;key_len&nbsp;|&nbsp;ref&nbsp;&nbsp;|&nbsp;rows&nbsp;|&nbsp;filtered&nbsp;|&nbsp;Extra&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-------------+
+|&nbsp;&nbsp;<span class="hljs-number">1</span>&nbsp;|&nbsp;SIMPLE&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;t&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;NULL&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;ALL&nbsp;&nbsp;|&nbsp;NULL&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;NULL&nbsp;|&nbsp;NULL&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;NULL&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-number">4</span>&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-number">25.00</span>&nbsp;|&nbsp;Using&nbsp;where&nbsp;|
++----+-------------+-------+------------+------+---------------+------+---------+------+------+----------+-------------+
+<span class="hljs-number">1</span>&nbsp;row&nbsp;in&nbsp;set,&nbsp;<span class="hljs-number">1</span>&nbsp;warning&nbsp;(<span class="hljs-number">0.00</span>&nbsp;sec)
+</code></pre>
+<p data-nodeid="817">通过执行计划你会发现上面的情况并没有命中索引。</p>
+<p data-nodeid="818"><strong data-nodeid="921">or 不同条件</strong></p>
+<p data-nodeid="819">从上面建表结构中我们可以看到 name 字段和 score 字段都有索引，但直接写 or 查询两个字段无法使用索引，这种场景，我们可以将 or 改写成 union 即可。通过如下实例的第一段和第二段执行计划中涉及的索引项就可以看出。</p>
+<pre class="lang-java" data-nodeid="820"><code data-language="java">(root<span class="hljs-meta">@localhost</span>)&nbsp;[t]&gt;&nbsp;desc&nbsp;select&nbsp;*&nbsp;from&nbsp;t&nbsp;where&nbsp;name&nbsp;=&nbsp;<span class="hljs-string">'allen'</span>&nbsp;or&nbsp;score&nbsp;=&nbsp;<span class="hljs-string">'456'</span>;
++----+-------------+-------+------------+------+---------------------+------+---------+------+------+----------+-------------+
+|&nbsp;id&nbsp;|&nbsp;select_type&nbsp;|&nbsp;table&nbsp;|&nbsp;partitions&nbsp;|&nbsp;type&nbsp;|&nbsp;possible_keys&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;key&nbsp;&nbsp;|&nbsp;key_len&nbsp;|&nbsp;ref&nbsp;&nbsp;|&nbsp;rows&nbsp;|&nbsp;filtered&nbsp;|&nbsp;Extra&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|
++----+-------------+-------+------------+------+---------------------+------+---------+------+------+----------+-------------+
+|&nbsp;&nbsp;<span class="hljs-number">1</span>&nbsp;|&nbsp;SIMPLE&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;t&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;NULL&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;ALL&nbsp;&nbsp;|&nbsp;idx_name,idx_score&nbsp;&nbsp;|&nbsp;NULL&nbsp;|&nbsp;NULL&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;NULL&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-number">4</span>&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-number">43.75</span>&nbsp;|&nbsp;Using&nbsp;where&nbsp;|
++----+-------------+-------+------------+------+---------------------+------+---------+------+------+----------+-------------+
+<span class="hljs-number">1</span>&nbsp;row&nbsp;in&nbsp;set,&nbsp;<span class="hljs-number">1</span>&nbsp;warning&nbsp;(<span class="hljs-number">0.00</span>&nbsp;sec)
+<span class="hljs-comment">//第一段执行计划</span>
+(root<span class="hljs-meta">@localhost</span>)&nbsp;[t]&gt;&nbsp;desc&nbsp;select&nbsp;*&nbsp;from&nbsp;t&nbsp;where&nbsp;name&nbsp;=&nbsp;<span class="hljs-string">'allen'</span>&nbsp;union&nbsp;all&nbsp;select&nbsp;*&nbsp;from&nbsp;t&nbsp;where&nbsp;score&nbsp;=&nbsp;<span class="hljs-string">'456'</span>;
++----+-------------+-------+------------+------+---------------+------------+---------+-------+------+----------+-------+
+|&nbsp;id&nbsp;|&nbsp;select_type&nbsp;|&nbsp;table&nbsp;|&nbsp;partitions&nbsp;|&nbsp;type&nbsp;|&nbsp;possible_keys&nbsp;|&nbsp;key&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;key_len&nbsp;|&nbsp;ref&nbsp;&nbsp;&nbsp;|&nbsp;rows&nbsp;|&nbsp;filtered&nbsp;|&nbsp;Extra&nbsp;|
++----+-------------+-------+------------+------+---------------+------------+---------+-------+------+----------+-------+
+|&nbsp;&nbsp;<span class="hljs-number">1</span>&nbsp;|&nbsp;PRIMARY&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;t&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;NULL&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;ref&nbsp;&nbsp;|&nbsp;idx_name&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;idx_name&nbsp;&nbsp;&nbsp;|&nbsp;<span class="hljs-number">47</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;<span class="hljs-keyword">const</span>&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-number">1</span>&nbsp;|&nbsp;&nbsp;&nbsp;<span class="hljs-number">100.00</span>&nbsp;|&nbsp;NULL&nbsp;&nbsp;|
+|&nbsp;&nbsp;<span class="hljs-number">2</span>&nbsp;|&nbsp;UNION&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;t&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;NULL&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;ref&nbsp;&nbsp;&nbsp;|&nbsp;idx_score&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;idx_score&nbsp;&nbsp;|&nbsp;<span class="hljs-number">47</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&nbsp;<span class="hljs-keyword">const</span>&nbsp;|&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-number">1</span>&nbsp;|&nbsp;&nbsp;&nbsp;<span class="hljs-number">100.00</span>&nbsp;|&nbsp;NULL&nbsp;&nbsp;|
++----+-------------+-------+------------+------+---------------+------------+---------+-------+------+----------+-------+
+<span class="hljs-number">2</span>&nbsp;rows&nbsp;in&nbsp;set,&nbsp;<span class="hljs-number">1</span>&nbsp;warning&nbsp;(<span class="hljs-number">0.00</span>&nbsp;sec)
+<span class="hljs-comment">//第二段执行计划</span>
+</code></pre>
+<p data-nodeid="821"><strong data-nodeid="926">总结</strong></p>
+<p data-nodeid="822">本讲从实际工作出发，以慢 SQL 中问题的重灾区索引为切入点，以执行计划为手段诊断了索引的常见问题，这些都是 SQL 优化中最常见的知识点，通过实例可以让你明白这些优化带来的好处。</p>
+<p data-nodeid="823">你还见过哪些索引未生效的情况？欢迎在评论区给出你的思考。</p>
+<p data-nodeid="824" class="">下一节课我将带来结束篇：线上全链路性能实践总结，虽是作为最终的 ending，还是想给你带来更多的干货，到时见。</p></div>
+
+</body></html>

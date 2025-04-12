@@ -1,0 +1,1415 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>16 | Redis 集成：如何实现对 Redis 的响应式数据访问？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>16 | Redis 集成：如何实现对 Redis 的响应式数据访问？</h1><p data-nodeid="418" class="">上一讲，我们介绍了 Spring Data MongoDB Reactive 组件，它是 Spring Data MongoDB 的响应式版本。今天我们要讨论的是 Spring Data Redis Reactive 组件，它专门针对 Redis 这款 NoSQL 数据库提供了响应式编程能力。</p>
+<p data-nodeid="419">使用该组件的步骤与 MongoDB 类似，我们同样围绕开发环境的初始化、Repository 的创建以及与 Service 层之间的集成这些步骤展开讨论，并结合 ReactiveSpringCSS 案例来集成这款主流的缓存中间件。</p>
+<h3 data-nodeid="420">Spring Data Redis Reactive 技术栈</h3>
+<p data-nodeid="421">我们可以通过导入 spring-boot-starter-data-redis-reactive 依赖来集成 Spring Data Reactive Redis 模块。与上一讲介绍的 MongoDB 不同，Redis 不提供响应式存储库，也就没有 ReactiveMongoRepository 这样的工具类可以直接使用。因此，ReactiveRedisTemplate 类成为响应式 Redis 数据访问的核心工具类。与 ReactiveMongoTemplate 和 ReactiveMongoOperations 之间的关系类似，ReactiveRedisTemplate 模板类实现了 ReactiveRedisOperations 接口定义的 API。</p>
+<p data-nodeid="422">ReactiveRedisOperations 中定义了一批针对 Redis 各种数据结构的操作方法，如下所示。</p>
+<pre class="lang-java hljs" data-nodeid="423"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">interface</span> <span class="hljs-title">ReactiveRedisOperations</span>&lt;<span class="hljs-title">K</span>, <span class="hljs-title">V</span>&gt; </span>{
+&nbsp;
+    &lt;HK, HV&gt; <span class="hljs-function">ReactiveHashOperations&lt;K, HK, HV&gt; <span class="hljs-title">opsForHash</span><span class="hljs-params">()</span></span>;
+	&lt;K, HK, HV&gt; <span class="hljs-function">ReactiveHashOperations&lt;K, HK, HV&gt; <span class="hljs-title">opsForHash</span><span class="hljs-params">(RedisSerializationContext&lt;K, ?&gt; serializationContext)</span></span>;
+&nbsp;
+    <span class="hljs-function">ReactiveListOperations&lt;K, V&gt; <span class="hljs-title">opsForList</span><span class="hljs-params">()</span></span>;
+	&lt;K, V&gt; <span class="hljs-function">ReactiveListOperations&lt;K, V&gt; <span class="hljs-title">opsForList</span><span class="hljs-params">(RedisSerializationContext&lt;K, V&gt; serializationContext)</span></span>;
+&nbsp;
+    <span class="hljs-function">ReactiveSetOperations&lt;K, V&gt; <span class="hljs-title">opsForSet</span><span class="hljs-params">()</span></span>;
+	&lt;K, V&gt; <span class="hljs-function">ReactiveSetOperations&lt;K, V&gt; <span class="hljs-title">opsForSet</span><span class="hljs-params">(RedisSerializationContext&lt;K, V&gt; serializationContext)</span></span>;
+&nbsp;
+    <span class="hljs-function">ReactiveValueOperations&lt;K, V&gt; <span class="hljs-title">opsForValue</span><span class="hljs-params">()</span></span>;
+	&lt;K, V&gt; <span class="hljs-function">ReactiveValueOperations&lt;K, V&gt; <span class="hljs-title">opsForValue</span><span class="hljs-params">(RedisSerializationContext&lt;K, V&gt; serializationContext)</span></span>;
+&nbsp;
+    <span class="hljs-function">ReactiveZSetOperations&lt;K, V&gt; <span class="hljs-title">opsForZSet</span><span class="hljs-params">()</span></span>;
+	&lt;K, V&gt; <span class="hljs-function">ReactiveZSetOperations&lt;K, V&gt; <span class="hljs-title">opsForZSet</span><span class="hljs-params">(RedisSerializationContext&lt;K, V&gt; serializationContext)</span></span>;
+&nbsp;
+…
+}
+</code></pre>
+<p data-nodeid="424">上述方法分别对应了 Redis 中 String、List、Set、ZSet 和 Hash 这五种常见的数据结构。同时，我们还看到了一个用于序列化管理的上下文对象 RedisSerializationContext。ReactiveRedisTemplate 提供了所有必需的序列化/反序列化过程，所支持的序列化方式包括常见的 Jackson2JsonRedisSerializer、JdkSerializationRedisSerializer、StringRedisSerializer 等。</p>
+<p data-nodeid="425">除了序列化管理，ReactiveRedisTemplate 的另一个核心功能是完成自动化的连接过程管理。应用程序想要访问 Redis，就需要获取 RedisConnection，而获取 RedisConnection 的途径是通过注入 RedisConnectionFactory 到 ReactiveRedisTemplate 中，该 ReactiveRedisTemplate 就能获取 RedisConnection。</p>
+<p data-nodeid="426">在 Redis 中，常见的 ConnectionFactory 有两种，一种是传统的 JedisConnectionFactory，而另一种就是新型的 LettuceConnectionFactory。LettuceConnectionFactory 基于 Netty 创建连接实例，可以在多个线程间实现线程安全，满足多线程环境下的并发访问要求。更为重要的是，LettuceConnectionFactory 同时支持响应式的数据访问用法，它是 ReactiveRedisConnectionFactory 接口的一种实现。Lettuce 也是目前 Redis 唯一的响应式 Java 连接器。Lettuce 4.x 版本使用 RxJava 作为底层响应式流实现方案。但是，该库的 5.x 分支切换到了 Project Reactor。</p>
+<h3 data-nodeid="427">应用 Reactive Redis</h3>
+<p data-nodeid="428">在你对这一组件有一定的解了之后，接下来，我将要为你介绍使用 Spring Data Redis Reactive 进行系统开发的具体过程，首先要说的同样是初始化运行环境。</p>
+<h4 data-nodeid="429">初始化 Reactive Redis 运行环境</h4>
+<p data-nodeid="430">首先我们在 pom 文件中添加 spring-boot-starter-data-redis-reactive 依赖，如下所示。</p>
+<pre class="lang-java hljs" data-nodeid="431"><code data-language="java">&lt;dependency&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+&nbsp;&nbsp;&nbsp;  &lt;artifactId&gt;spring-boot-starter-data-redis-reactive&lt;/artifactId&gt;
+&lt;/dependency&gt;
+</code></pre>
+<p data-nodeid="1370">然后我们通过 Maven 可以得到如下图所示的组件依赖图，可以看到 spring-boot-starter-data-redis-reactive 组件同时依赖于 spring-data-redis 和 luttuce-core 组件。</p>
+<p data-nodeid="1371" class="te-preview-highlight"><img src="https://s0.lgstatic.com/i/image6/M01/3A/1D/Cgp9HWB-UKuAHIxRAA0aJtyWMgI410.png" alt="图片2.png" data-nodeid="1376"></p>
+<div data-nodeid="1372"><p style="text-align:center">spring-boot-starter-data-redis-reactive 组件依赖图</p></div>
+
+
+
+
+
+
+
+
+<p data-nodeid="435">在上图中，我们同时看到 luttuce-core 组件中使用了 Project Reactor 框架中的 reactor-core 组件，这点与前面介绍的技术栈是完全一致的。</p>
+<p data-nodeid="436">为了获取连接，我们需要初始化 LettuceConnectionFactory。LettuceConnectionFactory 类的最简单使用方法如下所示。</p>
+<pre class="lang-java hljs" data-nodeid="437"><code data-language="java"><span class="hljs-meta">@Bean</span>
+<span class="hljs-function"><span class="hljs-keyword">public</span> ReactiveRedisConnectionFactory <span class="hljs-title">lettuceConnectionFactory</span><span class="hljs-params">()</span> </span>{
+	&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> LettuceConnectionFactory();
+}
+	&nbsp;
+<span class="hljs-meta">@Bean</span>
+<span class="hljs-function"><span class="hljs-keyword">public</span> ReactiveRedisConnectionFactory <span class="hljs-title">lettuceConnectionFactory</span><span class="hljs-params">()</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> LettuceConnectionFactory(<span class="hljs-string">"localhost"</span>, <span class="hljs-number">6379</span>);
+}
+</code></pre>
+<p data-nodeid="438">当然，LettuceConnectionFactory 也提供了一系列配置项供我们在初始化时进行设置，示例代码如下所示，我们可以对连接的安全性、超时时间等参数进行设置。</p>
+<pre class="lang-java hljs" data-nodeid="439"><code data-language="java"><span class="hljs-meta">@Bean</span>
+<span class="hljs-function"><span class="hljs-keyword">public</span> ReactiveRedisConnectionFactory <span class="hljs-title">lettuceConnectionFactory</span><span class="hljs-params">()</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; RedisStandaloneConfiguration redisStandaloneConfiguration = <span class="hljs-keyword">new</span> RedisStandaloneConfiguration();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; redisStandaloneConfiguration.setDatabase(database);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; redisStandaloneConfiguration.setHostName(host);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; redisStandaloneConfiguration.setPort(port);
+&nbsp;&nbsp;&nbsp;  redisStandaloneConfiguration.setPassword(RedisPassword.of(password));
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; LettuceClientConfiguration.LettuceClientConfigurationBuilder lettuceClientConfigurationBuilder = LettuceClientConfiguration
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .builder();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; LettuceConnectionFactory factory = <span class="hljs-keyword">new</span> LettuceConnectionFactory(redisStandaloneConfiguration,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; lettuceClientConfigurationBuilder.build());
+	&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> factory;
+}
+</code></pre>
+<p data-nodeid="440">有了 LettuceConnectionFactory，就可以用它来进一步初始化 ReactiveRedisTemplate。ReactiveRedisTemplate 的创建方式如下所示。与传统 RedisTemplate 创建方式的主要区别在于，ReactiveRedisTemplate 依赖于 ReactiveRedisConnectionFactory 来获取 ReactiveRedisConnection。</p>
+<pre class="lang-java hljs" data-nodeid="441"><code data-language="java"><span class="hljs-meta">@Bean</span>
+<span class="hljs-function">ReactiveRedisTemplate&lt;String, String&gt; 
+<span class="hljs-title">reactiveRedisTemplate</span><span class="hljs-params">(ReactiveRedisConnectionFactory factory)</span> </span>{
+<span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> ReactiveRedisTemplate&lt;&gt;(factory, 
+	RedisSerializationContext.string());
+&nbsp;&nbsp;&nbsp; }
+&nbsp;
+&nbsp;&nbsp;&nbsp; <span class="hljs-meta">@Bean</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-function">ReactiveRedisTemplate&lt;String, Account&gt; <span class="hljs-title">redisOperations</span><span class="hljs-params">(ReactiveRedisConnectionFactory factory)</span> </span>{
+	Jackson2JsonRedisSerializer&lt;Account&gt; serializer = <span class="hljs-keyword">new</span> 
+	Jackson2JsonRedisSerializer&lt;&gt;(Account.class);
+&nbsp;
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; RedisSerializationContext.RedisSerializationContextBuilder
+	&lt;String, Account&gt; builder = RedisSerializationContext
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .newSerializationContext(<span class="hljs-keyword">new</span> StringRedisSerializer());
+&nbsp;
+&nbsp;&nbsp;&nbsp; RedisSerializationContext&lt;String, Account&gt; context = 
+	builder.value(serializer).build();
+&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> ReactiveRedisTemplate&lt;&gt;(factory, context);
+}
+</code></pre>
+<p data-nodeid="442">以上代码中，我们使用了 Jackson2 作为数据存储的序列化方式，并对 Account 对象映射的规则做了初始化。</p>
+<h4 data-nodeid="443">创建 Reactive Redis Repository</h4>
+<p data-nodeid="444">因为没有直接可用的 Reactive Repository，所以在创建针对 Redis 的响应式 Repository 时，我们将采用“14 | 响应式全栈：响应式编程能为数据访问过程带来什么样的变化”中介绍的第三种方法，即自定义数据访问层接口。这里创建了 AccountRedisRepository 接口，代码如下。</p>
+<pre class="lang-java hljs" data-nodeid="445"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">interface</span> <span class="hljs-title">AccountRedisRepository</span> </span>{
+&nbsp;   <span class="hljs-function">Mono&lt;Boolean&gt; <span class="hljs-title">saveAccount</span><span class="hljs-params">(Account account)</span></span>;
+
+&nbsp;   <span class="hljs-function">Mono&lt;Boolean&gt; <span class="hljs-title">updateAccount</span><span class="hljs-params">(Account account)</span></span>;
+
+&nbsp;   <span class="hljs-function">Mono&lt;Boolean&gt; <span class="hljs-title">deleteAccount</span><span class="hljs-params">(String accountId)</span></span>;
+
+&nbsp;&nbsp;&nbsp; <span class="hljs-function">Mono&lt;Account&gt; <span class="hljs-title">findAccountById</span><span class="hljs-params">(String accountId)</span></span>;
+
+&nbsp;&nbsp;&nbsp; <span class="hljs-function">Flux&lt;Account&gt; <span class="hljs-title">findAllAccounts</span><span class="hljs-params">()</span></span>;
+}
+</code></pre>
+<p data-nodeid="446">然后我们创建了 AccountRedisRepositoryImpl 类来实现 AccountRedisRepository 接口中定义的方法，这里就会用到前面初始化的 ReactiveRedisTemplate。AccountRedisRepositoryImpl 类代码如下所示。</p>
+<pre class="lang-java hljs" data-nodeid="447"><code data-language="java">Repository
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">AccountRedisRepositoryImpl</span> <span class="hljs-keyword">implements</span> <span class="hljs-title">AccountRedisRepository</span></span>{
+&nbsp;
+&nbsp; <span class="hljs-meta">@Autowired</span>
+  <span class="hljs-keyword">private</span> ReactiveRedisTemplate&lt;String, Account&gt; reactiveRedisTemplate;
+&nbsp;
+&nbsp; <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> String HASH_NAME = <span class="hljs-string">"Account:"</span>;
+&nbsp;
+&nbsp; <span class="hljs-meta">@Override</span>
+&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> Mono&lt;Boolean&gt; <span class="hljs-title">saveAccount</span><span class="hljs-params">(Account account)</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> reactiveRedisTemplate.opsForValue().set(HASH_NAME + account.getId(), account);
+&nbsp; }
+&nbsp;
+&nbsp; <span class="hljs-meta">@Override</span>
+&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> Mono&lt;Boolean&gt; <span class="hljs-title">updateAccount</span><span class="hljs-params">(Account account)</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> reactiveRedisTemplate.opsForValue().set(HASH_NAME + account.getId(), account);
+&nbsp; }
+&nbsp;
+&nbsp; <span class="hljs-meta">@Override</span>
+&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> Mono&lt;Boolean&gt; <span class="hljs-title">deleteAccount</span><span class="hljs-params">(String accountId)</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> reactiveRedisTemplate.opsForValue().delete(HASH_NAME + accountId);
+&nbsp; }
+&nbsp;
+&nbsp; <span class="hljs-meta">@Override</span>
+&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> Mono&lt;Account&gt; <span class="hljs-title">findAccountById</span><span class="hljs-params">(String accountId)</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> reactiveRedisTemplate.opsForValue().get(HASH_NAME + accountId);
+&nbsp; }
+&nbsp;
+&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> Flux&lt;Account&gt; <span class="hljs-title">findAllAccounts</span><span class="hljs-params">()</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> reactiveRedisTemplate.keys(HASH_NAME + <span class="hljs-string">"*"</span>).flatMap((String key) -&gt; {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Mono&lt;Account&gt; mono = reactiveRedisTemplate.opsForValue().get(key);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> mono;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; });
+&nbsp; }
+}
+</code></pre>
+<p data-nodeid="448">上述代码中的 reactiveRedisTemplate.opsForValue() 方法将使用 ReactiveValueOperations 来实现对 Redis 中数据的具体操作。与传统的 RedisOperations 工具类一样，响应式 Redis 也提供了 ReactiveHashOperations、ReactiveListOperations、ReactiveSetOperations、ReactiveValueOperations 和 ReactiveZSetOperations 类来分别处理不同的数据类型。</p>
+<p data-nodeid="449">同时，在最后的 findAllAccounts() 方法中，我也演示了如何使用“07 | Reactor 操作符（上）：如何快速转换响应式流”中介绍的 flatMap 操作符，来根据 Redis 中的 Key 获取具体实体对象的处理方式，这种处理方式在响应式编程过程中应用非常广泛。</p>
+<h4 data-nodeid="450">在 Service 层中调用 Reactive Repository</h4>
+<p data-nodeid="451">在 Service 层中调用 AccountRedisRepository 的过程比较简单，我们创建了对应的 AccountService 类，代码如下所示。</p>
+<pre class="lang-java hljs" data-nodeid="452"><code data-language="java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">AccountService</span> </span>{
+    <span class="hljs-meta">@Autowired</span>
+	<span class="hljs-keyword">private</span> AccountRedisRepository 
+	accountRepository;
+&nbsp;
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> Mono&lt;Boolean&gt; <span class="hljs-title">save</span><span class="hljs-params">(Account account)</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> accountRepository.saveAccount(account);
+&nbsp;&nbsp;&nbsp; }
+&nbsp;
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> Mono&lt;Boolean&gt; <span class="hljs-title">delete</span><span class="hljs-params">(String id)</span> </span>{
+&nbsp;&nbsp;&nbsp;  &nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> accountRepository.deleteAccount(id);
+&nbsp;&nbsp;&nbsp; }
+&nbsp;
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> Mono&lt;Account&gt; <span class="hljs-title">findAccountById</span><span class="hljs-params">(String id)</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> accountRepository
+	.findAccountById(id).log(<span class="hljs-string">"findOneAccount"</span>);
+&nbsp;&nbsp;&nbsp; }
+
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> Flux&lt;Account&gt; <span class="hljs-title">findAllAccounts</span><span class="hljs-params">()</span> </span>{
+&nbsp;&nbsp;&nbsp;      <span class="hljs-keyword">return</span> accountRepository
+	.findAllAccounts().log(<span class="hljs-string">"findAllAccounts"</span>);
+&nbsp;&nbsp;&nbsp; }
+}
+</code></pre>
+<p data-nodeid="453">可以看到，这些方法都只是对 AccountRedisRepository 中对应方法的简单调用。在每次调用中，我们也通过 log 操作符进行了日志的记录。</p>
+<h3 data-nodeid="454">案例集成：在 ReactiveSpringCSS 案例中整合 Redis</h3>
+<p data-nodeid="455">在 ReactiveSpringCSS 中，Redis 的作用是实现缓存，这里就需要考虑它的具体应用场景。我们知道，在整体架构上，customer-service 一般会与用户服务 account-service 进行交互，但因为用户账户信息的更新属于低频事件，所以我们设计的实现方式是 account-service 通过消息中间件的方式将用户账户变更信息主动推送给 customer–service。而在这个时候，customer–service 就可以把接收到的用户账户信息保存在 Redis 中，两者之间的交互过程如下图所示。</p>
+<p data-nodeid="456"><img src="https://s0.lgstatic.com/i/image6/M00/39/FD/CioPOWB9VM-AZWmYAADG17Qg_-g409.png" alt="Drawing 3.png" data-nodeid="522"></p>
+<div data-nodeid="457"><p style="text-align:center">customer-service 服务与 account-service 服务交互图</p></div>
+<p data-nodeid="458">在“10 | WebFlux（上）：如何使用注解编程模式构建异步非阻塞服务”中，我们已经梳理了 customer-service 中用于生成客户工单的 generateCustomerTicket 方法的整体流程，我带你回顾一下其伪代码。</p>
+<pre class="lang-java hljs" data-nodeid="459"><code data-language="java">generateCustomerTicket {
+&nbsp;
+&nbsp;&nbsp;&nbsp; 创建 CustomerTicket 对象
+&nbsp;
+	从远程 account-service 中获取 Account 对象
+&nbsp;
+	从远程 order-service 中获取Order对象
+&nbsp;
+	设置 CustomerTicket 对象属性
+&nbsp;
+	保存 CustomerTicket 对象并返回
+}
+</code></pre>
+<p data-nodeid="460">现在，customer-service 已经可以从 Redis 缓存中获取变更之后的用户账户信息了。但如果用户信息没有变更，那么 Redis 中就不存在相关数据，我们还是需要访问远程服务。因此，整体流程需要做相应的调整，如下所示。</p>
+<pre class="lang-java hljs" data-nodeid="461"><code data-language="java">generateCustomerTicket {
+&nbsp;
+&nbsp;&nbsp;&nbsp; 创建 CustomerTicket 对象
+&nbsp;
+&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">if</span>(Redis 中已存在目标 Account 对象) {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 从 Redis 中获取 Account 对象
+	} <span class="hljs-keyword">else</span> {
+	    从远程 account-service 中获取 Account 对象
+	}
+&nbsp;
+	从远程 order-service 中获取 Order 对象
+&nbsp;
+	设置 CustomerTicket 对象属性
+&nbsp;
+	保存 CustomerTicket 对象并返回
+}
+</code></pre>
+<p data-nodeid="462">让我们把上述流程的调整反映在案例代码上。针对上述流程，我先基于第 10 讲中的实现方法给出原始 ReactiveAccountClient 类的实现过程，如下所示。</p>
+<pre class="lang-java hljs" data-nodeid="463"><code data-language="java"><span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">ReactiveAccountClient</span> </span>{
+&nbsp;
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> Mono&lt;AccountMapper&gt; <span class="hljs-title">findAccountById</span><span class="hljs-params">(String accountId)</span> </span>{
+&nbsp;&nbsp;&nbsp;  Mono&lt;AccountMapper&gt; account = WebClient.create()
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .get()
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .uri(<span class="hljs-string">"http://127.0.0.1:8082/accounts/{accountId}"</span>, accountId) 
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .retrieve()
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; .bodyToMono(AccountMapper.class).log("getAccountFromRemote");
+&nbsp;&nbsp;&nbsp;  <span class="hljs-keyword">return</span> account;
+&nbsp;&nbsp;&nbsp; }
+}
+</code></pre>
+<p data-nodeid="464">可以看到这里直接使用 WebClient 类完成了对 account-service 的远程调用。现在，流程做了调整，我们需要在进行远程调用之前，先访问 Redis。因此，我们先在 ReactiveAccountClient 类中添加针对访问 Redis 的相关代码。</p>
+<pre class="lang-java hljs" data-nodeid="465"><code data-language="java"><span class="hljs-meta">@Autowired</span>
+<span class="hljs-keyword">private</span> AccountRedisRepository accountRedisRepository;
+
+<span class="hljs-function"><span class="hljs-keyword">private</span> Mono&lt;AccountMapper&gt; <span class="hljs-title">getAccountFromCache</span><span class="hljs-params">(String accountId)</span> </span>{
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> accountRedisRepository.findAccountById(accountId);
+}
+</code></pre>
+<p data-nodeid="466">可以看到这里使用AccountRedisRepository完成数据的查询。然后，我们再基于该方法来重构 ReactiveAccountClient 中的 findAccountById 方法。</p>
+<pre class="lang-java hljs" data-nodeid="467"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">public</span> Mono&lt;AccountMapper&gt; <span class="hljs-title">findAccountById</span><span class="hljs-params">(String accountId)</span></span>{
+
+&nbsp;&nbsp;&nbsp;  <span class="hljs-comment">//先从 Redis 中获取目标 Account 对象</span>
+&nbsp;&nbsp;&nbsp;  Mono&lt;AccountMapper&gt; accountMonoFromCache = getAccountFromCache(accountId); 
+
+&nbsp;&nbsp;&nbsp;  <span class="hljs-comment">//如果 Redis 中没有目标 Account 对象，则进行远程获取</span>
+&nbsp;&nbsp;&nbsp;  Mono&lt;AccountMapper&gt; accountMono = accountMonoFromCache.switchIfEmpty(getAccountFromRemote(accountId));
+&nbsp;&nbsp;&nbsp; &nbsp;<span class="hljs-keyword">return</span> accountMono;
+}
+</code></pre>
+<p data-nodeid="468">这里用到了 Reactor 提供的switchIfEmpty 操作符来判断是否能够从 Redis 中获取目标 Account 对象，如果不能则再调用getAccountFromRemote 进行远程获取。getAccountFromRemote 方法如下所示。</p>
+<pre class="lang-java hljs" data-nodeid="469"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">public</span> Mono&lt;AccountMapper&gt; <span class="hljs-title">getAccountFromRemote</span><span class="hljs-params">(String accountId)</span> </span>{
+&nbsp;&nbsp;&nbsp;  <span class="hljs-comment">//远程获取 Account 对象</span>
+&nbsp;&nbsp;&nbsp;  Mono&lt;AccountMapper&gt; accountMonoFromRemote= WebClient.create()
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .get()
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .uri(<span class="hljs-string">"http://127.0.0.1:8082/accounts/{accountId}"</span>, accountId) 
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .retrieve()
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; .bodyToMono(AccountMapper.class).log("getAccountFromRemote");
+&nbsp;&nbsp;&nbsp;  //将获取到的 Account 对象放入 Redis 中
+&nbsp;&nbsp;&nbsp;  <span class="hljs-keyword">return</span> accountMonoFromRemote.flatMap(<span class="hljs-keyword">this</span>::putAccountIntoCache);
+}
+</code></pre>
+<p data-nodeid="470">这里我们先从 account-service 中远程获取 Account 对象，然后再把获取到的对象通过 putAccountIntoCache 方法放入 Redis 中以便下次直接从缓存中进行获取。putAccountIntoCache 方法实现如下。</p>
+<pre class="lang-java hljs" data-nodeid="471"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">private</span> Mono&lt;AccountMapper&gt; <span class="hljs-title">putAccountIntoCache</span><span class="hljs-params">(AccountMapper account)</span> </span>{
+	&nbsp;
+	<span class="hljs-keyword">return</span> accountRedisRepository.saveAccount(account).flatMap( saved -&gt; {
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; Mono&lt;AccountMapper&gt; savedAccount = accountRedisRepository.findAccountById(account.getId());
+
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> savedAccount;
+&nbsp;&nbsp;&nbsp;  });
+}
+</code></pre>
+<p data-nodeid="472">上述代码中我们首先通过 accountRedisRepository 的 saveAccount 方法将对象保存到 Redis 中，然后再通过 findAccountById 从 Redis 中获取所保存的数据进行返回。<strong data-nodeid="543">请注意，accountRedisRepository 的 saveAccount 方法的返回值是 Mono<code data-backticks="1" data-nodeid="537">&lt;Boolean&gt;</code>，而我们想要获取的目标对象类型是 Mono<code data-backticks="1" data-nodeid="539">&lt;AccountMapper&gt;</code>，所以这里使用了 flatMap 操作符完成了两者之间的转换</strong>。这也是 flatMap 操作符非常常见的一种用法。</p>
+<p data-nodeid="473">最后，让我们确认一下重构之后的 ReactiveAccountClient 的完整代码，如下所示。</p>
+<pre class="lang-java hljs" data-nodeid="474"><code data-language="java"><span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">ReactiveAccountClient</span> </span>{
+
+&nbsp;&nbsp;&nbsp; <span class="hljs-meta">@Autowired</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">private</span> AccountRedisRepository accountRedisRepository;
+
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">private</span> Mono&lt;AccountMapper&gt; <span class="hljs-title">getAccountFromCache</span><span class="hljs-params">(String accountId)</span> </span>{
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> accountRedisRepository.findAccountById(accountId);
+&nbsp;&nbsp;&nbsp; }
+
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">private</span> Mono&lt;AccountMapper&gt; <span class="hljs-title">putAccountIntoCache</span><span class="hljs-params">(AccountMapper account)</span> </span>{
+
+&nbsp;&nbsp;&nbsp;  <span class="hljs-keyword">return</span> accountRedisRepository.saveAccount(account).flatMap( saved -&gt; {
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; Mono&lt;AccountMapper&gt; savedAccount = accountRedisRepository.findAccountById(account.getId());
+
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> savedAccount;
+&nbsp;&nbsp;&nbsp;  });
+&nbsp;&nbsp;&nbsp; }
+&nbsp;
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> Mono&lt;AccountMapper&gt; <span class="hljs-title">findAccountById</span><span class="hljs-params">(String accountId)</span></span>{
+
+&nbsp;&nbsp;&nbsp;  <span class="hljs-comment">//先从 Redis 中获取目标 Account 对象</span>
+&nbsp;&nbsp;&nbsp;  Mono&lt;AccountMapper&gt; accountMonoFromCache= getAccountFromCache(accountId); 
+
+&nbsp;&nbsp;&nbsp;  <span class="hljs-comment">//如果 Redis 中没有目标 Account 对象，则进行远程获取</span>
+&nbsp;&nbsp;&nbsp;  Mono&lt;AccountMapper&gt; accountMono = accountMonoFromCache.switchIfEmpty(getAccountFromRemote(accountId));
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> accountMono;
+&nbsp;&nbsp;&nbsp; }
+
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> Mono&lt;AccountMapper&gt; <span class="hljs-title">getAccountFromRemote</span><span class="hljs-params">(String accountId)</span> </span>{
+&nbsp;&nbsp;&nbsp;  <span class="hljs-comment">//远程获取 Account 对象</span>
+&nbsp;&nbsp;&nbsp;  Mono&lt;AccountMapper&gt; accountMonoFromRemote= WebClient.create()
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .get()
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .uri(<span class="hljs-string">"http://127.0.0.1:8082/accounts/{accountId}"</span>, accountId) 
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .retrieve()
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; .bodyToMono(AccountMapper.class).log("getAccountFromRemote");
+
+&nbsp;&nbsp;&nbsp;  //将获取到的 Account 对象放入 Redis 中
+&nbsp;&nbsp;&nbsp;  <span class="hljs-keyword">return</span> accountMonoFromRemote.flatMap(<span class="hljs-keyword">this</span>::putAccountIntoCache);
+&nbsp;&nbsp;&nbsp; }
+}
+</code></pre>
+<p data-nodeid="475">现在，当我们访问 customer-service 里面 CustomerTicketService 中的 generateCustomerTicket 方法时，就会从 Redis 中获取数据从而提高访问效率。</p>
+<h3 data-nodeid="476">小结与预告</h3>
+<p data-nodeid="477">Redis 是一款主流的缓存数据库，和 MongoDB 一样提供了实现响应式流的驱动程序。而 Spring 家族中的 Spring Data Redis Reactive 组件则提供了以响应式流的方法访问 Redis 的高效开发模式，本讲结合案例对这一组件的使用方式进行了详细的讨论。</p>
+<p data-nodeid="478">最后给你留一道思考题：在使用 Spring Data Redis Reactive 时，如果想要实现一个自定义的响应式 Repository 应该怎么做？</p>
+<p data-nodeid="479">在 Spring Data 中，除了 MongoDB 和 Redis 之外，还针对 Cassandra 和 CouchBase 提供了响应式驱动程序，对于关系型数据库而言则没有直接的解决方案。因此，如何在系统中为关系型数据库添加响应式数据访问机制，从而确保全栈式的响应式数据流是一大挑战。下一讲，我们将深入讨论这一话题。</p>
+<blockquote data-nodeid="480">
+<p data-nodeid="481" class="">点击链接，获取课程相关代码 ↓↓↓<br>
+<a href="https://github.com/lagoueduCol/ReactiveProgramming-jianxiang.git?fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="554">https://github.com/lagoueduCol/ReactiveProgramming-jianxiang.git</a></p>
+</blockquote></div>
+
+</body></html>

@@ -1,0 +1,1350 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>07 | 如何使用 Go 更好地开发并发程序？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>07 | 如何使用 Go 更好地开发并发程序？</h1><p data-nodeid="126115" class="">我们都知道计算机的核心为 CPU，它是计算机的运算和控制核心，承载了所有的计算任务。最近半个世纪以来，由于半导体技术的高速发展，集成电路中晶体管的数量也在大幅度增长，这大大提升了 CPU 的性能。著名的摩尔定律——“集成电路芯片上所集成的电路的数目，每隔18个月就翻一番”，描述的就是该种情形。</p>
+<p data-nodeid="126116" class="">过于密集的晶体管虽然提高了 CPU 的处理性能，但也带来了单个芯片发热过高和成本过高的问题，与此同时，受限于材料技术的发展，芯片中晶体管数量密度的增加速度已经放缓。也就是说，程序已经无法简单地依赖硬件的提升而提升运行速度。这时，多核 CPU 的出现让我们看到了提升程序运行速度的另一个方向：将程序的执行过程分为多个可并行或并发执行的步骤，让它们分别在不同的 CPU 核心中同时执行，最后将各部分的执行结果进行合并得到最终结果。</p>
+<p data-nodeid="126117">并行和并发是计算机程序执行的常见概念，它们的区别在于：</p>
+<ul data-nodeid="126118">
+<li data-nodeid="126119">
+<p data-nodeid="126120"><strong data-nodeid="126219">并行</strong>，指两个或多个程序在<strong data-nodeid="126220">同一个时刻</strong>执行；</p>
+</li>
+<li data-nodeid="126121">
+<p data-nodeid="126122"><strong data-nodeid="126229">并发</strong>，指两个或多个程序在<strong data-nodeid="126230">同一个时间段内</strong>执行。</p>
+</li>
+</ul>
+<p data-nodeid="126123"><strong data-nodeid="126235">并行执行的程序</strong>，无论从宏观还是微观的角度观察，同一时刻内都有多个程序在 CPU 中执行。这就要求 CPU 提供多核计算能力，多个程序被分配到 CPU 的不同的核中被同时执行。</p>
+<p data-nodeid="126124">而<strong data-nodeid="126241">并发执行的程序</strong>，仅需要在宏观角度观察到多个程序在 CPU 中同时执行。即使是单核 CPU 也可以通过分时复用的方式，给多个程序分配一定的执行时间片，让它们在 CPU 上被快速轮换执行，从而在宏观上模拟出多个程序同时执行的效果。但从微观角度来看，这些程序其实是在 CPU 中被串行执行。</p>
+<h3 data-nodeid="127775" class="">Go 的 MPG 线程模型</h3>
+
+<p data-nodeid="126126">Go 被认为是一门高性能并发语言，得益于它在原生态支持<strong data-nodeid="126248">协程并发</strong>。这里我们首先了解进程、线程和协程这三者的联系和区别。</p>
+<p data-nodeid="126127">在多道程序系统中，<strong data-nodeid="126254">进程</strong>是一个具有独立功能的程序关于某个数据集合的一次动态执行过程，是操作系统进行资源分配和调度的基本单位，是应用程序运行的载体。</p>
+<p data-nodeid="126128">而<strong data-nodeid="126264">线程</strong>则是程序执行过程中一个单一的顺序控制流程，是 CPU 调度和分派的基本单位。<strong data-nodeid="126265">线程是比进程更小的独立运行基本单位</strong>，一个进程中可以拥有一个或者以上的线程，这些线程共享进程所持有的资源，在 CPU 中被调度执行，共同完成进程的执行任务。</p>
+<p data-nodeid="126129">在 Linux 系统中，根据资源访问权限的不同，操作系统会把内存空间分为内核空间和用户空间：内核空间的代码能够直接访问计算机的底层资源，如 CPU 资源、I/O 资源等，为用户空间的代码提供计算机底层资源访问能力；用户空间为上层应用程序的活动空间，无法直接访问计算机底层资源，需要借助“系统调用”“库函数”等方式调用内核空间提供的资源。</p>
+<p data-nodeid="126130">同样，线程也可以分为内核线程和用户线程。<strong data-nodeid="126276">内核线程</strong>由操作系统管理和调度，是内核调度实体，它能够直接操作计算机底层资源，可以充分利用 CPU 多核并行计算的优势，但是线程切换时需要 CPU 切换到内核态，存在一定的开销，可创建的线程数量也受到操作系统的限制。<strong data-nodeid="126277">用户线程</strong>由用户空间的代码创建、管理和调度，无法被操作系统感知。用户线程的数据保存在用户空间中，切换时无须切换到内核态，切换开销小且高效，可创建的线程数量理论上只与内存大小相关。</p>
+<p data-nodeid="126131"><strong data-nodeid="126282">协程是一种用户线程，属于轻量级线程</strong>。协程的调度，完全由用户空间的代码控制；协程拥有自己的寄存器上下文和栈，并存储在用户空间；协程切换时无须切换到内核态访问内核空间，切换速度极快。但这也给开发人员带来较大的技术挑战：开发人员需要在用户空间处理协程切换时上下文信息的保存和恢复、栈空间大小的管理等问题。</p>
+<p data-nodeid="128707">Go 是为数不多在语言层次实现协程并发的语言，它采用了一种特殊的两级线程模型：MPG 线程模型（如下图）。</p>
+<p data-nodeid="129651" class=""><img src="https://s0.lgstatic.com/i/image/M00/36/9A/Ciqc1F8X5ymAf7NvAAE_PDbjFtw120.png" alt="1.png" data-nodeid="129654"></p>
+
+
+
+
+
+
+<ul data-nodeid="126135">
+<li data-nodeid="126136">
+<p data-nodeid="126137">M，即 machine，相当于内核线程在 Go 进程中的映射，它与内核线程一一对应，代表真正执行计算的资源。在 M 的生命周期内，它只会与一个内核线程关联。</p>
+</li>
+<li data-nodeid="126138">
+<p data-nodeid="126139">P，即 processor，代表 Go 代码片段执行所需的上下文环境。M 和 P 的结合能够为 G 提供有效的运行环境，它们之间的结合关系不是固定的。P 的最大数量决定了 Go 程序的并发规模，由 runtime.GOMAXPROCS 变量决定。</p>
+</li>
+<li data-nodeid="126140">
+<p data-nodeid="126141">G，即 goroutine，是一种轻量级的用户线程，是对代码片段的封装，拥有执行时的栈、状态和代码片段等信息。</p>
+</li>
+</ul>
+<p data-nodeid="130339">在实际执行过程中，M 和 P 共同为 G 提供有效的运行环境（如下图），多个可执行的 G 顺序挂载在 P 的可执行 G 队列下面，等待调度和执行。当 G 中存在一些 I/O 系统调用阻塞了 M 时，P 将会断开与 M 的联系，从调度器空闲 M 队列中获取一个 M 或者创建一个新的 M 组合执行， 保证 P 中可执行 G 队列中其他 G 得到执行，且由于程序中并行执行的 M 数量没变，保证了程序 CPU 的高利用率。</p>
+<p data-nodeid="130340" class=""><img src="https://s0.lgstatic.com/i/image/M00/36/9A/Ciqc1F8X5zuAQrDLAAEpRhFm8n4546.png" alt="2.png" data-nodeid="130344"></p>
+
+
+
+<p data-nodeid="126145">当 G 中系统调用执行结束返回时，M 会为 G 捕获一个 P 上下文，如果捕获失败，就把 G 放到全局可执行 G 队列等待其他 P 的获取。新创建的 G 会被放置到全局可执行 G 队列中，等待调度器分发到合适的 P 的可执行 G 队列中。M 和 P 结合后，会从 P 的可执行 G 队列中无锁获取 G 执行。当 P 的可执行 G 队列为空时，P 才会加锁从全局可执行 G 队列获取 G。当全局可执行 G 队列中也没有 G 时，P 会尝试从其他 P 的可执行 G 队列中“剽窃” G 执行。</p>
+<h3 data-nodeid="130805" class="">goroutine 和 channel</h3>
+
+<p data-nodeid="126147">并发程序中的多个线程同时在 CPU 执行，由于资源之间的相互依赖和竞态条件，需要一定的并发模型协作不同线程之间的任务执行。Go 中倡导使用 <strong data-nodeid="126303">CSP 并发模型</strong>来控制线程之间的任务协作，CSP 倡导使用通信的方式来进行线程之间的内存共享。</p>
+<p data-nodeid="126148">Go 是通过 goroutine 和 channel 来实现 CSP 并发模型的：</p>
+<ul data-nodeid="126149">
+<li data-nodeid="126150">
+<p data-nodeid="126151"><strong data-nodeid="126309">goroutine，即协程</strong>，Go 中的并发实体，是一种轻量级的用户线程，是消息的发送和接收方；</p>
+</li>
+<li data-nodeid="126152">
+<p data-nodeid="126153"><strong data-nodeid="126314">channel，即通道</strong>， goroutine 使用通道发送和接收消息。</p>
+</li>
+</ul>
+<p data-nodeid="126154">CSP 并发模型类似常用的同步队列，它更加关注消息的传输方式，解耦了发送消息的 goroutine 和接收消息的 goroutine，channel 可以独立创建和存取，在不同的 goroutine 中传递使用。</p>
+<p data-nodeid="126155">使用关键字 go 即可使用 goroutine 并发执行代码片段，形式如下：</p>
+<pre class="lang-go hljs" data-nodeid="126156"><code data-language="go"><span class="hljs-keyword">go</span> expression
+</code></pre>
+<p data-nodeid="126157">而 channel 作为一种引用类型，声明时需要指定传输数据类型，声明形式如下：</p>
+<pre class="lang-go hljs" data-nodeid="126158"><code data-language="go"><span class="hljs-keyword">var</span> name <span class="hljs-keyword">chan</span> T <span class="hljs-comment">// 双向 channel</span>
+<span class="hljs-keyword">var</span> name <span class="hljs-keyword">chan</span> &lt;- T <span class="hljs-comment">// 只能发送消息的 channel</span>
+<span class="hljs-keyword">var</span> name T &lt;- <span class="hljs-keyword">chan</span> <span class="hljs-comment">// 只能接收消息的 channel </span>
+</code></pre>
+<p data-nodeid="126159">其中，T 即为 channel 可传输的数据类型。channel 作为队列，遵循消息先进先出的顺序，同时保证同一时刻只能有一个 goroutine 发送或者接收消息。<br>
+使用 channel 发送和接收消息形式如下：</p>
+<pre class="lang-go hljs" data-nodeid="126160"><code data-language="go">channel &lt;- val <span class="hljs-comment">// 发送消息</span>
+val := &lt;- channel <span class="hljs-comment">// 接收消息</span>
+val, ok := &lt;- channel <span class="hljs-comment">// 非阻塞接收消息</span>
+</code></pre>
+<p data-nodeid="131267">goroutine 向已经填满信息的 channel 发送信息或从没有数据的 channel 接收信息会阻塞自身。goroutine 接收消息时可以使用非阻塞的方式，无论 channel 中是否存在消息都会立即返回，通过 ok 布尔值判断是否接收成功。</p>
+<p data-nodeid="131268">创建一个 channel 需要使用 make 函数对 channel 进行初始化，形式如下所示：</p>
+
+<pre class="lang-go hljs" data-nodeid="126162"><code data-language="go">ch := <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> T, sizeOfChan)
+</code></pre>
+<p data-nodeid="126163">初始化 channel 时可以指定 channel 的长度，表示 channel 最多可以缓存多少条信息。下面我们通过一个简单例子演示 goroutine 和 channel 的使用：</p>
+<pre class="lang-go hljs" data-nodeid="126164"><code data-language="go"><span class="hljs-keyword">package</span> main
+<span class="hljs-keyword">import</span> (
+	<span class="hljs-string">"fmt"</span>
+	<span class="hljs-string">"time"</span>
+)
+<span class="hljs-comment">//生产者</span>
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">Producer</span><span class="hljs-params">(begin, end <span class="hljs-keyword">int</span>, queue <span class="hljs-keyword">chan</span>&lt;- <span class="hljs-keyword">int</span>)</span></span> {
+	<span class="hljs-keyword">for</span> i:= begin ; i &lt; end ; i++ {
+		fmt.Println(<span class="hljs-string">"produce:"</span>, i)
+		queue &lt;- i
+	}
+}
+<span class="hljs-comment">//消费者</span>
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">Consumer</span><span class="hljs-params">(queue &lt;-<span class="hljs-keyword">chan</span> <span class="hljs-keyword">int</span>)</span></span> {
+	<span class="hljs-keyword">for</span> val := <span class="hljs-keyword">range</span> queue  { <span class="hljs-comment">//当前的消费者循环消费</span>
+		fmt.Println(<span class="hljs-string">"consume:"</span>, val)
+	}
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span> {
+	queue := <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> <span class="hljs-keyword">int</span>)
+	<span class="hljs-keyword">defer</span> <span class="hljs-built_in">close</span>(queue)
+	<span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">3</span>; i++ {
+		<span class="hljs-keyword">go</span> Producer(i * <span class="hljs-number">5</span>, (i+<span class="hljs-number">1</span>) * <span class="hljs-number">5</span>, queue) <span class="hljs-comment">//多个生产者</span>
+	}
+	<span class="hljs-keyword">go</span> Consumer(queue) <span class="hljs-comment">//单个消费者</span>
+	time.Sleep(time.Second) <span class="hljs-comment">// 避免主 goroutine 结束程序</span>
+}
+</code></pre>
+<p data-nodeid="126165">这是一个简单的多生产者和单消费的代码例子，生产 goroutine 将生产的数字通过 channel 发送给消费 goroutine。上述例子中，消费 goroutine 使用 for:range 从 channel 中循环接收消息，只有当相应的 channel 被内置函数 close 后，该循环才会结束。channel 在关闭之后不可以再用于发送消息，但是可以继续用于接收消息，从关闭的 channel 中接收消息或者正在被阻塞的 goroutine 将会接收零值并返回。还有一个需要注意的点是，main 函数由主 goroutine 启动，当主 goroutine 即 main 函数执行结束，整个 Go 程序也会直接执行结束，无论是否存在其他未执行完的 goroutine。</p>
+<h4 data-nodeid="131731" class="">1. select 多路复用</h4>
+
+<p data-nodeid="126169">当需要从多个 channel 中接收消息时，可以使用 Go 提供的 select 关键字，它提供类似多路复用的能力，使得 goroutine 可以同时等待多个 channel 的读写操作。select 的形式与 switch 类似，但是要求 case 语句后面必须为 channel 的收发操作，一个简单的例子如下：</p>
+<pre class="lang-go hljs" data-nodeid="126170"><code data-language="go"><span class="hljs-keyword">package</span> main
+<span class="hljs-keyword">import</span> (
+	<span class="hljs-string">"fmt"</span>
+	<span class="hljs-string">"time"</span>
+)
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">send</span><span class="hljs-params">(ch <span class="hljs-keyword">chan</span> <span class="hljs-keyword">int</span>, begin <span class="hljs-keyword">int</span> )</span></span>  {
+	<span class="hljs-comment">// 循环向 channel 发送消息</span>
+	<span class="hljs-keyword">for</span> i :=begin ; i&lt; begin + <span class="hljs-number">10</span> ;i++{
+		ch &lt;- i
+	}
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">receive</span><span class="hljs-params">(ch &lt;-<span class="hljs-keyword">chan</span> <span class="hljs-keyword">int</span>)</span></span>  {
+	val := &lt;- ch
+	fmt.Println(<span class="hljs-string">"receive:"</span>, val)
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span>  {
+	ch1 := <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> <span class="hljs-keyword">int</span>)
+	ch2 := <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> <span class="hljs-keyword">int</span>)
+	<span class="hljs-keyword">go</span> send(ch1, <span class="hljs-number">0</span>)
+	<span class="hljs-keyword">go</span> receive(ch2)
+	<span class="hljs-comment">// 主 goroutine 休眠 1s，保证调度成功</span>
+	time.Sleep(time.Second)
+	<span class="hljs-keyword">for</span> {
+		<span class="hljs-keyword">select</span> {
+		<span class="hljs-keyword">case</span> val := &lt;- ch1: <span class="hljs-comment">// 从 ch1 读取数据</span>
+			fmt.Printf(<span class="hljs-string">"get value %d from ch1\n"</span>, val)
+		<span class="hljs-keyword">case</span> ch2 &lt;- <span class="hljs-number">2</span> : <span class="hljs-comment">// 使用 ch2 发送消息</span>
+			fmt.Println(<span class="hljs-string">"send value by ch2"</span>)
+		<span class="hljs-keyword">case</span> &lt;-time.After(<span class="hljs-number">2</span> * time.Second): <span class="hljs-comment">// 超时设置</span>
+			fmt.Println(<span class="hljs-string">"Time out"</span>)
+			<span class="hljs-keyword">return</span>
+		}
+	}
+}
+</code></pre>
+<p data-nodeid="126171">在上述例子中，我们使用 select 关键字同时从 ch1 中接收数据和使用 ch2 发送数据，输出的一种可能结果为：</p>
+<pre class="lang-java hljs" data-nodeid="132418"><code data-language="java">get value <span class="hljs-number">0</span> from ch1
+get value <span class="hljs-number">1</span> from ch1
+send value by ch2
+receive: <span class="hljs-number">2</span>
+get value <span class="hljs-number">2</span> from ch1
+get value <span class="hljs-number">3</span> from ch1
+get value <span class="hljs-number">4</span> from ch1
+get value <span class="hljs-number">5</span> from ch1
+get value <span class="hljs-number">6</span> from ch1
+get value <span class="hljs-number">7</span> from ch1
+get value <span class="hljs-number">8</span> from ch1
+get value <span class="hljs-number">9</span> from ch1
+Time out
+</code></pre>
+
+
+<p data-nodeid="126173">由于 ch2 中的消息仅被接收一次，所以仅出现一次“send value by ch2”，后续消息的发送将被阻塞。select 语句分别从 3 个 case 中选取返回的 case 进行处理，当有多个 case 语句同时返回时，select 将会随机选择一个 case 进行处理。如果 select 语句的最后包含 default 语句，该 select 语句将会变为非阻塞型，即当其他所有的 case 语句都被阻塞无法返回时，select 语句将直接执行 default 语句返回结果。在上述例子中，我们在最后的 case 语句使用了 &lt;-time.After(2 * time.Second) 的方式指定了定时返回的 channel，这是一种有效从阻塞的 channel 中超时返回的小技巧。</p>
+<h4 data-nodeid="133335" class="">2. Context 上下文</h4>
+
+
+<p data-nodeid="126177">当需要在多个 goroutine 中传递上下文信息时，可以使用 Context 实现。Context 除了用来传递上下文信息，还可以用于传递终结执行子任务的相关信号，中止多个执行子任务的 goroutine。Context 中提供以下接口：</p>
+<pre class="lang-go hljs" data-nodeid="126178"><code data-language="go"><span class="hljs-keyword">type</span> Context <span class="hljs-keyword">interface</span> {
+    Deadline() (deadline time.Time, ok <span class="hljs-keyword">bool</span>)
+    Done() &lt;-<span class="hljs-keyword">chan</span> <span class="hljs-keyword">struct</span>{}
+    Err() error
+    Value(key <span class="hljs-keyword">interface</span>{}) <span class="hljs-keyword">interface</span>{}
+}
+</code></pre>
+<ul data-nodeid="126179">
+<li data-nodeid="126180">
+<p data-nodeid="126181">Deadline 方法，返回 Context 被取消的时间，也就是完成工作的截止日期；</p>
+</li>
+<li data-nodeid="126182">
+<p data-nodeid="126183">Done，返回一个 channel，这个 channel 会在当前工作完成或者上下文被取消之后关闭，多次调用 Done 方法会返回同一个 channel；</p>
+</li>
+<li data-nodeid="126184">
+<p data-nodeid="126185">Err 方法，返回 Context 结束的原因，它只会在 Done 返回的 channel 被关闭时才会返回非空的值，如果 Context 被取消，会返回 Canceled 错误；如果 Context 超时，会返回 DeadlineExceeded 错误。</p>
+</li>
+<li data-nodeid="126186">
+<p data-nodeid="126187">Value 方法，可用于从 Context 中获取传递的键值信息。</p>
+</li>
+</ul>
+<p data-nodeid="126188">在 Web 请求的处理过程中，一个请求可能启动多个 goroutine 协同工作，这些 goroutine 之间可能需要共享请求的信息，且当请求被取消或者执行超时时，该请求对应的所有 goroutine 都需要快速结束，释放资源。Context 就是为了解决上述场景而开发的，我们通过下面一个例子来演示：</p>
+<pre class="lang-go hljs" data-nodeid="126189"><code data-language="go"><span class="hljs-keyword">package</span> main
+<span class="hljs-keyword">import</span> (
+	<span class="hljs-string">"context"</span>
+	<span class="hljs-string">"fmt"</span>
+	<span class="hljs-string">"time"</span>
+)
+<span class="hljs-keyword">const</span> DB_ADDRESS  = <span class="hljs-string">"db_address"</span>
+<span class="hljs-keyword">const</span> CALCULATE_VALUE  = <span class="hljs-string">"calculate_value"</span>
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">readDB</span><span class="hljs-params">(ctx context.Context, cost time.Duration)</span></span>  {
+	fmt.Println(<span class="hljs-string">"db address is"</span>, ctx.Value(DB_ADDRESS))
+	<span class="hljs-keyword">select</span> {
+	<span class="hljs-keyword">case</span> &lt;- time.After(cost): <span class="hljs-comment">//  模拟数据库读取</span>
+		fmt.Println(<span class="hljs-string">"read data from db"</span>)
+	<span class="hljs-keyword">case</span> &lt;-ctx.Done():
+		fmt.Println(ctx.Err()) <span class="hljs-comment">// 任务取消的原因</span>
+		<span class="hljs-comment">// 一些清理工作</span>
+	}
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">calculate</span><span class="hljs-params">(ctx context.Context, cost time.Duration)</span></span>  {
+	fmt.Println(<span class="hljs-string">"calculate value is"</span>, ctx.Value(CALCULATE_VALUE))
+	<span class="hljs-keyword">select</span> {
+	<span class="hljs-keyword">case</span> &lt;- time.After(cost): <span class="hljs-comment">//  模拟数据计算</span>
+		fmt.Println(<span class="hljs-string">"calculate finish"</span>)
+	<span class="hljs-keyword">case</span> &lt;-ctx.Done():
+		fmt.Println(ctx.Err()) <span class="hljs-comment">// 任务取消的原因</span>
+		<span class="hljs-comment">// 一些清理工作</span>
+	}
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span>  {
+	ctx := context.Background(); <span class="hljs-comment">// 创建一个空的上下文</span>
+	<span class="hljs-comment">// 添加上下文信息</span>
+	ctx = context.WithValue(ctx, DB_ADDRESS, <span class="hljs-string">"localhost:10086"</span>)
+	ctx = context.WithValue(ctx, CALCULATE_VALUE, <span class="hljs-number">1234</span>)
+	<span class="hljs-comment">// 设定子 Context 2s 后执行超时返回</span>
+	ctx, cancel := context.WithTimeout(ctx, time.Second * <span class="hljs-number">2</span>)
+	<span class="hljs-keyword">defer</span> cancel()
+	<span class="hljs-comment">// 设定执行时间为 4 s</span>
+	<span class="hljs-keyword">go</span> readDB(ctx, time.Second * <span class="hljs-number">4</span>)
+	<span class="hljs-keyword">go</span> calculate(ctx, time.Second * <span class="hljs-number">4</span>)
+	
+	<span class="hljs-comment">// 充分执行</span>
+    time.Sleep(time.Second * <span class="hljs-number">5</span>)
+}
+</code></pre>
+<p data-nodeid="126190">在上述例子中，我们模拟了一个请求中同时进行数据库访问和逻辑计算的操作，在请求执行超时时，及时关闭尚未执行结束 goroutine。我们首先通过 context.WithValue 方法为 context 添加上下文信息，Context 在多个 goroutine 中是并发安全的，可以安全地在多个 goroutine 中对 Context 中的上下文数据进行读取。接着使用 context.WithTimeout 方法设定了 Context 的超时时间为 2s，并传递给 readDB 和 calculate 两个 goroutine 执行子任务。在 readDB 和 calculate 方法中，使用 select 语句对 Context 的 Done 通道进行监控。由于我们设定了子 Context 将在 2s 之后超时，所以它将在 2s 之后关闭 Done 通道；然而预设的子任务执行时间为 4s，对应的 case 语句尚未返回，执行被取消，进入到清理工作的 case 语句中，结束掉当前的 goroutine 所执行的任务。预期的输出结果如下：</p>
+<pre class="lang-java hljs" data-nodeid="133789"><code data-language="java">calculate value is <span class="hljs-number">1234</span>
+db address is localhost:<span class="hljs-number">10086</span>
+context deadline exceeded
+context deadline exceeded
+</code></pre>
+
+<p data-nodeid="126192">使用 Context，能够有效地在一组 goroutine 中传递共享值、取消信号、deadline 等信息，及时关闭不需要的 goroutine。</p>
+<h3 data-nodeid="134696" class="">小结</h3>
+
+
+<p data-nodeid="126194">本节课我们介绍了 Go 语言并发特性，主要包含：</p>
+<ul data-nodeid="126195">
+<li data-nodeid="126196">
+<p data-nodeid="126197">Go 的 MPG 线程模型；</p>
+</li>
+<li data-nodeid="126198">
+<p data-nodeid="126199">goroutine 和 channel；</p>
+</li>
+<li data-nodeid="126200">
+<p data-nodeid="126201">select 多路复用；</p>
+</li>
+<li data-nodeid="126202">
+<p data-nodeid="126203">Context 上下文。</p>
+</li>
+</ul>
+<p data-nodeid="126204">除了支持 CSP 的并发模型，Go 同样支持传统的线程与锁并发模型，提供了互斥锁、读写锁、并发等待组、同步等待条件等一系列同步工具，这些同步工具的结构体位于 sync 包中，与其他语言的同步工具使用方式相差无几。Go 在语言层次支持协程并发，在并发性能上表现卓越，能够充分挖掘多核 CPU 的运算性能。希望本节课的学习，能够有效提升你对 Go 并发设计和编程的认知。</p>
+<p data-nodeid="127067">最后，欢迎在留言区和我交流分享。</p></div>
+
+</body></html>

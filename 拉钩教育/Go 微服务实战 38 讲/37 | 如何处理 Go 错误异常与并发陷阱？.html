@@ -1,0 +1,1014 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>37 | 如何处理 Go 错误异常与并发陷阱？</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>37 | 如何处理 Go 错误异常与并发陷阱？</h1><p data-nodeid="316442" class="">错误处理是软件开发中不可回避的问题，<strong data-nodeid="316526">Go 中主要通过 error 和 panic 分别表示错误和异常</strong>，并提供了较为简洁的错误异常处理机制。作为一门并发性能优越的语言，Go 虽然降低了协程并发开发的难度，但也存在一些<strong data-nodeid="316527">并发陷阱</strong>，这就需要我们在开发时额外注意。</p>
+<p data-nodeid="316443">在本课时，我们就来介绍 Go 中的一些错误处理机制，并讲解如何去规避一些常见的并发陷阱。</p>
+<h3 data-nodeid="316444">Errors are values</h3>
+<p data-nodeid="316445">错误处理是每个开发人员都需要面对的问题，在我过去接触的编程语言中，大多是通过<strong data-nodeid="316539">try-catch 的方式</strong>对可能出现错误的代码块进行包装：<strong data-nodeid="316540">程序运行 try 中代码，如果 try 中的代码运行出错，程序将会立即跳转到 catch 中执行异常处理逻辑</strong>。</p>
+<p data-nodeid="316446">与其他的编程语言不同，Go 中倡导“Errors are values!”的处理思想，它将 error 作为一个返回值，来迫使调用者对 error 进行处理或者忽略。于是，在代码中我们将会编写大量的 if 判断语句对 error 进行判断，如下所示：</p>
+<pre class="lang-go" data-nodeid="316447"><code data-language="go">result, err := dothing(<span class="hljs-string">"work"</span>)
+<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> {
+	log.Fatal(err)
+}
+<span class="hljs-comment">// do other thing</span>
+</code></pre>
+<p data-nodeid="316448">当项目的代码快速增长起来时，我们会发现代码中到处都是类似 err != nil 的判断片段。虽然这会使代码变得很烦琐，但是这种设计和约定也会鼓励开发人员明确检查和确定错误发生的位置。</p>
+<p data-nodeid="316449">在 Go 中，error 接口定义如下：</p>
+<pre class="lang-go" data-nodeid="316450"><code data-language="go"><span class="hljs-keyword">type</span> error <span class="hljs-keyword">interface</span> {
+	Error() <span class="hljs-keyword">string</span>
+}
+</code></pre>
+<p data-nodeid="316451">最常用的 error 实现是 Go 标准库 errors 包中内置的 errorString，它是一个仅包含错误信息的error 实现，可以通过 errors.New 和 fmt.Errorf 函数创建。内置的 error 接口使得开发人员可以为错误添加任何所需的信息，error 可以是实现 Error() 方法的任何类型，比如我们可以为错误添加错误码和调用栈信息，如下所示：</p>
+<pre class="lang-go" data-nodeid="316452"><code data-language="go"><span class="hljs-keyword">type</span> Error <span class="hljs-keyword">struct</span> {
+	Msg <span class="hljs-keyword">string</span>
+	Code <span class="hljs-keyword">int32</span>
+	St []<span class="hljs-keyword">uintptr</span> <span class="hljs-comment">// 调用栈</span>
+}
+<span class="hljs-comment">// 获取调用栈信息</span>
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">callers</span><span class="hljs-params">()</span> []<span class="hljs-title">uintptr</span></span> {
+	<span class="hljs-keyword">var</span> pcs [<span class="hljs-number">32</span>]<span class="hljs-keyword">uintptr</span>
+	n := runtime.Callers(<span class="hljs-number">3</span>, pcs[:])
+	st := pcs[<span class="hljs-number">0</span>:n]
+	<span class="hljs-keyword">return</span> st
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">New</span><span class="hljs-params">(code <span class="hljs-keyword">int32</span>, msg <span class="hljs-keyword">string</span>)</span> <span class="hljs-title">error</span></span> {
+	<span class="hljs-keyword">return</span> &amp;Error{
+		Code: <span class="hljs-keyword">int32</span>(code),
+		Msg:  msg,
+		St: callers(),
+	}
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(e *Error)</span> <span class="hljs-title">Error</span><span class="hljs-params">()</span> <span class="hljs-title">string</span></span> {
+	<span class="hljs-keyword">if</span> e == <span class="hljs-literal">nil</span> {
+		<span class="hljs-keyword">return</span> <span class="hljs-string">"OK"</span>
+	}
+	<span class="hljs-keyword">return</span> fmt.Sprintf(<span class="hljs-string">"code:%d, msg:%s"</span>, e.Code, e.Msg)
+}
+</code></pre>
+<p data-nodeid="316453">通过<strong data-nodeid="316554">断言</strong>的方式可以将 error 转化为特定的类型从而进行特异化处理，如下所示：</p>
+<pre class="lang-go" data-nodeid="316454"><code data-language="go"><span class="hljs-keyword">if</span> e, ok := err.(*Error); ok {
+	<span class="hljs-comment">// 取出堆栈信息进行处理</span>
+	st := e.st
+	<span class="hljs-comment">// ....</span>
+}<span class="hljs-keyword">else</span> {
+	<span class="hljs-comment">// 其他错误处理</span>
+}
+</code></pre>
+<p data-nodeid="316455">在 Go 1.13 版本之后，errors 包中添加了 errors.Is 和 errors.As 函数：errors.Is 方法用来比较两个 error 是否相等，而 errors.As 函数用来判断 error 是否为特定类型。</p>
+<p data-nodeid="316456">由于 error 是一个值，因此我们可以对其进行编程，简化 Go 错误处理的重复代码。在一些管道和循环的代码中，只要其中一次处理出现错误，就应该退出本次管道或者循环。寻常的做法是在每次迭代都检查错误，但为了让管道和循环的操作显得更加自然，我们可以将 error 封装到独立的方法或者变量中返回，以避免错误处理掩盖控制流程，如 gorm 中的 DB 设计所示：</p>
+<pre class="lang-go" data-nodeid="316457"><code data-language="go">err := DB.Where(queryString, queryValue...).
+		Table(<span class="hljs-string">"table_name"</span>).
+		Updates(<span class="hljs-keyword">map</span>[<span class="hljs-keyword">string</span>]<span class="hljs-keyword">interface</span>{}{...}).Error
+<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span>{
+	<span class="hljs-comment">// 错误处理逻辑</span>
+}
+</code></pre>
+<p data-nodeid="316458">这里 error 是从 gorm.DB 的 Error 成员变量中获取的。在数据库请求执行结束之后，程序才从 DB 中获取执行错误，这样的写法使得错误处理不会中断执行流程。但需要注意的是，无论如何简化 error 的设计，程序都要检查和处理错误，错误是无法避免的。</p>
+<h3 data-nodeid="316459">defer、panic 和 recover</h3>
+<p data-nodeid="316460">错误一般是一些开发人员“意料之内”的错误，比如获取数据库连接失败等，这些都是在 Go 中通过 error 表达并可控。但当程序出现异常，如数组访问越界这类“意料之外”的错误时，它能够导致程序运行崩溃，此时就需要开发人员捕获异常并恢复程序的正常运行流程。</p>
+<p data-nodeid="316461">接下来我们就介绍 defer、panic 和 recover 如何组合恢复运行时执行异常的 Go 程序。</p>
+<p data-nodeid="316462"><strong data-nodeid="316565">defer 是 Go 中提供的一种延迟执行机制</strong>，每次执行 defer，都会将对应的函数压入栈中。在函数返回或者 panic 异常结束时，Go 会依次从栈中取出延迟函数执行。</p>
+<p data-nodeid="316463">在编程的时候，经常需要打开一些资源，比如数据库连接、文件等，在资源使用完成之后需要释放，不然有可能会造成资源泄漏。这个时候，我们可以通过 defer 语句在函数执行完之后，自动释放资源，避免在每个函数返回之前手动释放资源，减少冗余代码。</p>
+<p data-nodeid="316464">defer 有三个比较重要的特点。<strong data-nodeid="316576">第一个是按照调用 defer 的逆序执行</strong>，即后调用的在函数退出时先执行，<strong data-nodeid="316577">后进先出</strong>。如下例子所示:</p>
+<pre class="lang-go" data-nodeid="316465"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span>  {
+	<span class="hljs-keyword">defer</span> fmt.Println(<span class="hljs-string">"I register at first, but execute at last"</span>)
+	<span class="hljs-keyword">defer</span> fmt.Println(<span class="hljs-string">"I register at middle, execute at middle"</span>)
+	<span class="hljs-keyword">defer</span> fmt.Println(<span class="hljs-string">"I register at last, execute at first"</span>)
+	fmt.Println(<span class="hljs-string">"test begin"</span>)
+}
+</code></pre>
+<p data-nodeid="316466">预期的结果为：</p>
+<pre class="lang-powershell" data-nodeid="316467"><code data-language="powershell">test <span class="hljs-keyword">begin</span>
+I register at last, execute at first
+I register at middle, execute at middle
+I register at first, but execute at last
+</code></pre>
+<p data-nodeid="316468"><strong data-nodeid="316583">第二个特点是 defer 被定义时，参数变量会被立即解析，传递参数的值拷贝</strong>。在函数内使用的变量其实是对外部变量的一个拷贝，在函数体内，对变量更改也不会影响外部变量，如下所示：</p>
+<pre class="lang-go" data-nodeid="316469"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span>  {
+	i := <span class="hljs-number">10</span>
+	<span class="hljs-keyword">defer</span> fmt.Printf(<span class="hljs-string">"defer i is %d\n"</span>, i)
+	i = <span class="hljs-number">20</span>
+	fmt.Printf(<span class="hljs-string">"current i is %d\n"</span>, i)
+}
+</code></pre>
+<p data-nodeid="316470">预期结果为：</p>
+<pre class="lang-powershell" data-nodeid="316471"><code data-language="powershell">current i is <span class="hljs-number">20</span>
+defer i is <span class="hljs-number">10</span>
+</code></pre>
+<p data-nodeid="316472">然而当 defer 以闭包的方式引用外部变量时，则会在延迟函数真正执行的时候，根据整个上下文确定当前的值，如下示例代码：</p>
+<pre class="lang-go" data-nodeid="316473"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span>  {
+	<span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">5</span>; i++ {
+		<span class="hljs-keyword">defer</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> {
+			fmt.Println(i)
+		}()
+	}
+}
+</code></pre>
+<p data-nodeid="316474">预期的输出结果为：</p>
+<pre class="lang-powershell" data-nodeid="316475"><code data-language="powershell"><span class="hljs-number">5</span>
+<span class="hljs-number">5</span>
+<span class="hljs-number">5</span>
+<span class="hljs-number">5</span>
+<span class="hljs-number">5</span>
+</code></pre>
+<p data-nodeid="316476">上述例子为了演示简单，在 for 循环中使用了 defer，但<strong data-nodeid="316592">在日常开发中，我建议你还是不要在循环中使用 defer</strong>。因为相较于直接调用，defer 的执行存在着额外的开销，例如 defer 会对其后需要的参数进行内存拷贝，还会对 defer 结构进行压栈出栈操作。因此，在循环中使用 defer 可能会带来较大的性能开销。</p>
+<p data-nodeid="316477"><strong data-nodeid="316597">defer 的第三个特点是可以读取并修改函数的命名返回值</strong>，如下面的例子所示：</p>
+<pre class="lang-go" data-nodeid="316478"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span>  {
+	fmt.Println(test())
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">test</span><span class="hljs-params">()</span> <span class="hljs-params">(i <span class="hljs-keyword">int</span>)</span></span> {
+	<span class="hljs-keyword">defer</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> { i++ }()
+	<span class="hljs-keyword">return</span> <span class="hljs-number">1</span>
+}
+</code></pre>
+<p data-nodeid="316479">预期的返回结果为：</p>
+<pre class="lang-plain" data-nodeid="316480"><code data-language="plain">2
+</code></pre>
+<p data-nodeid="316481">这是因为对于命名返回值，defer 和 return 的执行顺序如下：</p>
+<ul data-nodeid="316482">
+<li data-nodeid="316483">
+<p data-nodeid="316484">将 1 赋给 i；</p>
+</li>
+<li data-nodeid="316485">
+<p data-nodeid="316486">执行 i++；</p>
+</li>
+<li data-nodeid="316487">
+<p data-nodeid="316488">返回 i 作为函数返回值。</p>
+</li>
+</ul>
+<p data-nodeid="316489">defer 的内部实现为一个<strong data-nodeid="316608">延迟调用链表</strong>，如下图所示：</p>
+<p data-nodeid="317621"><img src="https://s0.lgstatic.com/i/image/M00/67/D7/Ciqc1F-iaTOALrVCAAC28gcQ66k361.png" alt="Lark20201104-164037.png" data-nodeid="317624"><br>
+defer 延迟调用链表示意图</p>
+
+
+
+
+<p data-nodeid="316491">其中，g 代表 goroutine 的数据结构。每个 goroutine 中都有一个 _defer 链表，当代码中遇到 defer 关键字时，Go 都会将 defer 相关的函数和参数封装到 _defer 结构体中，然后将其注册到当前 goroutine 的 _defer 链表的表头。在当前函数执行完毕之后，Go 会从 goroutine 的 _defer 链表头部取出来注册的 defer 执行并返回。</p>
+<p data-nodeid="316492">_defer 结构体中存储 defer 执行相关的信息，定义如下所示：</p>
+<pre class="lang-go" data-nodeid="316493"><code data-language="go"><span class="hljs-keyword">type</span> _defer <span class="hljs-keyword">struct</span> {
+	siz       <span class="hljs-keyword">int32</span> <span class="hljs-comment">// 参数与结果内存大小</span>
+	started   <span class="hljs-keyword">bool</span> 
+	heap      <span class="hljs-keyword">bool</span> <span class="hljs-comment">// 是否在堆上分配</span>
+	openDefer <span class="hljs-keyword">bool</span> <span class="hljs-comment">//是否经过开放编码优化</span>
+	sp        <span class="hljs-keyword">uintptr</span> <span class="hljs-comment">// 栈指针</span>
+	pc        <span class="hljs-keyword">uintptr</span> <span class="hljs-comment">// 调用方的程序计数器</span>
+	fn        *funcval <span class="hljs-comment">// defer 传入的函数</span>
+	_panic    *_panic 
+	link      *_defer <span class="hljs-comment">// 下一个 _defer</span>
+}
+</code></pre>
+<p data-nodeid="316494"><strong data-nodeid="316629">panic 是一个内置函数，用于抛出程序执行的异常</strong>。它会终止其后将要执行的代码，并依次逆序执行 panic 所在函数可能存在的 defer 函数列表；然后返回该函数的调用方，如果函数的调用方中也有 defer 函数列表，也将被逆序执行，执行结束后再返回到上一层调用方，直到返回当前 goroutine 中的所有函数为止，最后报告异常，程序崩溃退出。异常可以直接通过 panic 函数调用抛出，也可能是因为运行时错误而引发，比如访问了空指针等。</p>
+<p data-nodeid="316495">而<strong data-nodeid="316635">recover 内置函数可用于捕获 panic，重新恢复程序正常执行流程，但是 recover 函数只有在 defer 内部使用才有效</strong>。如下面例子所示：</p>
+<pre class="lang-go" data-nodeid="316496"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span> {
+	err := panicAndReturnErr()
+	<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span>{
+		fmt.Printf(<span class="hljs-string">"err is %+v\n"</span>, err)
+	}
+	fmt.Println(<span class="hljs-string">"returned normally from panicAndReturnErr"</span>)
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">panicAndReturnErr</span><span class="hljs-params">()</span> <span class="hljs-params">(err error)</span></span>{
+	<span class="hljs-keyword">defer</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> {
+        <span class="hljs-comment">// 从 panic 中恢复</span>
+		<span class="hljs-keyword">if</span> e := <span class="hljs-built_in">recover</span>(); e != <span class="hljs-literal">nil</span> {
+            <span class="hljs-comment">// 打印栈信息</span>
+			buf := <span class="hljs-built_in">make</span>([]<span class="hljs-keyword">byte</span>, <span class="hljs-number">1024</span>)
+			buf = buf[:runtime.Stack(buf, <span class="hljs-literal">false</span>)]
+			err = fmt.Errorf(<span class="hljs-string">"[PANIC]%v\n%s\n"</span>, e, buf)
+		}
+	}()
+	fmt.Println(<span class="hljs-string">"panic begin"</span>)
+	<span class="hljs-built_in">panic</span>(<span class="hljs-string">"panic this game"</span>)
+	fmt.Println(<span class="hljs-string">"panic over"</span>)
+	<span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>
+}
+</code></pre>
+<p data-nodeid="316497">预期的执行结果为：</p>
+<pre class="lang-go" data-nodeid="316498"><code data-language="go"><span class="hljs-built_in">panic</span> begin
+err is [PANIC]<span class="hljs-built_in">panic</span> this game
+goroutine <span class="hljs-number">1</span> [running]:
+main.panicAndReturnErr.func1(<span class="hljs-number">0xc000062f08</span>)
+	/Users/apple/Desktop/micro-<span class="hljs-keyword">go</span>-course/section37/defer_example.<span class="hljs-keyword">go</span>:<span class="hljs-number">21</span> +<span class="hljs-number">0xa1</span>
+<span class="hljs-built_in">panic</span>(<span class="hljs-number">0x10ad640</span>, <span class="hljs-number">0x10eb360</span>)
+	/usr/local/<span class="hljs-keyword">go</span>/src/runtime/<span class="hljs-built_in">panic</span>.<span class="hljs-keyword">go</span>:<span class="hljs-number">969</span> +<span class="hljs-number">0x166</span>
+main.panicAndReturnErr(<span class="hljs-number">0x0</span>, <span class="hljs-number">0x0</span>)
+	/Users/apple/Desktop/micro-<span class="hljs-keyword">go</span>-course/section37/defer_example.<span class="hljs-keyword">go</span>:<span class="hljs-number">26</span> +<span class="hljs-number">0xc2</span>
+main.main()
+	/Users/apple/Desktop/micro-<span class="hljs-keyword">go</span>-course/section37/defer_example.<span class="hljs-keyword">go</span>:<span class="hljs-number">10</span> +<span class="hljs-number">0x26</span>
+returned normally from panicAndReturnErr
+</code></pre>
+<p data-nodeid="316499">从这个执行结果可以看出，panicAndReturnErr 函数在 panic 之后将会执行 defer 定义的延迟函数，恢复程序的正常执行逻辑。在上述例子中，我们在 defer 函数中使用 recover 函数帮助程序从 panic 中恢复过来，并获取异常堆栈信息组成 error 返回调用方。panicAndReturnErr 从 panic 中恢复后将直接返回，不会执行函数中 panic 后的其他代码。</p>
+<p data-nodeid="316500">在日常开发中，对于可能出现执行异常的函数，如数组越界、操作空指针等，在函数中定义一个使用 recover 函数的 defer 延迟函数，有利提高程序执行的健壮性，避免程序运行时异常崩溃。</p>
+<h3 data-nodeid="316501">常见的并发陷阱</h3>
+<p data-nodeid="316502">最后我们再来介绍与 Go 并发相关的几个小技巧，帮助你规避 Go 并发开发的一些陷阱。</p>
+<p data-nodeid="316503">首先是循环并发时闭包传递参数的问题，如下错误例子所示：</p>
+<pre class="lang-go" data-nodeid="316504"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span>  {
+	<span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span> ; i &lt; <span class="hljs-number">5</span> ; i++{
+		<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> {
+			fmt.Println(<span class="hljs-string">"current i is "</span>, i)
+		}()
+	}
+	time.Sleep(time.Second)
+}
+</code></pre>
+<p data-nodeid="316505">这段代码极有可能的输出为：</p>
+<pre class="lang-java" data-nodeid="316506"><code data-language="java">current i is <span class="hljs-number">5</span>
+current i is <span class="hljs-number">5</span>
+current i is <span class="hljs-number">5</span>
+current i is <span class="hljs-number">5</span>
+current i is <span class="hljs-number">5</span>
+</code></pre>
+<p data-nodeid="316507">这是因为 i 使用的地址空间在循环中被复用，在 goroutine 执行时，i 的值可能在被主 goroutine 修改，而此时其他 goroutine 也在读取使用，从而导致了并发错误。针对这种错误可以通过<strong data-nodeid="316652">复制拷贝</strong>或者<strong data-nodeid="316653">传参拷贝</strong>的方式规避，如下所示：</p>
+<pre class="lang-java" data-nodeid="316508"><code data-language="java"><span class="hljs-function">func <span class="hljs-title">main</span><span class="hljs-params">()</span>  </span>{
+	<span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span> ; i &lt; <span class="hljs-number">5</span> ; i++{
+		<span class="hljs-function">go <span class="hljs-title">func</span><span class="hljs-params">(v <span class="hljs-keyword">int</span>)</span> </span>{
+			fmt.Println(<span class="hljs-string">"current i is"</span>, v)
+		}(i)
+	}
+	time.Sleep(time.Second)
+}
+</code></pre>
+<p data-nodeid="316509">前面介绍 panic 时我们了解到 panic 异常的出现会导致 Go 程序的崩溃。但其实即使 panic 是出现在其他启动的子 goroutine 中，也会导致 Go 程序的崩溃退出，同时 panic 只能捕获 goroutine 自身的异常，因此**对于每个启动的 goroutine，都需要在入口处捕获 panic，并尝试打印堆栈信息并进行异常处理，<strong data-nodeid="316662">从而避免子 goroutine 的 panic 导致整个程序的崩溃退出</strong>。如下面的例子所示：</p>
+<pre class="lang-go" data-nodeid="316510"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">RecoverPanic</span><span class="hljs-params">()</span></span> {
+    <span class="hljs-comment">// 从 panic 中恢复并打印栈信息</span>
+	<span class="hljs-keyword">if</span> e := <span class="hljs-built_in">recover</span>(); e != <span class="hljs-literal">nil</span> {
+		buf := <span class="hljs-built_in">make</span>([]<span class="hljs-keyword">byte</span>, <span class="hljs-number">1024</span>)
+		buf = buf[:runtime.Stack(buf, <span class="hljs-literal">false</span>)]
+		fmt.Printf(<span class="hljs-string">"[PANIC]%v\n%s\n"</span>, e, buf)
+	}
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span> {
+	<span class="hljs-keyword">for</span> i:= <span class="hljs-number">0</span> ; i &lt; <span class="hljs-number">5</span> ; i++{
+		<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> {
+            <span class="hljs-comment">// defer 注册 panic 捕获函数</span>
+			<span class="hljs-keyword">defer</span> RecoverPanic()
+			dothing()
+		}()
+	}
+}
+</code></pre>
+<p data-nodeid="316511">最后一个技巧是要<strong data-nodeid="316668">善于结合使用 select、timer 和 context 进行超时控制</strong>。在 goroutine 中进行一些耗时较长的操作，最好都加上超时 timer，在并发的时候也要传递 context，这样在取消的时候就不会有遗漏，进而达到回收 goroutine 的目的，避免内存泄漏的发生。如下面的例子所示，通过 select 同时监听任务和定时器状态，在定时器到达而任务未完成之时，提前结束任务，清理资源并返回。</p>
+<pre class="lang-go" data-nodeid="316512"><code data-language="go"><span class="hljs-keyword">select</span> {
+<span class="hljs-comment">// do logic process</span>
+<span class="hljs-keyword">case</span> msg &lt;- input:
+   ....
+<span class="hljs-comment">// has been canceled</span>
+<span class="hljs-keyword">case</span> &lt;-ctx.Done():
+    <span class="hljs-comment">// ...资源清理</span>
+    <span class="hljs-keyword">return</span>
+<span class="hljs-comment">// 2 second timeout</span>
+<span class="hljs-keyword">case</span> &lt;-time.After(time.Second * <span class="hljs-number">2</span>)
+    <span class="hljs-comment">// ...资源清理 </span>
+    <span class="hljs-keyword">return</span>
+<span class="hljs-keyword">default</span>:
+}
+</code></pre>
+<h3 data-nodeid="316513">小结</h3>
+<p data-nodeid="316514">在本课时我们主要介绍了 Go 中常见的错误处理机制和一些并发开发技巧。</p>
+<p data-nodeid="316515">Go 倡导将错误作为返回值返回给调用方，由调用方决定如何处理或者忽略错误。通过 defer 和 recover 内置函数，我们可以轻易地将运行时异常的 Go 程序恢复到正常执行流程。另外，Go 并发开发中存在不少的并发陷阱，这些都需要我们在开发中额外留意并规避。</p>
+<p data-nodeid="316516" class="">最后，对于 Go 中的错误处理和并发技巧，你还有哪些经验？欢迎在留言区与我分享。</p></div>
+
+</body></html>

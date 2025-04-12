@@ -1,0 +1,781 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第30课：k8s 主流网络方案（OVS、Flannel、Calico）及原理</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>第30课：k8s 主流网络方案（OVS、Flannel、Calico）及原理</h1><h3>容器间通信原理</h3>
+<p>我们知道 K8s 属于容器编排工具，了解K8s 网络其本质上需要了解容器间的网络互访原理。同宿主机上容器与容器通过 namespace 做网络隔离，使得每个容器由独立的网卡、回环设备以及监听的独立端口地址并不会相互影响。关于容器和容器之间的通信原理，我们就需要分两块来讲，一是同宿主机上，容器之间的通信过程，二就是不同宿主机上面，容器之间又是如何进行通信。</p>
+<h4>同宿主机上的容器通信原理</h4>
+<p>首先我们要来讲解的就是在同宿主机上的容器通信原理。 我们来看一下这样一张图：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/1D/41/Ciqc1F7h0CuAQKQLAACg7iAyYtk957.png" alt="图片1.png"></p>
+<p>这张图里面同一台宿主机上面包含的两个容器，分别是 Docker01 和 Docker02，这两个容器都有自己的网卡设备，名称是 eth0 ，对应到宿主机上面，就有一个对应给到容器的虚拟网卡设备，对应的名称就是 Veth，后面加序列号的名称。容器一个对外通讯网络接口，那么通过什么来将它们整个串联起来呢，就是通过在宿主机下面搭建一个网桥的服务，使得在一台宿主机上面所有的容器进行内部的关联和通信，网桥相当于在宿主机上面起到一个二层虚拟交换机的作用。</p>
+<h4>不同宿主机上的容器通信原理</h4>
+<p>以上就是同一台宿主机上面容器之间进行通信的原理，不同宿主机上面容器又是如何通信的？ 对于不同主机上面的容器间通信主要有两种方式，第一种方式就是在三层网络上覆盖一层虚拟包头，如做对应的隧道，常见的有 VXLAN、GRE 等协议模式，都是利用了这样的原理。第二种方式就是通过路由的方式，修改路由表的信息，控制下一跳的 IP 地址来实现对应的功能。</p>
+<p>首先我们来了解第一种方式的具体实现原理。要了解到主机之间的通信原理，我们可以先看一下这样的一张图：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/1D/41/Ciqc1F7h0DSACfq1AAF-K0jMyOw430.png" alt="图片2.png"></p>
+<p>如 A 和 B 的通信过程，点对点的通信通常必须包含两大部分的数据包，一个是 IP 包，我们要了解 A、B 两个地址对应的 IP 地址，同时也需要了解到 A 和 B 之间的 MAC 地址，这样无论是在二层还是三层的网络结构下面，都使得这样的数据范围能够正常可达和回复。那对容器的不同宿主机下的网络模式而言，就会有一定的区别了。</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/1D/4D/CgqCHl7h0DyAK5y_AAB58cJAvqE444.png" alt="图片3.png"></p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/1D/41/Ciqc1F7h0EOAHjRZAAEH3JdazRM728.png" alt="图片4.png"></p>
+<p>我们会看到这里我画了一个大圆圈，加了一个 C 和 D，它们分别是宿主机，中间两个红色的点点是对应的容器，容器的网段和宿主机的网站又有差异，它们是两个不同的网站，所以我们想要容器能够直接通信，必须通过宿主机来做对应地支持，那么通常采用加虚拟包头的方式，也就是在原有容器的内层包上封装一层虚拟包头。在图中我们会看到这一层的外层包头是 C 和 D 对应的 IP 地址包和 MAC 地址包，这样就使得容器之间原有的包头，能够借助于宿主机的通信过程，承载这样的一份数据包来进行通信，而它的实现原理是这样子的，从 C 端进行封包，也就是加上最外层的数据包，等数据包通过 C 正常传到 D 以后，再从 D 这一层对应地解外层的数据包，同样再给到这个容器，该容器就可以看到原地址的 IP 地址和原的 MAC 地址，这些信息都可以通过这样的一种方式进行承载。这是通过虚拟包头的方式来实现的。</p>
+<p>另外一种方式就是通过路由来实现，而路由的实现方式，这里同样有一张图，我们来看一下。</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/1D/4D/CgqCHl7h0E2AS_LKAAFFzpBCr9E555.png" alt="图片5.png"></p>
+<p>在这张图里面我们会看到同样两台宿主机 C 和 D，以及容器 A 和 B，在张图中，我将对应的 IP 都加进去了，如果 A 需要发给 B 的话，就需要在 C 的宿主机上面添加对应的一条路由，发给 B 的 IP 地址段，以及它的掩码，如果是这样的目标地址和掩码，就可以交给 D，也就是这个 IP 地址的网关进行处理，也就是图示中的 192.168.0.2 了，我们会看到，这样的一种方式就使得 A 可以通过 C 直接路由的方式，把数据包给到 D，从而完成容器之间的通信。</p>
+<p>这两种模式各有优劣，首先包头的方式，它的性能损耗会略大，因为需要封装包和解封，这本身就是对性能有影响的一个过程。但是路由这种方式，它的性能虽然好，但是需要我们去解决动态路由的一些问题，所以需要有整套的机制来完善，这样相对来说实现起来更加复杂，所以两种方式都有各自的一些优劣。而结合到 K8s 而言，它有对应的一整套 CNI 插件，在整个集群的海量容器和主机节点的模式上，能够让它们灵活自由地进行通信。</p>
+<p>这个插件里面规范了网络通信的一些接口和规范，主要的功能包含创建 pod 时的一些网络接口地址，提供 pod 间的相互通信功能，删除 pod 时释放分配的资源 ，这些在 K8s 里面的 CNI 插件里都可以提供对应的功能。常见的 CNI 插件，包含了 Flannel、Canal 等网络模式。</p>
+<h3>K8s 网络通信方案</h3>
+<p>接下来我们来具体介绍在 K8s 里，对应的网络插件是如何来帮助整个容器进行容器间的通信，以及对应关联的。我们首先来介绍的就是 Flannel 这样一个网络插件，它包含了几种对应的模式，首先给你介绍的就是 UDP 这样一种网络模式。这里有两张图，分别是物理机 1 和物理机 2，那么用 Flannel 这种模式，在组下面都会启用一个 Flanneld 的进程，它用于不同宿主机之间对应的通信，可以通过 Flanneld 查询 K8s 的 etcd 子网与宿主机的对应关系。</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/1D/42/Ciqc1F7h0FeAFhKhAAK-BS315Vg631.png" alt="图片6.png"></p>
+<p>另外，在每台数据层都会有一个 flannel1 的网卡名称，在往外发数据包的时候都要通过 flannel1 的网卡进行发送。我们看一下具体的发送流程：可以看到，整体的发送模式是基于隧道模式来实现的，也就是说在容器原有 IP 的基础上封装了一层主机之间的 IP，我们来对应看一下，容器 A 要发给另外一台物理机上面的容器 B，首先它会通过自己的虚拟网卡发到桥接的网卡地址上，这里原有的数据包包含了原地址和目的地址，原地址当然是容器 A 的主机地址，那么目的地址是容器 B 的主机地址，它要发送出去的时候，先会通过 Flanneld 这样的一个进程，这个进程是在用户态的，它起到的作用就是把原数据包进行封装，封装对应目标物理机的地址和目标物理机 Flanneld 进程的监听端口地址，还有物理机的源地址等信息来进行封装，封装完成以后再交给 flannel1 网卡通过 eth0 发送出去。</p>
+<p>这种模式很大的一个特点就是需要通过 Flanneld 进程来进行 UDP 数据包的封装，它的性能损耗比较大，因为它需要通过用户态和内核态进行数据拷贝，我们知道数据包在用户态进行了一次处理，再回给了内核态，这样的性能其实是相对低下的，为了解决这样的问题， flannel 还有另外一种模式，就是 VXLAN 模式：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/1D/4D/CgqCHl7h0GCABEu-AAKQrMJH90Q489.png" alt="图片7.png"></p>
+<p>相较于 UDP 模式而言，它们的共同点是都是基于数据包的这种报文封装，只不过它封装的不是 UDP 的报文，而是封装成 VXLAN 这种模式的报文，报文有一个非常大的特点，就是对于数据包的封装和解封装，VXLAN 完全可以交给 Linux 的内核来实现，而不用跑用户态，这样它的性能是相对比较高的，那么这里还会有一些细小的区别，这里就不给你详细讲解了。</p>
+<p>我们重点来看一下 VXLAN 的特性。那么无论是 VXLAN 也好，flannel 这种网络模式而言也好，它们都是基于数据包的封装而实现的。但是如果想要讲到最高的性能模式，还是需要考虑使用路由模式。那么 K8s 下面的 CALICO 组件和模式就是来实现的这样一套路由的机制。</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/1D/4D/CgqCHl7h0GmAcg61AALpS3DjaG0262.png" alt="图片8.png"></p>
+<p>我们讲到，容器宿主机间联接的路由模式最大的问题，就是动态路由，为了解决动态表的问题，在 CALICO 这个组件下面，有两个非常重要的组件，一个是 BGP speak，它用于路由广播，另外一个组件是 Felix ，它是做路由配置的，有了这两个组件，配合 K8s 就实现了动态路由更新配置的实现机制。由于它不会做数据包的封装解封，所以它的性能一定是更优了，但是这样的一种模式受制于二层网络的条件，为了解决二层网络的限制问题，就需要通过结合 CALICO 的另外一种模式，就是 IPIP 的模式：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/1D/4D/CgqCHl7h0HKAVF2vAALeTcS5iK0236.png" alt="图片9.png"></p>
+<p>这种模式既做路由的协议，同时也通过更底层的封装解封的协议，来打通受制于二层网络的瓶颈问题，那么通过 tun0 这样的网卡设备，来把不同主机通过隧道直接打通，这就是 CALICO IPIP 对应的实现机制。</p>
+<p>本课时我们从容器的网络通信讲起，讲到了 K8s 对于容器编排所支持的 CNI 的几套对应插件的实现机制。</p></div>
+
+</body></html>

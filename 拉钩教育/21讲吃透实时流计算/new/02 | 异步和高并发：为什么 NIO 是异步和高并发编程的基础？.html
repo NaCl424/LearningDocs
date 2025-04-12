@@ -1,0 +1,1183 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>02 | 异步和高并发：为什么 NIO 是异步和高并发编程的基础？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>02 | 异步和高并发：为什么 NIO 是异步和高并发编程的基础？</h1><p data-nodeid="173670" class="">为什么在讲流计算之前，要先讲异步和高并发的问题呢？</p>
+<ul data-nodeid="173671">
+<li data-nodeid="173672">
+<p data-nodeid="173673">其一，是因为“流”本质是异步的，可以说“流计算”也是一种形式的异步编程。</p>
+</li>
+<li data-nodeid="173674">
+<p data-nodeid="173675">其二，是因为对于一个流计算系统而言，其起点一定是数据采集，没数据就什么事情都做不了，而数据采集通常就会涉及 IO 问题，如何设计一个高性能的 IO 密集型应用，异步和并发编程既是过不去的坎，也是我们掌握高性能 Java 编程的基础。</p>
+</li>
+</ul>
+<p data-nodeid="173676">所以，在这个课时中，我们就从数据采集模块切入，通过开发一个高性能的数据采集模块，从实战中理解 NIO、异步和高并发的原理。这样，当你以后开发高性能服务时，比如需要支持数万甚至数百万并发连接的 Web 服务时，就知道如何充分发挥出硬件资源的能力，就可以用最低的硬件成本，来达到业务的性能要求。</p>
+<p data-nodeid="173677">为了更方便地说明问题，我们今天的讨论，以从互联网上采集数据为例。具体来说，如下图 1 所示，数据通过 REST 接口，从手机或网页端，发送到数据采集服务器。</p>
+<p data-nodeid="173678"><img src="https://s0.lgstatic.com/i/image2/M01/0A/9C/Cip5yGASZ4SAW0_5AAGrQ8Srwvo664.png" alt="Drawing 0.png" data-nodeid="173745"></p>
+<div data-nodeid="173679"><p style="text-align:center">图 1 基于 REST 协议的数据采集服务器</p></div>
+<h3 data-nodeid="173680">BIO 连接器的问题</h3>
+<p data-nodeid="173681">由于是面向互联网采集数据，所以我们要实现的数据采集服务器，就是一个常见的 Web 服务。说到 Web 服务开发，作为 Java 开发人员，十有八九会用到 Tomcat。毕竟 Tomcat 一直是 Spring 生态的默认 Web 服务器，使用面是非常广的。</p>
+<p data-nodeid="173682">但使用 Tomcat 需要注意一个问题。在 Tomcat 7 及之前的版本中， Tomcat 默认使用的是 BIO 连接器， BIO 连接器的工作原理如下图 2 所示。</p>
+<p data-nodeid="173683"><img src="https://s0.lgstatic.com/i/image2/M01/0C/18/CgpVE2AXdWiADLMCAAHMLshLpPY043.png" alt="Lark20210201-112830.png" data-nodeid="173751"></p>
+<div data-nodeid="173684"><p style="text-align:center">图 2 BIO连接器工作原理</p></div>
+<p data-nodeid="173685">当使用 BIO 连接器时，Tomcat 会为每个客户端请求，分配一个独立的工作线程进行处理。这样，如果有 100 个客户端同时发送请求，就需要同时创建 100 个工作线程。如果有 1 万个客户端同时请求，就需要创建 1 万个工作线程。而如果是 100 万个客户端同时请求呢？是不是需要创建 100 万个工作线程？</p>
+<p data-nodeid="173686">所以，<strong data-nodeid="173758">BIO 连接器的最大问题是它的工作线程和请求连接是一一对应耦合起来的</strong>。当同时建立的请求连接数比较少时，使用 BIO 连接器是合适的，因为这个时候线程数是够用的。但考虑下，像 BATJ 等大厂的使用场景，哪家不是成万上亿的用户，哪家不是数十万、数百万的并发连接。在这些场景下，使用 BIO 连接器就根本行不通了。</p>
+<p data-nodeid="173687">所以，我们需要采取新的方案，这就是 Tomcat NIO 连接器。</p>
+<h3 data-nodeid="173688">使用 NIO 支持百万连接</h3>
+<p data-nodeid="173689">毫无意外的是，从 Tomcat 8 开始，Tomcat 已经将 NIO 设置成了它的默认连接器。所以，如果你此时还在使用 Tomcat 7 或之前的版本的话，需要检查下你的服务器，究竟使用的是哪种连接器。</p>
+<p data-nodeid="173690"><img src="https://s0.lgstatic.com/i/image/M00/92/B2/CgqCHmASZ5uAJOF8AAHkGkDdBlM833.png" alt="Drawing 2.png" data-nodeid="173764"></p>
+<div data-nodeid="173691"><p style="text-align:center">图 3 NIO连接器工作原理</p></div>
+<p data-nodeid="173692">图 3 是 NIO 连接器的工作原理。可以看出，<strong data-nodeid="173770">NIO 连接器相比 BIO 连接器，主要做出了两大改进</strong>。</p>
+<ul data-nodeid="173693">
+<li data-nodeid="173694">
+<p data-nodeid="173695"><strong data-nodeid="173774">一是，使用“队列”将请求接收器和工作线程隔开；</strong></p>
+</li>
+<li data-nodeid="173696">
+<p data-nodeid="173697"><strong data-nodeid="173778">二是，引入选择器来更加精细地管理连接套接字。</strong></p>
+</li>
+</ul>
+<p data-nodeid="173698">NIO 连接器的这两点改进，带来了两个非常大的好处。</p>
+<ul data-nodeid="173699">
+<li data-nodeid="173700">
+<p data-nodeid="173701">一方面，将请求接收器和工作线程隔离开，可以让接收器和工作线程，各自尽其所能地工作，从而更加充分地使用 IO 和 CPU 资源。</p>
+</li>
+<li data-nodeid="173702">
+<p data-nodeid="173703">另一方面，NIO 连接器能够保持的并发连接数，不再受限于工作线程数量，这样无须分配大量线程，数据接收服务器就能支持大量并发连接了。</p>
+</li>
+</ul>
+<p data-nodeid="173704">所以，使用 NIO 连接器，我们解决了百万并发连接的问题。但想要实现一个高性能的数据采集服务器，光使用 NIO 连接器还不够。因为当系统支持百万并发连接时，也就意味着我们的系统是一个吞吐量非常高的系统。这就要求我们在实现业务逻辑时，需要更加精细地使用 CPU 和 IO 资源。否则，千辛万苦改成 NIO 的努力，就都白白浪费了。</p>
+<h3 data-nodeid="173705">如何优化 IO 和 CPU 都密集的任务</h3>
+<p data-nodeid="173706">考虑实际的应用场景，当数据采集服务器在接收到数据后，往往还需要做三件事情：</p>
+<ul data-nodeid="173707">
+<li data-nodeid="173708">
+<p data-nodeid="173709">一是，对数据进行解码；</p>
+</li>
+<li data-nodeid="173710">
+<p data-nodeid="173711">二是，对数据进行规整化，包括字段提取、类型统一、过滤无效数据等；</p>
+</li>
+<li data-nodeid="173712">
+<p data-nodeid="173713">三是，将规整化的数据发送到下游，比如消息中间件 Kafka。</p>
+</li>
+</ul>
+<p data-nodeid="173714">在这三个步骤中，1 和 2 主要是纯粹的 CPU 计算，占用的是 CPU 资源，而 3 则是 IO 输出，占用的是 IO 资源。每接收到一条数据，我们都会执行以上三个步骤，所以也就构成了类似于图 4 所示的这种循环。</p>
+<p data-nodeid="173715"><img src="https://s0.lgstatic.com/i/image2/M01/0C/16/Cip5yGAXdeGAFnlbAAC4HyWiW3I997.png" alt="Lark20210201-113030.png" data-nodeid="173791"></p>
+<div data-nodeid="173716"><p style="text-align:center">图 4 CPU和IO都密集型任务</p></div>
+<p data-nodeid="173717">从图 4 可以看出，数据采集服务器是一个对 CPU 和 IO 资源的使用都比较密集的场景。为什么我们会强调这种<strong data-nodeid="173801">CPU 和 IO 的使用都比较密集的情况</strong>呢？因为这是<strong data-nodeid="173802">破解“NIO 和异步”为什么比“BIO 和同步”程序，性能更优的关键</strong>所在！下面我们就来详细分析下。</p>
+<p data-nodeid="173718">如果想提高 IO 利用率，一种简单且行之有效的方式，是使用更多的线程。这是因为当线程执行到涉及 IO 操作或 sleep 之类的函数时，会触发系统调用。线程执行系统调用，会从用户态进入内核态，之后在其准备从内核态返回用户态时，操作系统将触发一次线程调度的机会。对于正在执行 IO 操作的线程，操作系统很有可能将其调度出去。这是因为触发 IO 请求的线程，通常需要等待 IO 操作完成，操作系统就会暂时让其在一旁等着，先调度其他线程执行。当 IO 请求的数据准备好之后，线程才再次获得被调度的机会，然后继续之前的执行流程。</p>
+<p data-nodeid="173719">但是，是不是能够一直将线程的数量增加下去呢？不是的！如果线程过多，操作系统就会频繁地进行线程调度和上下文切换，这样 CPU 会浪费很多的时间在线程调度和上下文切换上，使得用于有效计算的时间变少，从而造成另一种形式的 CPU 资源浪费。</p>
+<p data-nodeid="173720">所以，<strong data-nodeid="173810">针对 IO 和 CPU 都密集的任务，其优化思路是，尽可能让 CPU 不把时间浪费在等待 IO 完成上，同时尽可能降低操作系统消耗在线程调度上的时间</strong>。</p>
+<p data-nodeid="173721">那具体如何做到这两点呢？这就是接下来要讲的，“NIO”结合“异步”方法了。</p>
+<h3 data-nodeid="173722">NIO 结合异步编程</h3>
+<p data-nodeid="173723">既然要说异步，那什么是异步？举个生活中的例子。当我们做饭时，在把米和水放到电饭锅，并按下电源开关后，不会干巴巴站在一旁等米饭煮熟，而是会利用这段时间去炒菜。当电饭锅的米饭煮熟之后，它会发出嘟嘟的声音，通知我们米饭已经煮好。同时，这个时候我们的菜肴，也差不多做好了。</p>
+<p data-nodeid="173724">在这个例子中，我们没有等待电饭锅煮饭，而是让其在饭熟后提醒我们，这种做事方式就是“异步”的。反过来，如果我们一直等到米饭煮熟之后再做菜，这就是“同步”的做事方式。</p>
+<p data-nodeid="173725">对应到程序中，我们的角色就相当于 CPU ，电饭锅煮饭的过程，就相当于一次耗时的 IO 操作，而炒菜的过程，就相当于在执行一段算法。很显然，异步的方式能更加有效地使用 CPU 资源。</p>
+<p data-nodeid="173726">那在 Java 中，应该怎样完美地将 NIO 和异步编程结合起来呢？这里我采用了 Netty 框架，和 CompletableFuture 异步编程工具类。具体可以看看这段代码（<a href="https://github.com/alain898/realtime_stream_computing_course/blob/main/course02/src/main/java/com/alain898/course/realtimestreaming/course02/datacollector/netty/AsyncServerHandler.java" data-nodeid="173819">完整代码</a>）：</p>
+<pre class="lang-java hljs" data-nodeid="173727"><code data-language="java">Executor decoderExecutor = ExecutorHelper.createExecutor(<span class="hljs-number">2</span>, <span class="hljs-string">"decoder"</span>);
+Executor ectExecutor = ExecutorHelper.createExecutor(<span class="hljs-number">8</span>, <span class="hljs-string">"ect"</span>);
+Executor senderExecutor = ExecutorHelper.createExecutor(<span class="hljs-number">2</span>, <span class="hljs-string">"sender"</span>);
+<span class="hljs-meta">@Override</span>
+<span class="hljs-function"><span class="hljs-keyword">protected</span> <span class="hljs-keyword">void</span> <span class="hljs-title">channelRead0</span><span class="hljs-params">(ChannelHandlerContext ctx, HttpRequest req)</span> <span class="hljs-keyword">throws</span> Exception </span>{
+&nbsp; &nbsp; CompletableFuture
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .supplyAsync(() -&gt; <span class="hljs-keyword">this</span>.decode(ctx, req), <span class="hljs-keyword">this</span>.decoderExecutor)
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .thenApplyAsync(e -&gt; <span class="hljs-keyword">this</span>.doExtractCleanTransform(ctx, req, e), <span class="hljs-keyword">this</span>.ectExecutor)
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .thenApplyAsync(e -&gt; <span class="hljs-keyword">this</span>.send(ctx, req, e), <span class="hljs-keyword">this</span>.senderExecutor);
+}
+</code></pre>
+<p data-nodeid="173728">在上面的代码中，由于 Netty 框架本身已经处理好 NIO 的问题，所以我们的工作重点放在实现“异步”处理上。Netty 框架里的 channelRead0 函数，是实现业务逻辑的地方，于是我在这个函数中，将请求处理逻辑细分为，解码（decode）、规整化（doExtractCleanTransform）、发送（send）三个步骤，然后使用 CompletableFuture 类的方法，将这三个步骤串联起来，构成了最终的异步调用链。</p>
+<p data-nodeid="173729">至此，我们终于将数据采集服务的整个请求处理过程，都彻彻底底地异步化。所有 CPU 密集型任务和 IO 密集性任务都被隔离开，在各自分配的线程里独立运行，彼此互不影响。这样， CPU 和 IO 资源，都能够得到充分利用，程序的性能也能够彻底释放出来。</p>
+<h3 data-nodeid="173730">小结</h3>
+<p data-nodeid="173731">今天，我们为了实现了高性能的数据采集服务器，详细分析了 NIO 和异步编程的工作原理，其中，还涉及了一些有关操作系统进行线程调度的知识。我们实现的基于 Netty 的，数据采集服务器，将 NIO 和异步编程技术结合起来，整个请求处理过程都是异步的，最大限度地发挥出， CPU 和 IO 资源的使用效率。</p>
+<p data-nodeid="173732">但是，有关异步的内容，还没完全讨论完。在接下来的课程中，我们将着重讨论异步系统的一些问题。我们后面会发现，异步系统的这些问题，也会出现在流计算系统中。</p>
+<p data-nodeid="173733">相信通过今天的学习，你对高并发的基础，也就是 NIO 和异步编程，已经有一定理解。那你知道如何在 Spring 框架下，实现 NIO 和异步编程吗？在留言区写出你的想法吧。</p>
+<blockquote data-nodeid="173734">
+<p data-nodeid="173735">本课时精华：</p>
+</blockquote>
+<p data-nodeid="173736"><img src="https://s0.lgstatic.com/i/image2/M01/0C/16/Cip5yGAXdVCAWHAXAAWgk2TpqBQ259.png" alt="Lark20210201-112808.png" data-nodeid="173830"></p>
+<p data-nodeid="174334"><a href="https://github.com/alain898/realtime_stream_computing_course" data-nodeid="174339">点击此链接查看本课程所有课时的源码</a></p>
+<hr data-nodeid="174335">
+<p data-nodeid="174336" class="te-preview-highlight"><a href="https://kaiwu.lagou.com/data_enhancement.html?utm_source=lagouedu&amp;utm_medium=zhuanlan&amp;utm_campaign=%E5%A4%A7%E6%95%B0%E6%8D%AE%E5%BC%80%E5%8F%91%E9%AB%98%E8%96%AA%E8%AE%AD%E7%BB%83%E8%90%A5#/index" data-nodeid="174348"><img src="https://s0.lgstatic.com/i/image2/M01/0C/98/CgpVE2AZCKKAa8TbAAUCrlmIuEw611.png" alt="image (3).png" data-nodeid="174347"></a><br>
+<a href="https://kaiwu.lagou.com/data_enhancement.html?utm_source=lagouedu&amp;utm_medium=zhuanlan&amp;utm_campaign=%E5%A4%A7%E6%95%B0%E6%8D%AE%E5%BC%80%E5%8F%91%E9%AB%98%E8%96%AA%E8%AE%AD%E7%BB%83%E8%90%A5#/index" data-nodeid="174352">PB 级企业大数据项目实战 + 拉勾硬核内推，5 个月全面掌握大数据核心技能。点击链接，全面赋能！</a></p></div>
+
+</body></html>

@@ -1,0 +1,1349 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第21讲：Redis 中如何实现的消息队列？实现的方式有几种？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>第21讲：Redis 中如何实现的消息队列？实现的方式有几种？</h1><p>细心的你可能发现了，本系列课程中竟然出现了三个课时都是在说消息队列，第 10 课时讲了程序级别的消息队列以及延迟消息队列的实现，而第 15 课时讲了常见的消息队列中间件 RabbitMQ、Kafka 等，由此可见消息队列在整个 Java 技术体系中的重要程度。本课时我们将重点来看一下 Redis 是如何实现消息队列的。</p>
+<p>我们本课时的面试题是，在 Redis 中实现消息队列的方式有几种？</p>
+<h3>典型回答</h3>
+<p>早在 Redis 2.0 版本之前使用 Redis 实现消息队列的方式有两种：</p>
+<ul>
+<li>使用 List 类型实现</li>
+<li>使用 ZSet 类型实现</li>
+</ul>
+<p>其中使用** List 类型实现的方式最为简单和直接**，它主要是通过 lpush、rpop 存入和读取实现消息队列的，如下图所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/0E/10/CgqCHl7E8CiAPUYfAAA-J0r2Mgc997.png" alt="image.png"></p>
+<p>lpush 可以把最新的消息存储到消息队列（List 集合）的首部，而 rpop 可以读取消息队列的尾部，这样就实现了先进先出，如下图所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/0E/04/Ciqc1F7E8C6AJKWJAABCSLt5htE783.png" alt="image (1).png"></p>
+<p>命令行的实现命令如下：</p>
+<pre><code data-language="powershell" class="lang-powershell hljs"><span class="hljs-number">127.0</span>.<span class="hljs-number">0.1</span>:<span class="hljs-number">6379</span>&gt; lpush mq <span class="hljs-string">"java"</span> <span class="hljs-comment">#推送消息 java</span>
+(integer) <span class="hljs-number">1</span>
+<span class="hljs-number">127.0</span>.<span class="hljs-number">0.1</span>:<span class="hljs-number">6379</span>&gt; lpush mq <span class="hljs-string">"msg"</span> <span class="hljs-comment">#推送消息 msg</span>
+(integer) <span class="hljs-number">2</span>
+<span class="hljs-number">127.0</span>.<span class="hljs-number">0.1</span>:<span class="hljs-number">6379</span>&gt; rpop mq <span class="hljs-comment">#接收到消息 java</span>
+<span class="hljs-string">"java"</span>
+<span class="hljs-number">127.0</span>.<span class="hljs-number">0.1</span>:<span class="hljs-number">6379</span>&gt; rpop mq <span class="hljs-comment">#接收到消息 msg</span>
+<span class="hljs-string">"mq"</span>
+</code></pre>
+<p>其中，mq 相当于消息队列的名称，而 lpush 用于生产并添加消息，而 rpop 用于拉取并消费消息。<br>
+使用 List 实现消息队列的优点是消息可以被持久化，List 可以借助 Redis 本身的持久化功能，AOF 或者是 RDB 或混合持久化的方式，用于把数据保存至磁盘，这样当 Redis 重启之后，消息不会丢失。</p>
+<p>但使用 List 同样存在一定的问题，比如消息不支持重复消费、没有按照主题订阅的功能、不支持消费消息确认等。</p>
+<p>ZSet 实现消息队列的方式和 List 类似，它是利用 zadd 和 zrangebyscore 来实现存入和读取消息的，这里就不重复叙述了。但 ZSet 的实现方式更为复杂一些，因为 ZSet 多了一个分值（score）属性，我们可以使用它来实现更多的功能，比如用它来存储时间戳，以此来实现延迟消息队列等。</p>
+<p>ZSet 同样具备持久化的功能，List 存在的问题它也同样存在，不但如此，使用 ZSet 还不能存储相同元素的值。因为它是有序集合，有序集合的存储元素值是不能重复的，但分值可以重复，也就是说当消息值重复时，只能存储一条信息在 ZSet 中。</p>
+<p>在 Redis 2.0 之后 Redis 就新增了专门的发布和订阅的类型，Publisher（发布者）和 Subscriber（订阅者）来实现消息队列了，它们对应的执行命令如下：</p>
+<ul>
+<li>发布消息，publish channel "message"</li>
+<li>订阅消息，subscribe channel</li>
+</ul>
+<p>使用发布和订阅的类型，我们可以实现主题订阅的功能，也就是 Pattern Subscribe 的功能。因此我们可以使用一个消费者“queue_*”来订阅所有以“queue_”开头的消息队列，如下图所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/0E/10/CgqCHl7E8D2AUKjhAABVTe21uBg498.png" alt="image (2).png"></p>
+<p>发布订阅模式的优点很明显，但同样存在以下 3 个问题：</p>
+<ul>
+<li>无法持久化保存消息，如果 Redis 服务器宕机或重启，那么所有的消息将会丢失；</li>
+<li>发布订阅模式是“发后既忘”的工作模式，如果有订阅者离线重连之后就不能消费之前的历史消息；</li>
+<li>不支持消费者确认机制，稳定性不能得到保证，例如当消费者获取到消息之后，还没来得及执行就宕机了。因为没有消费者确认机制，Redis 就会误以为消费者已经执行了，因此就不会重复发送未被正常消费的消息了，这样整体的 Redis 稳定性就被没有办法得到保障了。</li>
+</ul>
+<p>然而在 Redis 5.0 之后新增了 Stream 类型，我们就可以使用 Stream 的 xadd 和 xrange 来实现消息的存入和读取了，并且 Stream 提供了 xack 手动确认消息消费的命令，用它我们就可以实现消费者确认的功能了，使用命令如下：</p>
+<pre><code data-language="powershell" class="lang-powershell hljs"><span class="hljs-number">127.0</span>.<span class="hljs-number">0.1</span>:<span class="hljs-number">6379</span>&gt; xack mq group1 <span class="hljs-number">1580959593553</span><span class="hljs-literal">-0</span>
+(integer) <span class="hljs-number">1</span>
+</code></pre>
+<p>相关语法如下：</p>
+<pre><code data-language="java" class="lang-java hljs">xack key group-key ID [ID ...]&nbsp;
+</code></pre>
+<p>消费确认增加了消息的可靠性，一般在业务处理完成之后，需要执行 ack 确认消息已经被消费完成，整个流程的执行如下图所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/0E/10/CgqCHl7E8GGAbuSbAADG34Yr_oI363.png" alt="image (3).png"></p>
+<p>其中“Group”为群组，消费者也就是接收者需要订阅到群组才能正常获取到消息。</p>
+<p>以上就 Redis 实现消息队列的四种方式，他们分别是：</p>
+<ul>
+<li>使用 List 实现消息队列；</li>
+<li>使用 ZSet 实现消息队列；</li>
+<li>使用发布订阅者模式实现消息队列；</li>
+<li>使用  Stream 实现消息队列。</li>
+</ul>
+<h3>考点分析</h3>
+<p>本课时的题目比较全面的考察了面试者对于 Redis 整体知识框架和新版本特性的理解和领悟。早期版本中比较常用的实现消息队列的方式是 List、ZSet 和发布订阅者模式，使用 Stream 来实现消息队列是近两年才流行起来的方案，并且很多企业也没有使用到 Redis 5.0 这么新的版本。因此只需回答出前三种就算及格了，而 Stream 方式实现消息队列属于附加题，如果面试中能回答上来的话就更好了，它体现了你对新技术的敏感度与对技术的热爱程度，属于面试中的加分项。</p>
+<p>和此知识点相关的面试题还有以下几个：</p>
+<ul>
+<li>在 Java 代码中使用 List 实现消息队列会有什么问题？应该如何解决？</li>
+<li>在程序中如何使用 Stream 来实现消息队列？</li>
+</ul>
+<h3>知识扩展</h3>
+<h4>使用 List 实现消息队列</h4>
+<p>在 Java 程序中我们需要使用 Redis 客户端框架来辅助程序操作 Redis，比如 Jedis 框架。</p>
+<p>使用 Jedis 框架首先需要在 pom.xml 文件中添加 Jedis 依赖，配置如下：</p>
+<pre><code data-language="xml" class="lang-xml hljs"><span class="hljs-comment">&lt;!-- https://mvnrepository.com/artifact/redis.clients/jedis --&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+&nbsp; <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>redis.clients<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+&nbsp; <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>jedis<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+&nbsp; <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>\${version}<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+</code></pre>
+<p>List 实现消息队列的完整代码如下：</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-keyword">import</span> redis.clients.jedis.Jedis;
+publicclass ListMQTest {
+    <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">main</span><span class="hljs-params">(String[] args)</span></span>{
+        <span class="hljs-comment">// 启动一个线程作为消费者</span>
+        <span class="hljs-keyword">new</span> Thread(() -&gt; consumer()).start();
+        <span class="hljs-comment">// 生产者</span>
+        producer();
+    }
+    <span class="hljs-comment">/**
+     * 生产者
+     */</span>
+    <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">producer</span><span class="hljs-params">()</span> </span>{
+        Jedis jedis = <span class="hljs-keyword">new</span> Jedis(<span class="hljs-string">"127.0.0.1"</span>, <span class="hljs-number">6379</span>);
+        <span class="hljs-comment">// 推送消息</span>
+        jedis.lpush(<span class="hljs-string">"mq"</span>, <span class="hljs-string">"Hello, List."</span>);
+    }
+    <span class="hljs-comment">/**
+     * 消费者
+     */</span>
+    <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">consumer</span><span class="hljs-params">()</span> </span>{
+        Jedis jedis = <span class="hljs-keyword">new</span> Jedis(<span class="hljs-string">"127.0.0.1"</span>, <span class="hljs-number">6379</span>);
+        <span class="hljs-comment">// 消费消息</span>
+        <span class="hljs-keyword">while</span> (<span class="hljs-keyword">true</span>) {
+            <span class="hljs-comment">// 获取消息</span>
+            String msg = jedis.rpop(<span class="hljs-string">"mq"</span>);
+            <span class="hljs-keyword">if</span> (msg != <span class="hljs-keyword">null</span>) {
+                <span class="hljs-comment">// 接收到了消息</span>
+                System.out.println(<span class="hljs-string">"接收到消息："</span> + msg);
+            }
+        }
+    }
+}
+</code></pre>
+<p>以上程序的运行结果是：</p>
+<pre><code data-language="java" class="lang-java hljs">接收到消息：Hello, Java.
+</code></pre>
+<p>但是以上的代码存在一个问题，可以看出以上消费者的实现是通过 while 无限循环来获取消息，但如果消息的空闲时间比较长，一直没有新任务，而 while 循环不会因此停止，<strong>它会一直执行循环的动作，这样就会白白浪费了系统的资源</strong>。</p>
+<p>此时我们可以借助 Redis 中的<strong>阻塞读</strong>来替代 rpop 的方法就可以解决此问题，具体实现代码如下：</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-keyword">import</span> redis.clients.jedis.Jedis;
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">ListMQExample</span> </span>{
+    <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">main</span><span class="hljs-params">(String[] args)</span> <span class="hljs-keyword">throws</span> InterruptedException </span>{
+        <span class="hljs-comment">// 消费者</span>
+        <span class="hljs-keyword">new</span> Thread(() -&gt; bConsumer()).start();
+        <span class="hljs-comment">// 生产者</span>
+        producer();
+    }
+    <span class="hljs-comment">/**
+     * 生产者
+     */</span>
+    <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">producer</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> InterruptedException </span>{
+        Jedis jedis = <span class="hljs-keyword">new</span> Jedis(<span class="hljs-string">"127.0.0.1"</span>, <span class="hljs-number">6379</span>);
+        <span class="hljs-comment">// 推送消息</span>
+        jedis.lpush(<span class="hljs-string">"mq"</span>, <span class="hljs-string">"Hello, Java."</span>);
+        Thread.sleep(<span class="hljs-number">1000</span>);
+        jedis.lpush(<span class="hljs-string">"mq"</span>, <span class="hljs-string">"message 2."</span>);
+        Thread.sleep(<span class="hljs-number">2000</span>);
+        jedis.lpush(<span class="hljs-string">"mq"</span>, <span class="hljs-string">"message 3."</span>);
+    }
+    <span class="hljs-comment">/**
+     * 消费者（阻塞版）
+     */</span>
+    <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">bConsumer</span><span class="hljs-params">()</span> </span>{
+        Jedis jedis = <span class="hljs-keyword">new</span> Jedis(<span class="hljs-string">"127.0.0.1"</span>, <span class="hljs-number">6379</span>);
+        <span class="hljs-keyword">while</span> (<span class="hljs-keyword">true</span>) {
+            <span class="hljs-comment">// 阻塞读</span>
+            <span class="hljs-keyword">for</span> (String item : jedis.brpop(<span class="hljs-number">0</span>,<span class="hljs-string">"mq"</span>)) {
+                <span class="hljs-comment">// 读取到相关数据，进行业务处理</span>
+                System.out.println(item);
+            }
+        }
+    }
+}
+</code></pre>
+<p>以上程序的运行结果是：</p>
+<pre><code data-language="java" class="lang-java hljs">接收到消息：Hello, Java.
+</code></pre>
+<p>以上代码是经过改良的，我们使用 brpop 替代 rpop 来读取最后一条消息，就可以解决 while 循环在没有数据的情况下，一直循环消耗系统资源的情况了。brpop 中的 b 是 blocking 的意思，表示阻塞读，也就是当队列没有数据时，它会进入休眠状态，当有数据进入队列之后，它才会“苏醒”过来执行读取任务，这样就可以解决 while 循环一直执行消耗系统资源的问题了。</p>
+<h4>使用 Stream 实现消息队列</h4>
+<p>在开始实现消息队列之前，我们必须先创建分组才行，因为消费者需要关联分组信息才能正常运行，具体实现代码如下：</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-keyword">import</span> com.google.gson.Gson;
+<span class="hljs-keyword">import</span> redis.clients.jedis.Jedis;
+<span class="hljs-keyword">import</span> redis.clients.jedis.StreamEntry;
+<span class="hljs-keyword">import</span> redis.clients.jedis.StreamEntryID;
+<span class="hljs-keyword">import</span> utils.JedisUtils;
+<span class="hljs-keyword">import</span> java.util.AbstractMap;
+<span class="hljs-keyword">import</span> java.util.HashMap;
+<span class="hljs-keyword">import</span> java.util.List;
+<span class="hljs-keyword">import</span> java.util.Map;
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">StreamGroupExample</span> </span>{
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> String _STREAM_KEY = <span class="hljs-string">"mq"</span>; <span class="hljs-comment">// 流 key</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> String _GROUP_NAME = <span class="hljs-string">"g1"</span>; <span class="hljs-comment">// 分组名称</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> String _CONSUMER_NAME = <span class="hljs-string">"c1"</span>; <span class="hljs-comment">// 消费者 1 的名称</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> String _CONSUMER2_NAME = <span class="hljs-string">"c2"</span>; <span class="hljs-comment">// 消费者 2 的名称</span>
+    <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">main</span><span class="hljs-params">(String[] args)</span> </span>{
+        <span class="hljs-comment">// 生产者</span>
+        producer();
+        <span class="hljs-comment">// 创建消费组</span>
+        createGroup(_STREAM_KEY, _GROUP_NAME);
+        <span class="hljs-comment">// 消费者 1</span>
+        <span class="hljs-keyword">new</span> Thread(() -&gt; consumer()).start();
+        <span class="hljs-comment">// 消费者 2</span>
+        <span class="hljs-keyword">new</span> Thread(() -&gt; consumer2()).start();
+    }
+    <span class="hljs-comment">/**
+     * 创建消费分组
+     * <span class="hljs-doctag">@param</span> stream    流 key
+     * <span class="hljs-doctag">@param</span> groupName 分组名称
+     */</span>
+    <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">createGroup</span><span class="hljs-params">(String stream, String groupName)</span> </span>{
+        Jedis jedis = JedisUtils.getJedis();
+        jedis.xgroupCreate(stream, groupName, <span class="hljs-keyword">new</span> StreamEntryID(), <span class="hljs-keyword">true</span>);
+    }
+    <span class="hljs-comment">/**
+     * 生产者
+     */</span>
+    <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">producer</span><span class="hljs-params">()</span> </span>{
+        Jedis jedis = JedisUtils.getJedis();
+        <span class="hljs-comment">// 添加消息 1</span>
+        Map&lt;String, String&gt; map = <span class="hljs-keyword">new</span> HashMap&lt;&gt;();
+        map.put(<span class="hljs-string">"data"</span>, <span class="hljs-string">"redis"</span>);
+        StreamEntryID id = jedis.xadd(_STREAM_KEY, <span class="hljs-keyword">null</span>, map);
+        System.out.println(<span class="hljs-string">"消息添加成功 ID："</span> + id);
+        <span class="hljs-comment">// 添加消息 2</span>
+        Map&lt;String, String&gt; map2 = <span class="hljs-keyword">new</span> HashMap&lt;&gt;();
+        map2.put(<span class="hljs-string">"data"</span>, <span class="hljs-string">"java"</span>);
+        StreamEntryID id2 = jedis.xadd(_STREAM_KEY, <span class="hljs-keyword">null</span>, map2);
+        System.out.println(<span class="hljs-string">"消息添加成功 ID："</span> + id2);
+    }
+    <span class="hljs-comment">/**
+     * 消费者 1
+     */</span>
+    <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">consumer</span><span class="hljs-params">()</span> </span>{
+        Jedis jedis = JedisUtils.getJedis();
+        <span class="hljs-comment">// 消费消息</span>
+        <span class="hljs-keyword">while</span> (<span class="hljs-keyword">true</span>) {
+            <span class="hljs-comment">// 读取消息</span>
+            Map.Entry&lt;String, StreamEntryID&gt; entry = <span class="hljs-keyword">new</span> AbstractMap.SimpleImmutableEntry&lt;&gt;(_STREAM_KEY,
+                    <span class="hljs-keyword">new</span> StreamEntryID().UNRECEIVED_ENTRY);
+            <span class="hljs-comment">// 阻塞读取一条消息（最大阻塞时间120s）</span>
+            List&lt;Map.Entry&lt;String, List&lt;StreamEntry&gt;&gt;&gt; list = jedis.xreadGroup(_GROUP_NAME, _CONSUMER_NAME, <span class="hljs-number">1</span>,
+                    <span class="hljs-number">120</span> * <span class="hljs-number">1000</span>, <span class="hljs-keyword">true</span>, entry);
+            <span class="hljs-keyword">if</span> (list != <span class="hljs-keyword">null</span> &amp;&amp; list.size() == <span class="hljs-number">1</span>) {
+                <span class="hljs-comment">// 读取到消息</span>
+                Map&lt;String, String&gt; content = list.get(<span class="hljs-number">0</span>).getValue().get(<span class="hljs-number">0</span>).getFields(); <span class="hljs-comment">// 消息内容</span>
+                System.out.println(<span class="hljs-string">"Consumer 1 读取到消息 ID："</span> + list.get(<span class="hljs-number">0</span>).getValue().get(<span class="hljs-number">0</span>).getID() +
+                        <span class="hljs-string">" 内容："</span> + <span class="hljs-keyword">new</span> Gson().toJson(content));
+            }
+        }
+    }
+    <span class="hljs-comment">/**
+     * 消费者 2
+     */</span>
+    <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">consumer2</span><span class="hljs-params">()</span> </span>{
+        Jedis jedis = JedisUtils.getJedis();
+        <span class="hljs-comment">// 消费消息</span>
+        <span class="hljs-keyword">while</span> (<span class="hljs-keyword">true</span>) {
+            <span class="hljs-comment">// 读取消息</span>
+            Map.Entry&lt;String, StreamEntryID&gt; entry = <span class="hljs-keyword">new</span> AbstractMap.SimpleImmutableEntry&lt;&gt;(_STREAM_KEY,
+                    <span class="hljs-keyword">new</span> StreamEntryID().UNRECEIVED_ENTRY);
+            <span class="hljs-comment">// 阻塞读取一条消息（最大阻塞时间120s）</span>
+            List&lt;Map.Entry&lt;String, List&lt;StreamEntry&gt;&gt;&gt; list = jedis.xreadGroup(_GROUP_NAME, _CONSUMER2_NAME, <span class="hljs-number">1</span>,
+                    <span class="hljs-number">120</span> * <span class="hljs-number">1000</span>, <span class="hljs-keyword">true</span>, entry);
+            <span class="hljs-keyword">if</span> (list != <span class="hljs-keyword">null</span> &amp;&amp; list.size() == <span class="hljs-number">1</span>) {
+                <span class="hljs-comment">// 读取到消息</span>
+                Map&lt;String, String&gt; content = list.get(<span class="hljs-number">0</span>).getValue().get(<span class="hljs-number">0</span>).getFields(); <span class="hljs-comment">// 消息内容</span>
+                System.out.println(<span class="hljs-string">"Consumer 2 读取到消息 ID："</span> + list.get(<span class="hljs-number">0</span>).getValue().get(<span class="hljs-number">0</span>).getID() +
+                        <span class="hljs-string">" 内容："</span> + <span class="hljs-keyword">new</span> Gson().toJson(content));
+            }
+        }
+    }
+}
+</code></pre>
+<p>以上代码运行结果如下：</p>
+<pre><code data-language="java" class="lang-java hljs">消息添加成功 ID：<span class="hljs-number">1580971482344</span>-<span class="hljs-number">0</span>
+消息添加成功 ID：<span class="hljs-number">1580971482415</span>-<span class="hljs-number">0</span>
+Consumer <span class="hljs-number">1</span> 读取到消息 ID：<span class="hljs-number">1580971482344</span>-<span class="hljs-number">0</span> 内容：{<span class="hljs-string">"data"</span>:<span class="hljs-string">"redis"</span>}
+Consumer <span class="hljs-number">2</span> 读取到消息 ID：<span class="hljs-number">1580971482415</span>-<span class="hljs-number">0</span> 内容：{<span class="hljs-string">"data"</span>:<span class="hljs-string">"java"</span>}
+</code></pre>
+<p>其中，jedis.xreadGroup() 方法的第五个参数 noAck 表示是否自动确认消息，如果设置 true 收到消息会自动确认 (ack) 消息，否则需要手动确认。</p>
+<p>可以看出，同一个分组内的多个 consumer 会读取到不同消息，不同的 consumer 不会读取到分组内的同一条消息。</p>
+<blockquote>
+<p>小贴士：Jedis 框架要使用最新版，低版本 block 设置大于 0 时，会出现 bug，抛连接超时异常。</p>
+</blockquote>
+<h3>小结</h3>
+<p>本课时我们讲了 Redis 中消息队列的四种实现方式：List 方式、ZSet 方式、发布订阅者模式、Stream 方式，其中发布订阅者模式不支持消息持久化、而其他三种方式支持持久化，并且 Stream 方式支持消费者确认。我们还使用 Jedis 框架完成了 List 和 Stream 的消息队列功能，需要注意的是在 List 中需要使用 brpop 来读取消息，而不是 rpop，这样可以解决没有任务时 ，while 一直循环浪费系统资源的问题。</p></div>
+
+</body></html>

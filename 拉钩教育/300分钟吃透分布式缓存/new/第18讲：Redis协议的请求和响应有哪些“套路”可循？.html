@@ -1,0 +1,1166 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第18讲：Redis协议的请求和响应有哪些“套路”可循？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>第18讲：Redis协议的请求和响应有哪些“套路”可循？</h1><p style="line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; text-align: justify;">你好，我是你的缓存课老师陈波，欢迎进入第 18 课时“Redis 协议分析”的学习，本课时主要学习Redis的设计原则、三种响应模式、2种请求格式、5种响应格式。</span></p>
+<h1 style="text-align: justify; white-space: normal;"></h1>
+<h6 style="line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 18px;">Redis 协议</span></h6>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">Redis&nbsp;支持&nbsp;8&nbsp;种核心数据结构，每种数据结构都有一系列的操作指令，除此之外，Redis&nbsp;还有事务、集群、发布订阅、脚本等一系列相关的指令。为了方便以一种统一的风格和原则来设计和使用这些指令，Redis&nbsp;设计了&nbsp;RESP，即&nbsp;Redis Serialization Protocol，中文意思是&nbsp;Redis&nbsp;序列化协议。RESP 是二进制安全协议，可以供&nbsp;Redis 或其他任何&nbsp;Client-Server&nbsp;使用。在&nbsp;Redis&nbsp;内部，还会基于&nbsp;RESP&nbsp;进一步扩展细节。</span></p>
+<h2 style="text-align: justify; white-space: normal;"></h2>
+<h6 style="line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;;">设计原则</span></h6>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">Redis&nbsp;序列化协议的设计原则有三个：</span></p>
+<ol style=" text-align: justify; white-space: normal;">
+ <li><p style="line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">第一是实现简单；</span></p></li>
+ <li><p style="line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">第二是可快速解析；</span></p></li>
+ <li><p style="line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">第三是便于阅读。</span></p></li>
+</ol>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">Redis&nbsp;协议的请求响应模型有三种，除了&nbsp;2&nbsp;种特殊模式，其他基本都是&nbsp;ping-pong&nbsp;模式，即&nbsp;client&nbsp;发送一个请求，server&nbsp;回复一个响应，一问一答的访问模式。</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">&nbsp;</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">2&nbsp;种特殊模式：</span></p>
+<ul style=" text-align: justify; white-space: normal;">
+ <li><p style="line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">pipeline&nbsp;模式，即&nbsp;client&nbsp;一次连续发送多个请求，然后等待&nbsp;server&nbsp;响应，server&nbsp;处理完请求后，把响应返回给&nbsp;client。</span></p></li>
+ <li><p style="line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">pub/sub&nbsp;模式。即发布订阅模式，client&nbsp;通过&nbsp;subscribe&nbsp;订阅一个&nbsp;channel，然后&nbsp;client&nbsp;进入订阅状态，静静等待。当有消息产生时，server&nbsp;会持续自动推送消息给&nbsp;client，不需要&nbsp;client&nbsp;的额外请求。而且客户端在进入订阅状态后，只可接受订阅相关的命令如&nbsp;</span><a style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">SUBSCRIBE</a><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">、</span><a style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">PSUBSCRIBE</a><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">、</span><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63); text-decoration-line: underline;"><a>UNSUBSCRIBE</a>&nbsp;</span><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">和&nbsp;</span><a style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">PUNSUBSCRIBE</a><a style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">，</a><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">除了这些命令，其他命令一律失效。</span></p></li>
+</ul>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">Redis&nbsp;协议的请求和响应也是有固定套路的。</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">&nbsp;</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">对于请求指令，格式有&nbsp;2&nbsp;种类型。</span></p>
+<ol style=" text-align: justify; white-space: normal;">
+ <li><p style="line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">当你没有&nbsp;redis-client，但希望可以用通用工具&nbsp;telnet，直接与&nbsp;Redis&nbsp;交互时，Redis&nbsp;协议虽然简单易于阅读，但在交互式会话中使用，并不容易拼写，此时可以用第一种格式，即&nbsp;inline cmd&nbsp;内联命令格式。使用&nbsp;inline cmd&nbsp;内联格式，只需要用空格分隔请求指令及参数，简单快速，一个简单的例子如&nbsp;mget key1 key2\r\n。</span></p></li>
+ <li><p style="line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">第二种格式是&nbsp;Array&nbsp;数组格式类型。请求指令用的数组类型，与&nbsp;Redis&nbsp;响应的数组类型相同，后面在介绍响应格式类型时会详细介绍。</span></p></li>
+</ol>
+<h2 style="text-align: justify; white-space: normal;"></h2>
+<h6 style="line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;;">响应格式</span></h6>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">Redis&nbsp;协议的响应格式有&nbsp;5&nbsp;种，分别是：</span></p>
+<ol style=" text-align: justify; white-space: normal;">
+ <li><p style="line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">simple&nbsp;strings&nbsp;简单字符串类型，以&nbsp;+&nbsp;开头，后面跟字符串，以&nbsp;CRLF（即&nbsp;\r\n）结尾。这种类型不是二进制安全类型，字符串中不能包含&nbsp;\r&nbsp;或者&nbsp;\n。比如许多响应回复以&nbsp;OK&nbsp;作为操作成功的标志，协议内容就是 +OK\r\n 。</span></p></li>
+ <li><p style="line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">Redis&nbsp;协议将错误作为一种专门的类型，格式同简单字符串类型，唯一不同的是以&nbsp;-（减号）开头。Redis 内部实现对&nbsp;Redis&nbsp;协议做了进一步规范，减号后面一般先跟&nbsp;ERR 或者 WRONGTYPE，然后再跟其他简单字符串，最后以&nbsp;CRLF（回车换行）结束。这里给了两个示例，client&nbsp;在解析响应时，一旦发现&nbsp;-&nbsp;开头，就知道收到&nbsp;Error&nbsp;响应。</span></p></li>
+ <li><p style="line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">Integer&nbsp;整数类型。整数类型以&nbsp;：开头，后面跟字符串表示的数字，最后以回车换行结尾。Redis&nbsp;中许多命令都返回整数，但整数的含义要由具体命令来确定。比如，对于&nbsp;incr&nbsp;指令，：后的整数表示变更后的数值；对于&nbsp;llen&nbsp;表示&nbsp;list&nbsp;列表的长度，对于&nbsp;exists&nbsp;指令，1&nbsp;表示&nbsp;key&nbsp;存在，0&nbsp;表示&nbsp;key&nbsp;不存在。这里给个例子，：后面跟了个&nbsp;1000，然后回车换行结束。</span></p></li>
+ <li><p style="line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">bulk strings&nbsp;字符串块类型。字符串块分头部和真正字符串内容两部分。字符串块类型的头部，&nbsp;为 $&nbsp;开头，随后跟真正字符串内容的字节长度，然后以&nbsp;CRLF&nbsp;结尾。字符串块的头部之后，跟随真正的字符串内容，最后以&nbsp;CRLF&nbsp;结束字符串块。字符串块用于表示二进制安全的字符串，最大长度可以支持&nbsp;512MB。一个常规的例子，“$6\r\nfoobar\r\n”，对于空字串，可以表示为 “$0\r\n\r\n”，NULL字串： “$-1\r\n”。</span></p></li>
+ <li><p style="line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">Arrays&nbsp;数组类型，如果一个命令需要返回多条数据就需要用数组格式类型，另外，前面提到&nbsp;client&nbsp;的请求命令也是主要采用这种格式。</span></p></li>
+</ol>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);"><br></span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">Arrays&nbsp;数组类型，以&nbsp;*&nbsp;开头，随后跟一个数组长度&nbsp;N，然后以回车换行结尾；然后后面跟随&nbsp;N&nbsp;个数组元素，每个数组元素的类型，可以是&nbsp;Redis&nbsp;协议中除内联格式外的任何一种类型。</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">&nbsp;</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">比如一个字符串块的数组实例，*2\r\n$3\r\nget\r\n$3\r\nkey\r\n。整数数组实例：”*3\r\n:1\r\n:2\r\n:3\r\n"，混合数组实例："*3\r\n :1\r\n-Bar\r\n$6\r\n foobar\r\n”，空数组：”*0\r\n”，NULL数组：”*-1\r\n”。</span></p>
+<h2 style="text-align: justify; white-space: normal;"></h2>
+<h6 style="line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;;">协议分类</span></h6>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">Redis&nbsp;协议主要分为&nbsp;16&nbsp;种，其中&nbsp;8&nbsp;种协议对应前面我们讲到的&nbsp;8&nbsp;种数据类型，你选择了使用什么数据类型，就使用对应的响应操作指令即可。剩下&nbsp;8&nbsp;种协议如下所示。</span></p>
+<ol style=" text-align: justify; white-space: normal;">
+ <li><p style="line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">pub-sub&nbsp;发布订阅协议，client&nbsp;可以订阅&nbsp;channel，持续等待&nbsp;server 推送消息。</span></p></li>
+ <li><p style="line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">事务协议，事务协议可以用&nbsp;multi&nbsp;和&nbsp;exec&nbsp;封装一些列指令，来一次性执行。</span></p></li>
+ <li><p style="line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">脚本协议，关键指令是&nbsp;eval、evalsha&nbsp;和&nbsp;script等。</span></p></li>
+ <li><p style="line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">连接协议，主要包括权限控制，切换&nbsp;DB，关闭连接等。</span></p></li>
+ <li><p style="line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">复制协议，包括&nbsp;slaveof、role、psync&nbsp;等。</span></p></li>
+ <li><p style="line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">配置协议，config set/get&nbsp;等，可以在线修改/获取配置。</span></p></li>
+ <li><p style="line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">调试统计协议，如&nbsp;slowlog，monitor，info&nbsp;等。</span></p></li>
+ <li><p style="line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">其他内部命令，如&nbsp;migrate，dump，restore&nbsp;等。</span></p></li>
+</ol>
+<h1 style="text-align: justify; white-space: normal;"></h1>
+<h6 style="line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;;">Redis client 的使用及改进</span></h6>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">由于&nbsp;Redis&nbsp;使用广泛，几乎所有主流语言都有对&nbsp;Redis&nbsp;开发了对应的&nbsp;client。以&nbsp;Java&nbsp;语言为例，广泛使用的有&nbsp;Jedis、Redisson&nbsp;等。对于&nbsp;Jedis client，它的优势是轻量，简洁，便于集成和改造，它支持连接池，提供指令维度的操作，几乎支持&nbsp;Redis&nbsp;的所有指令，但它不支持读写分离。Redisson&nbsp;基于&nbsp;Netty&nbsp;实现，非阻塞&nbsp;IO，性能较高，而且支持异步请求和连接池，还支持读写分离、读负载均衡，它内建了&nbsp;tomcat Session ，支持&nbsp;spring session&nbsp;集成，但&nbsp;redisson&nbsp;实现相对复杂。</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">&nbsp;</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">在新项目启动时，如果只是简单的 Redis 访问业务场景，可以直接用 Jedis，甚至可以简单封装 Jedis，实现 master-slave 的读写分离方案。如果想直接使用读写分离，想集成 spring session 等这些高级特性，也可以采用 redisson。</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">&nbsp;</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">Redis client&nbsp;在使用中，需要根据业务及运维的需要，进行相关改进。在&nbsp;client&nbsp;访问异常时，可以增加重试策略，在访问某个&nbsp;slave&nbsp;异常时，需要重试其他&nbsp;slave&nbsp;节点。需要增加对&nbsp;Redis&nbsp;主从切换、slave&nbsp;扩展的支持，比如采用守护线程定期扫描&nbsp;master、slave&nbsp;域名，发现&nbsp;IP&nbsp;变更，及时切换连接。对于多个&nbsp;slave&nbsp;的访问，还需要增加负载均衡策略。最后，Redis client&nbsp;还可以与配置中心、Redis&nbsp;集群管理平台整合，从而实时感知及协调&nbsp;Redis&nbsp;服务的访问。</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: center; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><br></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">至此，本节课的内容就讲完了。</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;"><br></span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">在这几节课中，你首先学习了&nbsp;Redis&nbsp;的特性及基本原理，初步了解了&nbsp;Redis&nbsp;的数据类型、主进程/子进程、BIO&nbsp;线程、持久化、复制、集群等；这些内容会在后续逐一深入学习。</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; text-indent: 29.3333px; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">&nbsp;</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">然后，详细学习了&nbsp;Redis&nbsp;的数据类型，了解了字符串、列表、集合、有序集合、哈希、位图、GEO&nbsp;地理位置、HyperLogLog&nbsp;基数统计，这&nbsp;8&nbsp;种核心数据类型的功能、特点、主要操作指令及应用场景。</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; text-indent: 29.3333px; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">&nbsp;</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">接下来，你还熟悉了&nbsp;Redis&nbsp;协议，包括&nbsp;Redis&nbsp;协议的设计原则、三种响应模型，2&nbsp;种请求格式和&nbsp;5&nbsp;种响应格式。</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; text-indent: 29.3333px; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">&nbsp;</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">最后，以&nbsp;Java&nbsp;语言为例，你还了解了&nbsp;Redis client&nbsp;的对比、选择及改进。</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;;"><br></span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-align: justify; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-size: 16px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;;">你可以参考这个思维导图，对这些知识点进行回顾和梳理。</span></p>
+<p style="text-align: center;"><img src="http://s0.lgstatic.com/i/image2/M01/99/CF/CgoB5l2lPmeAeuJUAAEMUSuIodU352.png" style="white-space: normal; color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; text-align: justify;"></p>
+<p style="line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; text-align: justify;"></span></p>
+<p style="line-height: 1.75em;"></p>
+<p style="line-height: 1.7;margin-bottom: 0pt;margin-top: 0pt;font-size: 11pt;color: #494949;"><span style="color: rgb(63, 63, 63); font-size: 16px;">OK，这节课就讲到这里啦，<span style="color: rgb(63, 63, 63);">下一课时我将分享“Redis 系统架构”</span>，记得按时来听课哈。好，下节课见，拜拜！</span></p>
+<p><br></p>
+<p><br></p></div>
+
+</body></html>

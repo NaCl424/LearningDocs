@@ -1,0 +1,938 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第33讲：Nginx 的负载均衡模式有哪些？它的实现原理是什么？</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>第33讲：Nginx 的负载均衡模式有哪些？它的实现原理是什么？</h1><p data-nodeid="7181">Nginx 是后端工程师和运维工程师，以及前端工程师必须要掌握的必备技能，尤其在分布式系统应用越来越广泛的今天，Nginx 已经占据了 Web 服务器的大壁江山，并且还在不断地增长，比如国内的 BATJ、网易、新浪等公司都可以看到它的身影。</p>
+<p data-nodeid="7182">我们本课时的面试题是，Nginx 的负载均衡模式有哪些？它的实现原理是什么？</p>
+<h3 data-nodeid="7183">典型回答</h3>
+<p data-nodeid="7184">在正式开始之前，我们先来了解一下什么是 Nginx？</p>
+<p data-nodeid="8668" class="">Nginx 是一款开源的高性能轻量级 <strong data-nodeid="8686">Web 服务器</strong>（也叫 <strong data-nodeid="8687">HTTP 服务器</strong>），它主要提供的功能是：<strong data-nodeid="8688">反向代理、负载均衡</strong>和<strong data-nodeid="8689">HTTP 缓存</strong>。它于 2004 年首次公开发布，2011 年成立同名公司以提供支持，2019 年 3 月被 F5 Networks 以 6.7 亿美元收购。</p>
+
+<p data-nodeid="9522">之所以需要使用负载均衡是因为，如果我们使用的是一台服务器，那么在高峰期时很多用户就需要排队等待系统响应，因为一台服务器能处理的并发数是固定的。例如，一个 Tomcat 在默认情况下只能开启 150 个线程（Tomcat 8.5.x 版本）来处理并发任务，如果并发数超过了最大线程数，那么新来的请求就只能排队等待处理了，如下图所示：</p>
+<p data-nodeid="9523" class=""><img src="https://s0.lgstatic.com/i/image/M00/2A/5F/Ciqc1F78TvOALCJrAABv_aXOv8c313.png" alt="image (1).png" data-nodeid="9531"></p>
+
+
+<p data-nodeid="10380">然而如果有负载均衡的话，我们就可以将所有的请求分配到不同的服务器上。假如 1 台服务器可以处理 2000 个请求，那么 5 台服务器就可以处理 10000 个请求了，这样就大大提高了系统处理业务的能力，如下图所示：</p>
+<p data-nodeid="10381" class=""><img src="https://s0.lgstatic.com/i/image/M00/2A/5F/Ciqc1F78TvuAMPOiAAHBUceQ_F8585.png" alt="5.png" data-nodeid="10385"></p>
+
+
+<p data-nodeid="7190">知道了负载均衡的好处之后，我们来看下 Nginx 负载均衡的功能。</p>
+<p data-nodeid="7191">Nginx 主要的负载均衡策略（内置的负载均衡）有以下四种：</p>
+<ul data-nodeid="7192">
+<li data-nodeid="7193">
+<p data-nodeid="7194">轮询策略（默认负载均衡策略）</p>
+</li>
+<li data-nodeid="7195">
+<p data-nodeid="7196">最少连接数负载均衡策略</p>
+</li>
+<li data-nodeid="7197">
+<p data-nodeid="7198">ip-hash 负载均衡策略</p>
+</li>
+<li data-nodeid="7199">
+<p data-nodeid="7200">权重负载均衡策略</p>
+</li>
+</ul>
+<h4 data-nodeid="7201">1. 轮询策略</h4>
+<p data-nodeid="7202">轮询负载策略是指每次将请求按顺序轮流发送至相应的服务器上，它的配置示例如下所示：</p>
+<pre class="lang-java" data-nodeid="11029"><code data-language="java">http {
+    upstream myapp1 {
+        server srv1.example.com;
+        server srv2.example.com;
+        server srv3.example.com;
+    }
+    server {
+        listen <span class="hljs-number">80</span>;
+        location / {
+            proxy_pass http:<span class="hljs-comment">//myapp1;</span>
+        }
+    }
+}
+</code></pre>
+
+
+<p data-nodeid="7204">在以上实例中，当我们使用“ip:80/”访问时，请求就会轮询的发送至上面配置的三台服务器上。<br>
+Nginx 可以实现 HTTP、HTTPS、FastCGI、uwsgi、SCGI、memcached 和 gRPC 的负载均衡。</p>
+<h4 data-nodeid="7205">2. 最少连接数负载均衡</h4>
+<p data-nodeid="7206">此策略是指每次将请求分发到当前连接数最少的服务器上，也就是 Nginx 会将请求试图转发给相对空闲的服务器以实现负载平衡，它的配置示例如下：</p>
+<pre class="lang-java" data-nodeid="27546"><code data-language="java">upstream myapp1 {
+    least_conn;
+    server srv1.example.com;
+    server srv2.example.com;
+    server srv3.example.com;
+}
+</code></pre>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h4 data-nodeid="7208">3. 加权负载均衡</h4>
+<p data-nodeid="7209">此配置方式是指每次会按照服务器配置的权重进行请求分发，权重高的服务器会收到更多的请求，这就相当于给 Nginx 在请求分发时加了一个参考的权重选项，并且这个权重值是可以人工配置的。因此我们就可以将硬件配置高，以及并发能力强的服务器的权重设置高一点，以更合理地利用服务器的资源，它配置示例如下：</p>
+<pre class="lang-java" data-nodeid="27975"><code data-language="java">upstream myapp1 {
+    server srv1.example.com weight=<span class="hljs-number">3</span>;
+    server srv2.example.com;
+    server srv3.example.com;
+}
+</code></pre>
+
+<p data-nodeid="7211">以上配置表示，5 次请求中有 3 次请求会分发给 srv1，1 次请求会分发给 srv2，另外 1 次请求会分发给 srv3。</p>
+<h4 data-nodeid="7212">4. ip-hash 负载均衡</h4>
+<p data-nodeid="7213">以上三种负载均衡的配置策略都不能保证将每个客户端的请求固定的分配到一台服务器上。假如用户的登录信息是保存在单台服务器上的，而不是保存在类似于 Redis 这样的第三方中间件上时，如果不能将每个客户端的请求固定的分配到一台服务器上，就会导致用户的登录信息丢失。因此用户在每次请求服务器时都需要进行登录验证，这样显然是不合理的，也是不能被用户所接受的，所以在特殊情况下我们就需要使用 ip-hash 的负载均衡策略。</p>
+<p data-nodeid="7214">ip-hash 负载均衡策略可以根据客户端的 IP，将其固定的分配到相应的服务器上，它的配置示例如下：</p>
+<pre class="lang-java" data-nodeid="28404"><code data-language="java">upstream myapp1 {
+    ip_hash;
+    server srv1.example.com;
+    server srv2.example.com;
+    server srv3.example.com;
+}
+</code></pre>
+
+<p data-nodeid="7216">Nginx 的实现原理是，首先客户端通过访问域名地址发出 HTTP 请求，访问的域名会被 DNS 服务器解析为 Nginx 的 IP 地址，然后将请求转发至 Nginx 服务器，Nginx 接收到请求之后会通过 URL 地址和负载均衡的配置，匹配到配置的代理服务器，然后将请求转发给代理服务器，代理服务器拿到请求之后将处理结果返回给 Nginx，Nginx 再将结果返回给客户端，这样就完成了一次正常的 HTTP 交互。</p>
+<h3 data-nodeid="7217">考点分析</h3>
+<p data-nodeid="7218">负载均衡和缓存功能是 Nginx 最常用的两个功能，这两个功能都属于高性能的调优手段，也和后端人员的关系比较密切，只有了解并会使用它们才能更好地调试和运行自己的项目，因此 Nginx 的相关知识几乎是面试中都会出现。</p>
+<p data-nodeid="7219">和此知识点相关的面试题还有以下这些：</p>
+<ul data-nodeid="7220">
+<li data-nodeid="7221">
+<p data-nodeid="7222">如果代理的服务器宕机了 Nginx 会如何处理？</p>
+</li>
+<li data-nodeid="7223">
+<p data-nodeid="7224">Nginx 的缓存功能是如何使用的？</p>
+</li>
+</ul>
+<h3 data-nodeid="7225">知识扩展</h3>
+<h4 data-nodeid="7226">健康检测</h4>
+<p data-nodeid="7227">被代理的服务器出现宕机的情况，如果被 Nginx 发现，那么 Nginx 就会将其自动标识为不可用，并且在一段时间内会禁止入站的请求访问到该服务器上。</p>
+<p data-nodeid="7228">而这个发现服务器宕机的过程就是健康检测的功能了。Nginx 的健康检测分为两种类型，<strong data-nodeid="7315">主动检测和被动检测</strong>，默认的非商用 Nginx 采用的是被动检测。</p>
+<p data-nodeid="7229">所谓的被动检测是指只有访问了该服务器之后发现服务器不可用了，才会将其标识为不可用，并且在一定时间内禁止请求分发到该服务器上，而不是主动以一定的频率去检查服务器是否可用。</p>
+<p data-nodeid="7230">健康检测有两个重要参数 <strong data-nodeid="7330">max_fails</strong> 和 <strong data-nodeid="7331">fail_timeout</strong>。</p>
+<p data-nodeid="7231">fail_timeout 定义了健康检查的执行时长，而 max_fails 表示服务不可用的最大尝试次数，当一定时间内（此时间由 fail_timeout 定义），发生了一定次数的服务器不响应的事件（此次数由 max_fails 定义），那么 Nginx 就会将该服务器标识为不可用的服务器，并且在一定时间内禁止请求分发到该服务器。默认情况下 max_fails 设置为 1，当它设置为 0 时表示禁用此服务器的运行状况检查，它的配置示例如下：</p>
+<pre class="lang-java" data-nodeid="28833"><code data-language="java">upstream cluster{
+    server srv1.example.com max_fails=<span class="hljs-number">2</span> fail_timeout=<span class="hljs-number">10</span>s;
+    server srv2.example.com max_fails=<span class="hljs-number">2</span> fail_timeout=<span class="hljs-number">10</span>s;
+}
+</code></pre>
+
+<p data-nodeid="7233">以上配置表示，如果 10s 内发生了两次服务不可用的情况就会将该服务器标识为不可用的状态。<br>
+当服务器被标识为不可用时，只有达到了 fail_timeout 定义的时间后，才会进行再一次的健康请求检测。</p>
+<p data-nodeid="7234">而主动健康检测的实现方案有两种，一种是使用商用的 Nginx Plus 来配置主动健康检测，另一种是使用开源的第三方模块 nginx_upstream_check_module 来实现主动健康检测。</p>
+<p data-nodeid="7235">Nginx Plus 和 nginx_upstream_check_module 模块的主动健康检查配置大体都是一样的，它的配置示例如下：</p>
+<pre class="lang-java" data-nodeid="29262"><code data-language="java">upstream backend {
+    server srv1.example.com;
+    server srv2.example.com;
+    check interval=<span class="hljs-number">3000</span> rise=<span class="hljs-number">1</span> fall=<span class="hljs-number">3</span> timeout=<span class="hljs-number">2000</span> type=http;
+    check_http_send <span class="hljs-string">"HEAD /status HTTP/1.0\r\n\r\n"</span>;
+    check_http_expect_alive http_2xx http_3xx;
+}
+</code></pre>
+
+<p data-nodeid="7237">其中，check_http_send 表示发送请求的内容，而 check_http_expect_alive 是服务器正常情况下的响应状态码，如果后端服务器的响应状态包含在此配置中，则说明是健康的状态。</p>
+<h4 data-nodeid="7238">Nginx 缓存</h4>
+<p data-nodeid="7239">我们可以开启 Nginx 的静态资源缓存，将一些不变的静态文件，比如图片、CSS、JS 等文件进行缓存，这样在客户端访问这些资源时就不用去访问服务器了，因此响应的速度就可以大幅提升，并且节省了宝贵的服务器资源。</p>
+<p data-nodeid="7240">Nginx 开启缓存需要在 http 节点中配置 proxy_cache_path 信息，以及 server 节点中配置要缓存资源的后缀名，它的配置示例如下：</p>
+<pre class="lang-dart te-preview-highlight" data-nodeid="32694"><code data-language="dart">http {
+  <span class="hljs-comment">// 忽略其他的配置信息......</span>
+  proxy_cache_path  /data/cache levels=<span class="hljs-number">1</span>:<span class="hljs-number">2</span> keys_zone=nuget-cache:<span class="hljs-number">20</span>m max_size=<span class="hljs-number">50</span>g inactive=<span class="hljs-number">1</span>d;
+  include nginx_proxy.conf;
+  server {
+    listen  <span class="hljs-number">80</span>;
+    server_name  srv1.example.com;    
+    location ~ .*\.(gif|jpg|png|css|js)(.*) { # 要缓存的文件的后缀
+      access_log off;
+      add_header Cache-Control <span class="hljs-string">"public,max-age=24*3600"</span>;
+      proxy_pass http:<span class="hljs-comment">//localhost:8080;</span>
+    }
+  }
+}
+</code></pre>
+
+
+
+
+
+
+
+
+<p data-nodeid="7242">其中，proxy_cache_path 配置的是缓存的目录信息，以及缓存的保存时间 inactive，还有缓存的大小等信息；而“access_log off”表示关闭日志功能，proxy_pass 表示当第一次没有缓存时的请求地址，之后便会将访问到的资源缓存起来。</p>
+<h3 data-nodeid="7243">小结</h3>
+<p data-nodeid="7244">本课时我们介绍了 Nginx，并讲了 Nginx 的四种内置负载均衡的执行策略：轮询策略（默认负载均衡策略）、最少连接数负载均衡策略、ip-hash 负载均衡策略和权重负载均衡策略，其中 ip-hash 的负载均衡策略会将客户端的请求固定分发到一台服务器上。</p>
+<p data-nodeid="7245">后面我们还介绍了 Nginx 的健康检测：主动健康检测和被动健康检测；最后我们还讲了 Nginx 的缓存功能，它可以帮我们更快的访问到静态资源。</p>
+<p data-nodeid="7246">学完本课时后，相信你对 Nginx 已经有了一个大体的认识，其中面试中被问到最多的知识点是 Nginx 的四种负载均衡以及健康检查的相关内容。</p></div>
+
+</body></html>

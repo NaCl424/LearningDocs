@@ -1,0 +1,1182 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>33 | 如何追踪分布式系统调用链路的问题？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>33 | 如何追踪分布式系统调用链路的问题？</h1><p data-nodeid="139375" class="">微服务极大地改变了软件的开发和交付模式，单体应用被拆分为多个微服务，单个服务的复杂度大幅降低，库之间的依赖也转变为服务之间的依赖。由此带来的问题是部署的粒度变得越来越细，众多的微服务给运维带来巨大压力，即使有了 Docker 容器和服务编排组件 Kubernetes，这依然是个严肃的问题。</p>
+
+
+
+
+
+
+<h3 data-nodeid="138732">常见的追踪分布式系统调用链路的方式</h3>
+<p data-nodeid="138733">在分布式系统场景中，一个请求可能需要经历多个业务单元的处理才能完成响应，如果出现了错误或异常，是很难定位的。因此，利用分析性能问题的工具以及理解系统的行为就变得很重要了。</p>
+<p data-nodeid="138734">对于早期系统或者服务来说，开发人员一般<strong data-nodeid="138810">通过打日志的方式来进行埋点</strong>（常用的数据采集方式），然后再根据日志系统和性能监控定位及分析问题。采用日志打点的方式，虽然可以排查大部分的问题，但是侵入性非常大，且对于出现的紧急问题，往往并不能快速进行响应处理。对于排查性能问题，涉及更改的工作量更大，具体到调用的每个服务和服务里面的方法，得到的结果往往也是事倍功半。</p>
+<p data-nodeid="138735">除了日志打点的方式，有时甚至会出现开发人员<strong data-nodeid="138816">直接连接服务器进行代码调试</strong>的情况，这种方式的优点是能够针对请求涉及的某个服务进行排查，或许也能快速解决，但其弊端是显而易见的，线上生产环境很多时候并不具备直接Debug 调试的条件，这种调试也是严重影响了线上服务的正常运行。特别是随着业务变得越来越复杂，现代互联网服务通常会使用复杂的、大规模的分布式系统来实现。</p>
+<p data-nodeid="138736">虽说传统的日志监控和服务器调试的方式也可以解决业务异常问题，但是很显然，这两种方式已经无法满足跟踪调用、排查问题等一系列需求了。</p>
+<h3 data-nodeid="138737">为什么需要分布式链路追踪</h3>
+<p data-nodeid="138738">如上所述，随着服务数量的增多和内部调用链的复杂化，开发者仅凭借日志和性能监控，难以做到全局的监控，在进行问题排查或者性能分析时，无异于“盲人摸象”。</p>
+<p data-nodeid="138739">为了解决这个问题，业界推出了<strong data-nodeid="138825">分布式链路追踪组件</strong>。Google 内部开发了 Dapper，用于收集更多的复杂分布式系统的行为信息；Twitter 开源了分布式链路追踪组件 Zipkin；同时，也有很多其他公司开发了自己的链路追踪组件。</p>
+<p data-nodeid="138740"><strong data-nodeid="138829">分布式链路追踪不仅能够帮助开发者直观分析请求链路，快速定位性能瓶颈，逐渐优化服务间的依赖，而且还有助于开发者从宏观角度更好地理解整个分布式系统。</strong></p>
+<h3 data-nodeid="138741">什么是分布式链路追踪</h3>
+<p data-nodeid="138742">在微服务架构下，原单体服务被拆分为多个微服务独立部署，客户端的请求涉及多个微服务，从而无法知晓服务的具体位置。系统由大量服务组成，这些服务可能由不同的团队开发，可能使用不同的编程语言来实现，多实例部署，这些实例横跨多个不同的数据中心。在这种环境中，当出现错误异常或性能瓶颈时，<strong data-nodeid="138840">获取请求的依赖拓扑</strong>和<strong data-nodeid="138841">调用详情</strong>对于解决问题是非常有效的。</p>
+<p data-nodeid="138743"><strong data-nodeid="138853">所谓分布式链路追踪，就是记录一次分布式请求的调用链路，并将分布式请求的调用情况集中展示</strong>。其中，<strong data-nodeid="138854">调用详情</strong>包括各个请求的服务实例信息、服务节点的耗时、每个服务节点的请求状态等；分布式链路追踪还可以分析出<strong data-nodeid="138855">请求的依赖拓扑，即这次请求涉及哪些服务、这些服务上下游的关系等，这对于排查性能瓶颈非常有帮助。</strong></p>
+<h3 data-nodeid="138744">链路追踪与日志、Metrics 的关系</h3>
+<p data-nodeid="138745">在上文我们提到早期通常是使用日志和监控的方式来排查系统问题的，但在工作中我发现一些开发者对链路追踪和日志、Metrics 三者之间的关系并不是很清楚，经常会混淆，因此这里我们就简要介绍下这三者。</p>
+<p data-nodeid="140533">Tracing 表示链路追踪，Logging 和 Metrics 是与之相近的两个概念。这三者的关系如下图所示：</p>
+<p data-nodeid="140534" class=""><img src="https://s0.lgstatic.com/i/image/M00/5E/73/Ciqc1F-GvOSAV_BRAAEKN28KEAQ070.png" alt="image (4).png" data-nodeid="140543"></p>
+<div data-nodeid="140535"><p style="text-align:center">Tracing &amp; Logging &amp; Metrics三者的关系</p></div>
+
+
+
+
+
+<ul data-nodeid="138749">
+<li data-nodeid="138750">
+<p data-nodeid="138751">Tracing：记录单个请求的处理流程，其中包括服务调用和处理时长等信息。</p>
+</li>
+<li data-nodeid="138752">
+<p data-nodeid="138753">Logging：用于记录离散的日志事件，包含程序执行到某一点或某一阶段的详细信息。</p>
+</li>
+<li data-nodeid="138754">
+<p data-nodeid="138755">Metrics：可聚合的数据，通常是固定类型的时序数据，包括 Counter、Gauge、Histogram 等。</p>
+</li>
+</ul>
+<p data-nodeid="138756">同时，这三者相交的情况（或者说混合出现）也比较常见。</p>
+<ul data-nodeid="138757">
+<li data-nodeid="138758">
+<p data-nodeid="138759">Logging &amp; Metrics：可聚合的事件。例如，分析某对象存储的 Nginx 日志，统计某段时间内 GET、PUT、DELETE、OPTIONS 操作的总数。</p>
+</li>
+<li data-nodeid="138760">
+<p data-nodeid="138761">Metrics &amp; Tracing：单个请求中的可计量数据。例如，SQL 执行总时长、gRPC 调用总次数等。</p>
+</li>
+<li data-nodeid="138762">
+<p data-nodeid="138763">Tracing &amp; Logging：请求阶段的标签数据。例如，在 Tracing 的信息中标记详细的错误原因。</p>
+</li>
+</ul>
+<p data-nodeid="138764">针对这每种分析需求，我们都有非常强大的集中式分析工具。</p>
+<ul data-nodeid="138765">
+<li data-nodeid="138766">
+<p data-nodeid="138767">Logging：ELK（Elasticsearch、Logstash和Kibana），Elastic 公司提供的一套完整的日志收集以及展示的解决方案。</p>
+</li>
+<li data-nodeid="138768">
+<p data-nodeid="138769">Metrics：Prometheus，专业的Metric 统计系统，存储的是时序数据，即按相同时序（相同名称和标签），以时间维度存储连续数据的集合。</p>
+</li>
+<li data-nodeid="138770">
+<p data-nodeid="138771">Tracing：Jaeger，是 Uber 开源的一个兼容 OpenTracing 标准的分布式追踪服务。</p>
+</li>
+</ul>
+<p data-nodeid="138772">通过以上讲解，你现在应该知道，<strong data-nodeid="138889">Tracing、Logging 和 Metrics 这三者之间有一定的关系，既可以单独使用，也可以组合使用</strong>。每一个组件都有其侧重点，Tracing 用于追踪具体的请求，绘制调用的拓扑；Logging 则是主动记录的日志事件；Metrics 记录了请求相关的时序数据，通常用于性能统计。在分布式系统中，这三者通常是组合在一起使用。</p>
+<h3 data-nodeid="138773">分布式链路追踪的基础概念</h3>
+<p data-nodeid="138774">分布式链路追踪组件涉及 Span、Trace、Annotation 等基本概念，这些概念还是比较重要的，所以下面我们就具体介绍下这些概念。</p>
+<ul data-nodeid="138775">
+<li data-nodeid="138776">
+<p data-nodeid="138777"><strong data-nodeid="138896">Span，分布式链路追踪组件的基本工作单元</strong>。一次请求，即发起的一次链路调用（可以是 RPC、DB 调用等）会创建一个 Span。通过一个64位ID标识Span，通常使用 UUID，Span 中还有其他的数据，例如描述信息、时间戳、parentID 等，其中 parentID 用来表示 Span 调用链路的层级关系。</p>
+</li>
+<li data-nodeid="138778">
+<p data-nodeid="138779"><strong data-nodeid="138901">Trace，Span 集合，类似树结构</strong>。表示一条完整的调用链路，存在唯一标识。Trace 代表了一个事务或者流程在系统中的执行过程，由多个 Span 组成的一个有向无环图，每一个 Span 代表 Trace 中被命名并计时的连续性的执行片段。</p>
+</li>
+<li data-nodeid="138780">
+<p data-nodeid="138781"><strong data-nodeid="138906">Annotation，注解</strong>。用来记录请求特定事件相关信息（例如时间），通常包含 4 种注解信息，分别包括：①CS（Client Sent），表示客户端发起请求；②SR（Server Received），表示服务端收到请求；③SS（ServerSent），表示服务端完成处理，并将结果发送给了客户端；④CR（Client Received），表示客户端获取到服务端返回信息。</p>
+</li>
+</ul>
+<p data-nodeid="138782">链路信息的还原依赖于两种数据：一种是各个节点产生的事件，如 CS、SS，称为<strong data-nodeid="138916">带外数据</strong>，这些数据可以由节点独立生成，并且需要集中上报到存储端；另一种数据是TraceID、SpanID、ParentID，用来标识 Trace、Span 以及 Span 在一个Trace中的位置，称为<strong data-nodeid="138917">带内数据</strong>，这些数据需要从链路的起点一直传递到终点。</p>
+<p data-nodeid="138783"><strong data-nodeid="138921">通过带内数据的传递，可以将一个链路的所有过程串起来；通过带外数据，可以在存储端分析更多链路的细节。</strong></p>
+<p data-nodeid="141710">下图展示了 Trace 树的运行机制，通过 Trace 树我们可以了解一次请求过程中链路追踪的基本运行原理。</p>
+<p data-nodeid="141711" class=""><img src="https://s0.lgstatic.com/i/image/M00/5E/7F/CgqCHl-GvPCASsTBAACuOCx60p8798.png" alt="image (5).png" data-nodeid="141720"></p>
+<div data-nodeid="141712"><p style="text-align:center">Trace 树</p></div>
+
+
+
+
+
+<p data-nodeid="138787">对于每个 Trace 树，Trace 都要定义一个全局唯一的 TraceID，在这个跟踪中的所有 Span 都将获取到这个TraceID。每个 Span 都有一个 ParentID 和它自己的 SpanID。上面图中 Frontend Request 调用的 ParentID 为空，SpanID 为 1；然后 Backend Call 的 ParentID 为 1，SpanID 为 2；Backend DoSomething 调用的 ParentID 也为 1，SpanID 为 3，其内部还有两个调用，Helper Call 的 ParentID 为 3，SpanID 为 4，以此类推。</p>
+<p data-nodeid="138788"><strong data-nodeid="138932">Span 表示一个服务调用的开始和结束时间，即执行的时间段</strong>。分布式链路追踪组件记录了 Span 的名称以及每个 SpanID 的 ParentID，如果一个 Span 没有 ParentID 则被称为 Root Span，当前节点的 ParentID 即为调用链路上游的 SpanID，所有的 Span 都属于一个特定的 Trace，共用一个 TraceID。</p>
+<h3 data-nodeid="138789">小结</h3>
+<p data-nodeid="138790">分布式链路追踪组件主要用来追踪分布式系统调用链路的问题。</p>
+<p data-nodeid="138791">本课时我们主要介绍了分布式链路追踪组件产生的背景，以及分布式链路追踪的相关概念。分布式链路追踪组件对于快速解决线上问题、发现性能瓶颈并优化分布式系统的性能、合理部署服务器资源具有重要的作用。在接下来的课时中，我们将具体介绍几种业界流行的分布式链路追踪组件，并选择其中的一款进行实践。</p>
+<p data-nodeid="138792">关于分布式链路追踪，你有什么经验和踩坑的经历呢？欢迎你在留言区和我分享。</p></div>
+
+</body></html>

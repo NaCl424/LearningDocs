@@ -1,0 +1,1346 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第21讲：你的代码到底是怎么编译的？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>第21讲：你的代码到底是怎么编译的？</h1><p data-nodeid="226992">Node.js 的出现，越来越多前端自动化工具涌现出来，包括早期的 Grunt、Gulp 以及现在流行的 webpack。随着这些工具的功能愈发强大，其重要性也在不断提升，成熟的框架都已经将这些工具封装成专用的命令行工具，比如 angular-cli 和 vue-cli。这一课时我们将继续承接前面课程的“硬核”风格，通过分析 webpack(5.0.0-beta.23) 的源码来深入理解其原理。</p>
+
+
+
+<p data-nodeid="226497">webpack 有两个执行入口，分别是通过命令行调用的 bin/webpack.js，以及直接在代码中引用的 lib/webpack.js。我们避开命令参数解析以及进程调用的过程来分析 lib/webpack.js，下面是部分源码（省去了数组型配置及 watch 功能）。</p>
+<pre class="lang-javascript hljs" data-nodeid="226498"><code data-language="javascript"><span class="hljs-comment">// lib/webpack.js </span>
+<span class="hljs-keyword">const</span>&nbsp;webpack&nbsp;=&nbsp;(<span class="hljs-function">(<span class="hljs-params">&nbsp;options,&nbsp;callback&nbsp;</span>)&nbsp;=&gt;</span>&nbsp;{ 
+&nbsp;&nbsp;validateSchema(webpackOptionsSchema,&nbsp;options); 
+&nbsp;&nbsp;<span class="hljs-keyword">let</span>&nbsp;compiler; 
+&nbsp;&nbsp;compiler&nbsp;=&nbsp;createCompiler(options); 
+&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(callback)&nbsp;{ 
+&nbsp;&nbsp;&nbsp;&nbsp;compiler.run(<span class="hljs-function">(<span class="hljs-params">err,&nbsp;stats</span>)&nbsp;=&gt;</span>&nbsp;{ 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;compiler.close(<span class="hljs-function"><span class="hljs-params">err2</span>&nbsp;=&gt;</span>&nbsp;{ 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;callback(err&nbsp;||&nbsp;err2,&nbsp;stats); 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}); 
+&nbsp;&nbsp;&nbsp;&nbsp;}); 
+&nbsp;&nbsp;} 
+&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;compiler; 
+}); 
+</code></pre>
+<p data-nodeid="229023" class="">从源码中可以看到，webpack() 函数内部有 3 个重要的操作：<strong data-nodeid="229037">校验配置项</strong>、<strong data-nodeid="229038">创建编译器</strong>、<strong data-nodeid="229039">执行编译</strong>。</p>
+
+
+
+
+
+
+<h3 data-nodeid="226500">校验配置项</h3>
+<p data-nodeid="226501">校验配置项是通过调用 validateSchema() 函数来实现的，这个函数的内部其实是调用的  <a href="https://www.npmjs.com/package/schema-utils" data-nodeid="226580">schema-utils</a> 模块的 validate ()  函数 ，validate() 函数支持通过 JSONSchema 规则来校验 json 对象。这些 JSONSchema 规则保存在 schemas/WebpackOptions.json 文件中，对应代码中的 webpackOptionsSchema 变量。</p>
+<p data-nodeid="226502">这里简单介绍一下 JSONSchema，它是通过 JSON 文件来描述 JSON 文件 ，可以用来校验 JSON 对象、生成 mock 数据及描述 JSON 对象结构。下面是一个对 output 参数的部分校验规则。</p>
+<pre class="lang-java hljs" data-nodeid="230339"><code data-language="java"><span class="hljs-string">"Output"</span>:&nbsp;{ 
+&nbsp;&nbsp;<span class="hljs-string">"description"</span>:&nbsp;<span class="hljs-string">"Options&nbsp;affecting&nbsp;the&nbsp;output&nbsp;of&nbsp;the&nbsp;compilation.&nbsp;\`output\`&nbsp;options&nbsp;tell&nbsp;webpack&nbsp;how&nbsp;to&nbsp;write&nbsp;the&nbsp;compiled&nbsp;files&nbsp;to&nbsp;disk."</span>, 
+&nbsp;&nbsp;<span class="hljs-string">"type"</span>:&nbsp;<span class="hljs-string">"object"</span>, 
+&nbsp;&nbsp;<span class="hljs-string">"properties"</span>:&nbsp;{ 
+     ... 
+    <span class="hljs-string">"path"</span>:&nbsp;{ 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-string">"$ref"</span>:&nbsp;<span class="hljs-string">"#/definitions/Path"</span> 
+&nbsp;&nbsp;&nbsp;&nbsp;} 
+  } 
+} 
+... 
+<span class="hljs-string">"definitions"</span>: { 
+&nbsp;<span class="hljs-string">"Path"</span>:&nbsp;{ 
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-string">"description"</span>:&nbsp;<span class="hljs-string">"The&nbsp;output&nbsp;directory&nbsp;as&nbsp;**absolute&nbsp;path**&nbsp;(required)."</span>, 
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-string">"type"</span>:&nbsp;<span class="hljs-string">"string"</span> 
+&nbsp;&nbsp;} 
+} 
+</code></pre>
+
+
+
+
+<p data-nodeid="226504">从 "type": "object" 可以看到 Output 是一个对象，它拥有属性 Path，而这个 P ath 类型定义在 definitions 对象的 Path 属性中，通过 "type": "string" 可以看到，它是一个字符串类型。WebpackOptions.json 文件内容比较多，有 3000 多行，这里就不多介绍了，有兴趣的同学可以仔细研究。</p>
+<p data-nodeid="226505">一句话概括，validateSchema() 函数通过 JSONSchema 对 options 进行校验，如果不符合配置规则，则退出并在控制台输出格式化的错误信息。这样就能避免因为选项参数不正确而导致程序运行出错。</p>
+<h3 data-nodeid="226506">创建编译器</h3>
+<p data-nodeid="226507">创建编译器操作是在 compiler.compile() 函数中调用 createCompiler() 函数来实现的，该函数会返回一个 Compiler 实例。createCompiler() 函数源码如下：</p>
+<pre class="lang-javascript hljs" data-nodeid="226508"><code data-language="javascript"><span class="hljs-comment">// lib/webpack.js </span>
+<span class="hljs-keyword">const</span>&nbsp;createCompiler&nbsp;=&nbsp;<span class="hljs-function"><span class="hljs-params">rawOptions</span>&nbsp;=&gt;</span>&nbsp;{ 
+&nbsp;&nbsp;<span class="hljs-keyword">const</span>&nbsp;options&nbsp;=&nbsp;getNormalizedWebpackOptions(rawOptions); 
+&nbsp;&nbsp;applyWebpackOptionsBaseDefaults(options); 
+&nbsp;&nbsp;<span class="hljs-keyword">const</span>&nbsp;compiler&nbsp;=&nbsp;<span class="hljs-keyword">new</span>&nbsp;Compiler(options.context); 
+&nbsp;&nbsp;compiler.options&nbsp;=&nbsp;options; 
+&nbsp;&nbsp;<span class="hljs-keyword">new</span>&nbsp;NodeEnvironmentPlugin({ 
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">infrastructureLogging</span>:&nbsp;options.infrastructureLogging 
+&nbsp;&nbsp;}).apply(compiler); 
+&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(<span class="hljs-built_in">Array</span>.isArray(options.plugins))&nbsp;{ 
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">for</span>&nbsp;(<span class="hljs-keyword">const</span>&nbsp;plugin&nbsp;<span class="hljs-keyword">of</span>&nbsp;options.plugins)&nbsp;{ 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(<span class="hljs-keyword">typeof</span>&nbsp;plugin&nbsp;===&nbsp;<span class="hljs-string">"function"</span>)&nbsp;{ 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;plugin.call(compiler,&nbsp;compiler); 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}&nbsp;<span class="hljs-keyword">else</span>&nbsp;{ 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;plugin.apply(compiler); 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;} 
+&nbsp;&nbsp;&nbsp;&nbsp;} 
+&nbsp;&nbsp;} 
+&nbsp;&nbsp;applyWebpackOptionsDefaults(options); 
+&nbsp;&nbsp;compiler.hooks.environment.call(); 
+&nbsp;&nbsp;compiler.hooks.afterEnvironment.call(); 
+&nbsp;&nbsp;<span class="hljs-keyword">new</span>&nbsp;WebpackOptionsApply().process(options,&nbsp;compiler); 
+&nbsp;&nbsp;compiler.hooks.initialize.call(); 
+&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;compiler; 
+} 
+</code></pre>
+<p data-nodeid="230996" class="">在 createCompiler() 函数内部可以看到，首先会通过  getNormalizedWebpackOptions() 函数将默认的配置参数与自定义的配置参数 rawOptions 进行合成，赋值给变量 options。applyWebpackOptionsBaseDefaults() 函数则将程序当前执行路径赋值给 options.context 属性。</p>
+
+
+<p data-nodeid="226510">经过以上处理之后，变量 options 才会作为参数传递给类 Compiler 来生成实例。在构造函数中，实例的很多属性进行了初始化操作，其中比较重要的是 hooks 属性。下面是截取的部分源码：</p>
+<pre class="lang-javascript hljs" data-nodeid="226511"><code data-language="javascript"><span class="hljs-comment">// lib/Compiler.js </span>
+<span class="hljs-keyword">constructor</span>(context)&nbsp;{ 
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-built_in">this</span>.hooks&nbsp;=&nbsp;<span class="hljs-built_in">Object</span>.freeze({ 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">initialize</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;SyncHook([]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">shouldEmit</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;SyncBailHook([<span class="hljs-string">"compilation"</span>]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">done</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;AsyncSeriesHook([<span class="hljs-string">"stats"</span>]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">afterDone</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;SyncHook([<span class="hljs-string">"stats"</span>]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">additionalPass</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;AsyncSeriesHook([]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">beforeRun</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;AsyncSeriesHook([<span class="hljs-string">"compiler"</span>]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">run</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;AsyncSeriesHook([<span class="hljs-string">"compiler"</span>]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">emit</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;AsyncSeriesHook([<span class="hljs-string">"compilation"</span>]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">assetEmitted</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;AsyncSeriesHook([<span class="hljs-string">"file"</span>,&nbsp;<span class="hljs-string">"info"</span>]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">afterEmit</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;AsyncSeriesHook([<span class="hljs-string">"compilation"</span>]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">thisCompilation</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;SyncHook([<span class="hljs-string">"compilation"</span>,&nbsp;<span class="hljs-string">"params"</span>]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">compilation</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;SyncHook([<span class="hljs-string">"compilation"</span>,&nbsp;<span class="hljs-string">"params"</span>]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">normalModuleFactory</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;SyncHook([<span class="hljs-string">"normalModuleFactory"</span>]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">contextModuleFactory</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;SyncHook([<span class="hljs-string">"contextModuleFactory"</span>]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">beforeCompile</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;AsyncSeriesHook([<span class="hljs-string">"params"</span>]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">compile</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;SyncHook([<span class="hljs-string">"params"</span>]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">make</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;AsyncParallelHook([<span class="hljs-string">"compilation"</span>]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">finishMake</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;AsyncSeriesHook([<span class="hljs-string">"compilation"</span>]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">afterCompile</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;AsyncSeriesHook([<span class="hljs-string">"compilation"</span>]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">watchRun</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;AsyncSeriesHook([<span class="hljs-string">"compiler"</span>]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">failed</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;SyncHook([<span class="hljs-string">"error"</span>]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">invalid</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;SyncHook([<span class="hljs-string">"filename"</span>,&nbsp;<span class="hljs-string">"changeTime"</span>]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">watchClose</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;SyncHook([]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">infrastructureLog</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;SyncBailHook([<span class="hljs-string">"origin"</span>,&nbsp;<span class="hljs-string">"type"</span>,&nbsp;<span class="hljs-string">"args"</span>]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">environment</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;SyncHook([]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">afterEnvironment</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;SyncHook([]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">afterPlugins</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;SyncHook([<span class="hljs-string">"compiler"</span>]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">afterResolvers</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;SyncHook([<span class="hljs-string">"compiler"</span>]), 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">entryOption</span>:&nbsp;<span class="hljs-keyword">new</span>&nbsp;SyncBailHook([<span class="hljs-string">"context"</span>,&nbsp;<span class="hljs-string">"entry"</span>]) 
+&nbsp;&nbsp;&nbsp;&nbsp;}); 
+} 
+</code></pre>
+<p data-nodeid="231322" class="">为了防止 hooks 属性被修改，这里使用 Object.freeze() 函数来创建对象。简单介绍一下 object.freeze() 函数，它可以冻结一个对象。一个被冻结的对象再也不能被修改了；冻结了一个对象则不能向这个对象添加新的属性，不能删除已有属性，不能修改该对象已有属性的可枚举性、可配置性、可写性，以及不能修改已有属性的值。此外，冻结一个对象后该对象的原型也不能被修改。</p>
+
+<p data-nodeid="231974" class="">这里一共创建了 4 种类型的钩子（hook），它们的名称和作用如下：</p>
+
+
+<ul data-nodeid="233359">
+<li data-nodeid="233360">
+<p data-nodeid="233361"><strong data-nodeid="233372">SyncHook（同步钩子）</strong>，当钩子触发时，会依次调用钩子队列中的回调函数；</p>
+</li>
+<li data-nodeid="233362">
+<p data-nodeid="233363"><strong data-nodeid="233377">SyncBailHook（同步钩子）</strong>，当钩子触发时，会依次调用钩子队列中的回调函数，如果遇到有返回值的函数则停止继续调用；</p>
+</li>
+<li data-nodeid="233364">
+<p data-nodeid="233365"><strong data-nodeid="233382">AsyncSeriesHook（异步串行钩子）</strong>，如果钩子队列中有异步回调函数，则会等其执行完成后再执行剩余的回调函数；</p>
+</li>
+<li data-nodeid="233366">
+<p data-nodeid="233367" class=""><strong data-nodeid="233387">AsyncParallelHook（异步并行钩子）</strong>，可以异步执行钩子队列中的所有异步回调函数。</p>
+</li>
+</ul>
+
+
+
+
+<p data-nodeid="226523">下面一段代码是钩子函数的简单用法。通过 new 关键字创建钩子实例，然后调用 tap() 函数来监听钩子，向 hook 的钩子队列中添加一个回调函数 。 当执行 hook.call() 函数时，会依次调用队列中的回调函数，并将参数传递给这些回调函数 。 需要注意的是， 参数的数量必须与实例化的数组长度一致。在下面的例子中，只能传递 1 个参数。</p>
+<p data-nodeid="226524">tapable 模块提供了十多种钩子，这里就不一一详细介绍了，我们只要知道它实现了一些特殊的订阅机制即可，对钩子有兴趣的同学可以参看其 <a href="https://www.npmjs.com/package/tapable" data-nodeid="226631">文档</a>。</p>
+<pre class="lang-javascript hljs" data-nodeid="226525"><code data-language="javascript"><span class="hljs-keyword">const</span>&nbsp;{&nbsp;SyncHook&nbsp;}&nbsp;=&nbsp;<span class="hljs-built_in">require</span>(<span class="hljs-string">'tapable'</span>); 
+<span class="hljs-keyword">const</span>&nbsp;hook&nbsp;=&nbsp;<span class="hljs-keyword">new</span>&nbsp;SyncHook([<span class="hljs-string">'whatever'</span>]); 
+hook.tap(<span class="hljs-string">'1'</span>,&nbsp;<span class="hljs-function"><span class="hljs-keyword">function</span>&nbsp;(<span class="hljs-params">arg1</span>)&nbsp;</span>{ 
+&nbsp;&nbsp;<span class="hljs-built_in">console</span>.log(arg1); 
+}); 
+hook.call(<span class="hljs-string">'lagou'</span>); 
+</code></pre>
+<p data-nodeid="226526">接着继续往下看，会发现这样一行代码。</p>
+<pre class="lang-javascript hljs" data-nodeid="226527"><code data-language="javascript"><span class="hljs-comment">// lib/webpack.js </span>
+<span class="hljs-keyword">new</span> NodeEnvironmentPlugin({ 
+  <span class="hljs-attr">infrastructureLogging</span>: options.infrastructureLogging 
+}).apply(compiler); 
+</code></pre>
+<p data-nodeid="226528" class="">这种调用插件（plugin）的 apply() 函数的写法在 webpack 中很常见，主要作用就是监听 compiler 钩子事件，或者说是向钩子队列中插入一个回调函数，当对应的钩子事件触发时调用。</p>
+<p data-nodeid="226529">钩子初始化完成后会调用 3 个钩子事件：</p>
+<pre class="lang-javascript hljs" data-nodeid="226530"><code data-language="javascript"><span class="hljs-comment">// lib/webpack.js </span>
+compiler.hooks.environment.call(); 
+compiler.hooks.afterEnvironment.call(); 
+<span class="hljs-keyword">new</span> WebpackOptionsApply().process(options, compiler); 
+compiler.hooks.initialize.call(); 
+</code></pre>
+<p data-nodeid="226531">其中，process() 函数会根据不同的执行环境引入一些默认的插件并调用它的 apply() 函数，比如 Node 环境下会引入下面的插件：</p>
+<pre class="lang-javascript hljs" data-nodeid="226532"><code data-language="javascript"><span class="hljs-comment">// lib/WebpackOptionsApply.js </span>
+<span class="hljs-keyword">const</span>&nbsp;NodeTemplatePlugin&nbsp;=&nbsp;<span class="hljs-built_in">require</span>(<span class="hljs-string">"./node/NodeTemplatePlugin"</span>); 
+<span class="hljs-keyword">const</span>&nbsp;ReadFileCompileWasmPlugin&nbsp;=&nbsp;<span class="hljs-built_in">require</span>(<span class="hljs-string">"./node/ReadFileCompileWasmPlugin"</span>); 
+<span class="hljs-keyword">const</span>&nbsp;ReadFileCompileAsyncWasmPlugin&nbsp;=&nbsp;<span class="hljs-built_in">require</span>(<span class="hljs-string">"./node/ReadFileCompileAsyncWasmPlugin"</span>); 
+<span class="hljs-keyword">const</span>&nbsp;NodeTargetPlugin&nbsp;=&nbsp;<span class="hljs-built_in">require</span>(<span class="hljs-string">"./node/NodeTargetPlugin"</span>); 
+<span class="hljs-keyword">new</span>&nbsp;NodeTemplatePlugin({ 
+&nbsp;&nbsp;<span class="hljs-attr">asyncChunkLoading</span>:&nbsp;options.target&nbsp;===&nbsp;<span class="hljs-string">"async-node"</span> 
+}).apply(compiler); 
+<span class="hljs-keyword">new</span>&nbsp;ReadFileCompileWasmPlugin({ 
+&nbsp;&nbsp;<span class="hljs-attr">mangleImports</span>:&nbsp;options.optimization.mangleWasmImports 
+}).apply(compiler); 
+<span class="hljs-keyword">new</span>&nbsp;ReadFileCompileAsyncWasmPlugin().apply(compiler); 
+<span class="hljs-keyword">new</span>&nbsp;NodeTargetPlugin().apply(compiler); 
+<span class="hljs-keyword">new</span>&nbsp;LoaderTargetPlugin(<span class="hljs-string">"node"</span>).apply(compiler); 
+</code></pre>
+<p data-nodeid="226533">至此，编译器已经创建完成。小结一下创建编译器步骤的主要逻辑，首先会将配置参数进行修改，比如加入一些默认配置项；然后创建一个编译器实例 compiler，这个实例的构造函数会初始化一些钩子；最后就是调用插件的 apply() 函数来监听钩子，同时也会主动触发一些钩子事件。</p>
+<h3 data-nodeid="226534">执行编译</h3>
+<p data-nodeid="226535">调用 compiler.compile() 函数标志着进入编译阶段，该阶段非常依赖钩子， 代码跳跃比较大，理解起来会有一定难度 。下面是 compile() 函数的部分代码：</p>
+<pre class="lang-javascript hljs" data-nodeid="226536"><code data-language="javascript"><span class="hljs-comment">// lib/Compiler.js </span>
+compile(callback) { 
+  <span class="hljs-keyword">const</span> params = <span class="hljs-built_in">this</span>.newCompilationParams(); 
+  <span class="hljs-built_in">this</span>.hooks.beforeCompile.callAsync(params, <span class="hljs-function"><span class="hljs-params">err</span> =&gt;</span> { 
+    <span class="hljs-keyword">if</span> (err) <span class="hljs-keyword">return</span> callback(err); 
+    <span class="hljs-built_in">this</span>.hooks.compile.call(params); 
+    <span class="hljs-keyword">const</span> compilation = <span class="hljs-built_in">this</span>.newCompilation(params); 
+    <span class="hljs-built_in">this</span>.hooks.make.callAsync(compilation, <span class="hljs-function"><span class="hljs-params">err</span> =&gt;</span> { 
+    }) 
+  }) 
+} 
+</code></pre>
+<p data-nodeid="226537">首先是触发了 compiler.hooks.compile 钩子，触发后，一些插件将进行初始化操作，为编译做好准备，比如 LoaderTargetPlugin 插件将会加载需要的加载器。</p>
+<p data-nodeid="226538">调用 newCompilation() 函数则会创建了一个 Compilation 实例。注意，这里的 Compilation 和前面创建的 Compiler 是有区别的：Compiler 是全局唯一的，包含了配置参数、加载器、插件这些信息，它会一直存在 webpack 的生命周期中；而 Compilation 包含了当前模块的信息，只是代表一次编译过程。</p>
+<p data-nodeid="226539">在创建 compilation 完成后会触发  compiler.hooks.thisCompilation 钩子和 compiler.hooks.compilation，激活 JavaScriptModulesPlugin 插件的监听函数，从而加载 JavaScript 的解析模块 acorn 。</p>
+<pre class="lang-java hljs" data-nodeid="233712"><code data-language="java"><span class="hljs-comment">// lib/Compiler.j s </span>
+newCompilation(params) { 
+  <span class="hljs-keyword">const</span> compilation = <span class="hljs-keyword">this</span>.createCompilation(); 
+  compilation.fileTimestamps = <span class="hljs-keyword">this</span>.fileTimestamps; 
+  compilation.contextTimestamps = <span class="hljs-keyword">this</span>.contextTimestamps; 
+  compilation.name = <span class="hljs-keyword">this</span>.name; 
+  compilation.records = <span class="hljs-keyword">this</span>.records; 
+  compilation.compilationDependencies = params.compilationDependencies; 
+  <span class="hljs-keyword">this</span>.hooks.thisCompilation.call(compilation, params); 
+  <span class="hljs-keyword">this</span>.hooks.compilation.call(compilation, params); 
+  <span class="hljs-keyword">return</span> compilation; 
+} 
+</code></pre>
+
+<p data-nodeid="234355">在 compiler.compile() 函数中触发 compiler.hooks.make 钩子标志着编译操作正式开始。那么哪些函数监听了 make 钩子呢？通过搜索代码可以发现有 7 个插件监听了它。</p>
+<p data-nodeid="235044"><img src="https://s0.lgstatic.com/i/image/M00/3E/C3/CgqCHl8tItSAI1KMAABz6uawvig252.png" alt="image (2).png" data-nodeid="235052"></p>
+<div data-nodeid="235045" class=""><p style="text-align:center">监听了 make 钩子的插件</p> </div>
+<p></p>
+
+
+
+
+
+<p data-nodeid="226544">其中 EntryPlugin 插件负责分析入口文件，下面是截取的部分代码：</p>
+<pre class="lang-javascript hljs" data-nodeid="226545"><code data-language="javascript"><span class="hljs-comment">// lib/EntryPlugin.js </span>
+<span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">EntryPlugin</span> </span>{ 
+  apply(compiler) { 
+    compiler.hooks.make.tapAsync(<span class="hljs-string">"EntryPlugin"</span>, <span class="hljs-function">(<span class="hljs-params">compilation, callback</span>) =&gt;</span> { 
+    	<span class="hljs-keyword">const</span> { entry, options, context } = <span class="hljs-built_in">this</span>; 
+    	<span class="hljs-keyword">const</span> dep = EntryPlugin.createDependency(entry, options); 
+        <span class="hljs-comment">// 开始入口解析 </span>
+    	compilation.addEntry(context, dep, options, <span class="hljs-function"><span class="hljs-params">err</span> =&gt;</span> { 
+    		callback(err); 
+    	}); 
+    }); 
+  } 
+} 
+</code></pre>
+<p data-nodeid="226546">EntryPlugin 插件中调用了 compilation 对象的 addEntry() 函数，该函数中又调用了 _addEntryItem()  函数将入口模块添加到模块依赖列表中，部分源码如下：</p>
+<pre class="lang-javascript hljs" data-nodeid="226547"><code data-language="javascript">_addEntryItem(context, entry, target, options, callback) { 
+  <span class="hljs-built_in">this</span>.addModuleChain(context, entry, <span class="hljs-function">(<span class="hljs-params">err, <span class="hljs-built_in">module</span></span>) =&gt;</span> { 
+    <span class="hljs-keyword">if</span> (err) { 
+      <span class="hljs-built_in">this</span>.hooks.failedEntry.call(entry, options, err); 
+      <span class="hljs-keyword">return</span> callback(err); 
+    } 
+    <span class="hljs-built_in">this</span>.hooks.succeedEntry.call(entry, options, <span class="hljs-built_in">module</span>); 
+    <span class="hljs-keyword">return</span> callback(<span class="hljs-literal">null</span>, <span class="hljs-built_in">module</span>); 
+  }); 
+} 
+</code></pre>
+<p data-nodeid="226548">在 addModuleChain() 函数中会调用 compilation 的 handleModuleCreation() 函数，该函数代码比较多，其中会调用 compilation 的 buildModule() 函数来构建模块。</p>
+<p data-nodeid="226549">模块构建完成过后，通过 acorn 生成模块代码的抽象语法树，根据抽象语法树分析这个模块是否还有依赖的模块，如果有则继续解析每个依赖的模块，直到所有依赖解析完成，最后合并生成输出文件。这个过程和前面几讲提到的编译器执行过程类似，就不再赘述了。</p>
+<h3 data-nodeid="226550">总结</h3>
+<p data-nodeid="226551">这一课时从源码层面分析了 webpack 的工作原理，webpack 的执行过程大体上可以分为 3 个步骤，包括：检验配置项、创建编译器、执行编译。</p>
+<p data-nodeid="226552">在 检验 配置项时使用了 JSONSchema 来校验配置参数。在创建编译器时，用到了 tapable 模块提供的钩子机制，通过触发适当的钩子事件来让对应的插件进行初始化。</p>
+<p data-nodeid="226553">在执行编译阶段，以  compiler.hooks.make 钩子事件为起始点，触发入口文件的解析工作，并调用加载器对资源进行处理，然后构建成抽象语法树，将最终的抽象语法树转换成目标文件并输出到配置项指定的目录。</p>
+<p data-nodeid="235383">最后布置一道思考题：尝试一下 tapable 模块的各种钩子事件，分析比较一下它们的使用区别。</p></div>
+
+</body></html>

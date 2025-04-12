@@ -1,0 +1,1423 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>15 | 案例分析：从 BIO 到 NIO，再到 AIO</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>15 | 案例分析：从 BIO 到 NIO，再到 AIO</h1><p data-nodeid="1345" class="">Netty 的高性能架构，是基于一个网络编程设计模式 Reactor 进行设计的。现在，大多数与 I/O 相关的组件，都会使用 Reactor 模型，比如 Tomcat、Redis、Nginx 等，可见 Reactor 应用的广泛性。</p>
+<p data-nodeid="1346">Reactor 是 NIO 的基础。为什么 NIO 的性能就能够比传统的阻塞 I/O 性能高呢？我们首先来看一下传统阻塞式 I/O 的一些特点。</p>
+<h3 data-nodeid="1347">阻塞 I/O 模型</h3>
+<p data-nodeid="1348"><img src="https://s0.lgstatic.com/i/image/M00/48/9C/CgqCHl9MynKADFW4AAB9PAD7ZA0902.png" alt="Drawing 1.png" data-nodeid="1483"></p>
+<p data-nodeid="1349">如上图，是典型的<strong data-nodeid="1489">BIO 模型</strong>，每当有一个连接到来，经过协调器的处理，就开启一个对应的线程进行接管。如果连接有 1000 条，那就需要 1000 个线程。</p>
+<p data-nodeid="1350">线程资源是非常昂贵的，除了占用大量的内存，还会占用非常多的 CPU 调度时间，所以 BIO 在连接非常多的情况下，效率会变得非常低。</p>
+<p data-nodeid="1351">下面的代码是使用 ServerSocket 实现的一个简单 Socket 服务器，监听在 8888 端口。</p>
+<pre class="lang-java hljs" data-nodeid="1352"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">BIO</span> </span>{
+ &nbsp; &nbsp;<span class="hljs-keyword">static</span> <span class="hljs-keyword">boolean</span> stop = <span class="hljs-keyword">false</span>;
+
+ &nbsp; &nbsp;<span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">main</span><span class="hljs-params">(String[] args)</span> <span class="hljs-keyword">throws</span> Exception </span>{
+ &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">int</span> connectionNum = <span class="hljs-number">0</span>;
+ &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">int</span> port = <span class="hljs-number">8888</span>;
+ &nbsp; &nbsp; &nbsp; &nbsp;ExecutorService service = Executors.newCachedThreadPool();
+ &nbsp; &nbsp; &nbsp; &nbsp;ServerSocket serverSocket = <span class="hljs-keyword">new</span> ServerSocket(port);
+ &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">while</span> (!stop) {
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">if</span> (<span class="hljs-number">10</span> == connectionNum) {
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;stop = <span class="hljs-keyword">true</span>;
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  }
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;Socket socket = serverSocket.accept();
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;service.execute(() -&gt; {
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">try</span> {
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;Scanner scanner = <span class="hljs-keyword">new</span> Scanner(socket.getInputStream());
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;PrintStream printStream = <span class="hljs-keyword">new</span> PrintStream(socket.getOutputStream());
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">while</span> (!stop) {
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;String s = scanner.next().trim();
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;printStream.println(<span class="hljs-string">"PONG:"</span> + s);
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  }
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  } <span class="hljs-keyword">catch</span> (Exception ex) {
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;ex.printStackTrace();
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  }
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  });
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;connectionNum++;
+ &nbsp; &nbsp; &nbsp;  }
+ &nbsp; &nbsp; &nbsp; &nbsp;service.shutdown();
+ &nbsp; &nbsp; &nbsp; &nbsp;serverSocket.close();
+ &nbsp;  }
+}
+</code></pre>
+<p data-nodeid="1353">启动之后，使用 nc 命令进行连接测试，结果如下。</p>
+<pre class="lang-java hljs" data-nodeid="1354"><code data-language="java">$ nc -v localhost <span class="hljs-number">8888</span>
+Connection to localhost port <span class="hljs-number">8888</span> [tcp/ddi-tcp-<span class="hljs-number">1</span>] succeeded!
+hello
+PONG:hello
+nice
+PONG:nice
+</code></pre>
+<p data-nodeid="1355">使用 “04 | 工具实践：如何获取代码性能数据？”提到的 JMC 工具，在录制期间发起多个连接，能够发现有多个线程在运行，和连接数是一一对应的。</p>
+<p data-nodeid="1356"><img src="https://s0.lgstatic.com/i/image/M00/48/9C/CgqCHl9MyoiAGgY5AAGbD3wkqUs988.png" alt="Drawing 2.png" data-nodeid="1498"></p>
+<p data-nodeid="1357">可以看到，BIO 的读写操作是阻塞的，线程的整个生命周期和连接的生命周期是一样的，而且不能够被复用。</p>
+<p data-nodeid="1358">就单个阻塞 I/O 来说，它的效率并不比 NIO 慢。但是当服务的连接增多，考虑到整个服务器的资源调度和资源利用率等因素，NIO 就有了显著的效果，NIO 非常适合高并发场景。</p>
+<h3 data-nodeid="1359">非阻塞 I/O 模型</h3>
+<p data-nodeid="1360">其实，在处理 I/O 动作时，有大部分时间是在等待。比如，socket 连接要花费很长时间进行连接操作，在完成连接的这段时间内，它并没有占用额外的系统资源，但它只能阻塞等待在线程中。这种情况下，系统资源并不能被合理利用。</p>
+<p data-nodeid="1361">Java 的 NIO，在 Linux 上底层是使用 epoll 实现的。epoll 是一个高性能的多路复用 I/O 工具，改进了 select 和 poll 等工具的一些功能。<strong data-nodeid="1507">在网络编程中，对 epoll 概念的一些理解，几乎是面试中必问的问题。</strong></p>
+<p data-nodeid="1362">epoll 的数据结构是直接在内核上进行支持的，通过 epoll_create 和 epoll_ctl 等函数的操作，可以构造描述符（fd）相关的事件组合（event）。</p>
+<p data-nodeid="1363">这里有两个比较重要的概念：</p>
+<ul data-nodeid="1364">
+<li data-nodeid="1365">
+<p data-nodeid="1366">fd 每条连接、每个文件，都对应着一个描述符，比如端口号。内核在定位到这些连接的时候，就是通过 fd 进行寻址的。</p>
+</li>
+<li data-nodeid="1367">
+<p data-nodeid="1368">event 当 fd 对应的资源，有状态或者数据变动，就会更新 epoll_item 结构。在没有事件变更的时候，epoll 就阻塞等待，也不会占用系统资源；一旦有新的事件到来，epoll 就会被激活，将事件通知到应用方。</p>
+</li>
+</ul>
+<p data-nodeid="1369"><strong data-nodeid="1521">关于 epoll 还会有一个面试题，相对于 select，epoll 有哪些改进？</strong></p>
+<p data-nodeid="1370">你可以这样回答：</p>
+<ul data-nodeid="1371">
+<li data-nodeid="1372">
+<p data-nodeid="1373">epoll 不再需要像 select 一样对 fd 集合进行轮询，也不需要在调用时将 fd 集合在用户态和内核态进行交换；</p>
+</li>
+<li data-nodeid="1374">
+<p data-nodeid="1375">应用程序获得就绪 fd 的事件复杂度，epoll 是 O(1)，select 是 O(n)；</p>
+</li>
+<li data-nodeid="1376">
+<p data-nodeid="1377">select 最大支持约 1024 个 fd，epoll 支持 65535个；</p>
+</li>
+<li data-nodeid="1378">
+<p data-nodeid="1379">select 使用轮询模式检测就绪事件，epoll 采用通知方式，更加高效。</p>
+</li>
+</ul>
+<p data-nodeid="1380">我们还是以 Java 中的 NIO 代码为例，来看一下 NIO 的具体概念。</p>
+<pre class="lang-java hljs" data-nodeid="1381"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">NIO</span> </span>{
+ &nbsp; &nbsp;<span class="hljs-keyword">static</span> <span class="hljs-keyword">boolean</span> stop = <span class="hljs-keyword">false</span>;
+
+ &nbsp; &nbsp;<span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">main</span><span class="hljs-params">(String[] args)</span> <span class="hljs-keyword">throws</span> Exception </span>{
+ &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">int</span> connectionNum = <span class="hljs-number">0</span>;
+ &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">int</span> port = <span class="hljs-number">8888</span>;
+ &nbsp; &nbsp; &nbsp; &nbsp;ExecutorService service = Executors.newCachedThreadPool();
+
+ &nbsp; &nbsp; &nbsp; &nbsp;ServerSocketChannel ssc = ServerSocketChannel.open();
+ &nbsp; &nbsp; &nbsp; &nbsp;ssc.configureBlocking(<span class="hljs-keyword">false</span>);
+ &nbsp; &nbsp; &nbsp; &nbsp;ssc.socket().bind(<span class="hljs-keyword">new</span> InetSocketAddress(<span class="hljs-string">"localhost"</span>, port));
+
+ &nbsp; &nbsp; &nbsp; &nbsp;Selector selector = Selector.open();
+ &nbsp; &nbsp; &nbsp; &nbsp;ssc.register(selector, ssc.validOps());
+
+
+ &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">while</span> (!stop) {
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">if</span> (<span class="hljs-number">10</span> == connectionNum) {
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;stop = <span class="hljs-keyword">true</span>;
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  }
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">int</span> num = selector.select();
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">if</span> (num == <span class="hljs-number">0</span>) {
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">continue</span>;
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  }
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;Iterator&lt;SelectionKey&gt; events = selector.selectedKeys().iterator();
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">while</span> (events.hasNext()) {
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;SelectionKey event = events.next();
+
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">if</span> (event.isAcceptable()) {
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;SocketChannel sc = ssc.accept();
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;sc.configureBlocking(<span class="hljs-keyword">false</span>);
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;sc.register(selector, SelectionKey.OP_READ);
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;connectionNum++;
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (event.isReadable()) {
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">try</span> {
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;SocketChannel sc = (SocketChannel) event.channel();
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;ByteBuffer buf = ByteBuffer.allocate(<span class="hljs-number">1024</span>);
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">int</span> size = sc.read(buf);
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">if</span>(-<span class="hljs-number">1</span>==size){
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;sc.close();
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  }
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;String result = <span class="hljs-keyword">new</span> String(buf.array()).trim();
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;ByteBuffer wrap = ByteBuffer.wrap((<span class="hljs-string">"PONG:"</span> + result).getBytes());
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;sc.write(wrap);
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  } <span class="hljs-keyword">catch</span> (Exception ex) {
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;ex.printStackTrace();
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  }
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (event.isWritable()) {
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;SocketChannel sc = (SocketChannel) event.channel();
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  }
+
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;events.remove();
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  }
+ &nbsp; &nbsp; &nbsp;  }
+ &nbsp; &nbsp; &nbsp; &nbsp;service.shutdown();
+ &nbsp; &nbsp; &nbsp; &nbsp;ssc.close();
+ &nbsp;  }
+}
+</code></pre>
+<p data-nodeid="1382">上面这段代码比较长，是使用 NIO 实现的和 BIO 相同的功能。从它的 API 设计上，我们就能够看到 epoll 的一些影子。</p>
+<p data-nodeid="1383">首先，我们创建了一个服务端 ssc，并开启一个新的事件选择器，监听它的 OP_ACCEPT 事件。</p>
+<pre class="lang-yaml hljs" data-nodeid="1384"><code data-language="yaml"><span class="hljs-string">ServerSocketChannel</span> <span class="hljs-string">ssc</span> <span class="hljs-string">=</span> <span class="hljs-string">ServerSocketChannel.open();</span>
+<span class="hljs-string">Selector</span> <span class="hljs-string">selector</span> <span class="hljs-string">=</span> <span class="hljs-string">Selector.open();</span>
+<span class="hljs-string">ssc.register(selector,</span> <span class="hljs-string">ssc.validOps());</span>
+</code></pre>
+<p data-nodeid="1385">共有 4 种事件类型，分别是：</p>
+<ul data-nodeid="1386">
+<li data-nodeid="1387">
+<p data-nodeid="1388">新连接事件（OP_ACCEPT）；</p>
+</li>
+<li data-nodeid="1389">
+<p data-nodeid="1390">连接就绪事件（OP_CONNECT）；</p>
+</li>
+<li data-nodeid="1391">
+<p data-nodeid="1392">读就绪事件（OP_READ）；</p>
+</li>
+<li data-nodeid="1393">
+<p data-nodeid="1394">写就绪事件（OP_WRITE）。</p>
+</li>
+</ul>
+<p data-nodeid="1395">任何网络和文件操作，都可以抽象成这四个事件。</p>
+<p data-nodeid="1396"><img src="https://s0.lgstatic.com/i/image/M00/48/91/Ciqc1F9MyqmAdmlrAAMSNPAj_F4698.png" alt="Drawing 3.png" data-nodeid="1548"></p>
+<p data-nodeid="1397">接下来，在 while 循环里，使用 select 函数，阻塞在主线程里。所谓<strong data-nodeid="1554">阻塞</strong>，就是操作系统不再分配 CPU 时间片到当前线程中，所以 select 函数是几乎不占用任何系统资源的。</p>
+<pre class="lang-java hljs" data-nodeid="1398"><code data-language="java"><span class="hljs-keyword">int</span> num = selector.select();
+</code></pre>
+<p data-nodeid="1399">一旦有新的事件到达，比如有新的连接到来，主线程就能够被调度到，程序就能够向下执行。这时候，就能够根据订阅的事件通知，持续获取订阅的事件。<br>
+由于注册到 selector 的连接和事件可能会有多个，所以这些事件也会有多个。我们使用安全的迭代器循环进行处理，在处理完毕之后，将它删除。</p>
+<blockquote data-nodeid="1400">
+<p data-nodeid="1401">这里留一个思考题：如果事件不删除的话，或者漏掉了某个事件的处理，会有什么后果？</p>
+</blockquote>
+<pre class="lang-java hljs" data-nodeid="1402"><code data-language="java">Iterator&lt;SelectionKey&gt; events = selector.selectedKeys().iterator();
+ &nbsp; &nbsp;<span class="hljs-keyword">while</span> (events.hasNext()) {
+ &nbsp; &nbsp; &nbsp; &nbsp;SelectionKey event = events.next();
+ &nbsp; &nbsp; &nbsp;  ...
+ &nbsp; &nbsp; &nbsp; &nbsp;events.remove();
+ &nbsp;  }
+}
+</code></pre>
+<p data-nodeid="1403">有新的连接到达时，我们订阅了更多的事件。对于我们的数据读取来说，对应的事件就是 OP_READ。和 BIO 编程面向流的方式不同，NIO 操作的对象是抽象的概念 Channel，通过缓冲区进行数据交换。</p>
+<pre class="lang-java hljs" data-nodeid="1404"><code data-language="java">SocketChannel sc = ssc.accept();
+sc.configureBlocking(<span class="hljs-keyword">false</span>);
+sc.register(selector, SelectionKey.OP_READ);
+</code></pre>
+<p data-nodeid="1405">值得注意的是：服务端和客户端的实现方式，可以是不同的。比如，服务端是 NIO，客户端可以是 BIO，它们并没有什么强制要求。</p>
+<p data-nodeid="1406"><strong data-nodeid="1571">另外一个面试时候经常问到的事件就是 OP_WRITE</strong>。我们上面提到过，这个事件是表示写就绪的，当底层的缓冲区有空闲，这个事件就会一直发生，浪费占用 CPU 资源。所以，我们一般是不注册 OP_WRITE 的。</p>
+<p data-nodeid="1407">这里还有一个细节，在读取数据的时候，并没有像 BIO 的方式一样使用循环来获取数据。</p>
+<p data-nodeid="1408">如下面的代码，我们创建了一个 1024 字节的缓冲区，用于数据的读取。如果连接中的数据，大于 1024 字节怎么办？</p>
+<pre class="lang-java hljs" data-nodeid="1409"><code data-language="java">SocketChannel sc = (SocketChannel) event.channel();
+ByteBuffer buf = ByteBuffer.allocate(<span class="hljs-number">1024</span>);
+<span class="hljs-keyword">int</span> size = sc.read(buf);
+</code></pre>
+<p data-nodeid="1410">这涉及两种事件的通知机制：</p>
+<ul data-nodeid="1411">
+<li data-nodeid="1412">
+<p data-nodeid="1413"><strong data-nodeid="1579">水平触发</strong>(level-triggered) 称作 LT 模式。只要缓冲区有数据，事件就会一直发生</p>
+</li>
+<li data-nodeid="1414">
+<p data-nodeid="1415"><strong data-nodeid="1584">边缘触发</strong>(edge-triggered) 称作 ET 模式。缓冲区有数据，仅会触发一次。事件想要再次触发，必须先将 fd 中的数据读完才行</p>
+</li>
+</ul>
+<p data-nodeid="1416">可以看到，Java 的 NIO 采用的就是水平触发的方式。LT 模式频繁环唤醒线程，效率相比较ET模式低，所以 Netty 使用 JNI 的方式，实现了 ET 模式，效率上更高一些。</p>
+<h3 data-nodeid="1417">Reactor 模式</h3>
+<p data-nodeid="1418">了解了 BIO 和 NIO 的一些使用方式，Reactor 模式就呼之欲出了。</p>
+<p data-nodeid="1419">NIO 是基于事件机制的，有一个叫作 Selector 的选择器，阻塞获取关注的事件列表。获取到事件列表后，可以通过分发器，进行真正的数据操作。</p>
+<p data-nodeid="1420"><img src="https://s0.lgstatic.com/i/image/M00/48/91/Ciqc1F9MysaAZw9aAADxUNI1q_I139.png" alt="Drawing 5.png" data-nodeid="1591"></p>
+<blockquote data-nodeid="1421">
+<p data-nodeid="1422">该图来自 Doug Lea 的<a href="http://gee.cs.oswego.edu/dl/cpjslides/nio.pdf" data-nodeid="1595">《</a><a href="http://gee.cs.oswego.edu/dl/cpjslides/nio.pdf" data-nodeid="1598">Scalable IO in Java》</a>，该图指明了最简单的 Reactor 模型的基本元素。</p>
+</blockquote>
+<p data-nodeid="1423">你可以回看下我在上文举例的 “Java 中的 NIO 代码”，对比分析一下，你会发现 Reactor</p>
+<p data-nodeid="1424">模型 里面有四个主要元素：</p>
+<ul data-nodeid="1425">
+<li data-nodeid="1426">
+<p data-nodeid="1427"><strong data-nodeid="1606">Acceptor</strong>处理 client 的连接，并绑定具体的事件处理器；</p>
+</li>
+<li data-nodeid="1428">
+<p data-nodeid="1429"><strong data-nodeid="1611">Event</strong>具体发生的事件，比如图中s的read、send等；</p>
+</li>
+<li data-nodeid="1430">
+<p data-nodeid="1431"><strong data-nodeid="1616">Handler</strong>执行具体事件的处理者，比如处理读写事件的具体逻辑；</p>
+</li>
+<li data-nodeid="1432">
+<p data-nodeid="1433"><strong data-nodeid="1621">Reactor</strong>将具体的事件分配（dispatch）给 Handler。</p>
+</li>
+</ul>
+<p data-nodeid="1434">我们可以对上面的模型进行进一步细化，如下图所示，将 Reactor 分为 mainReactor 和 subReactor 两部分。</p>
+<p data-nodeid="1435"><img src="https://s0.lgstatic.com/i/image/M00/48/91/Ciqc1F9MytSAebMfAAFlMTAoyJQ496.png" alt="Drawing 7.png" data-nodeid="1625"></p>
+<blockquote data-nodeid="1436">
+<p data-nodeid="1437">该图来自 Doug Lea 的 <a href="http://gee.cs.oswego.edu/dl/cpjslides/nio.pdf" data-nodeid="1629">《Scalable IO in Java》</a></p>
+</blockquote>
+<ul data-nodeid="1438">
+<li data-nodeid="1439">
+<p data-nodeid="1440"><strong data-nodeid="1634">mainReactor</strong>负责监听处理新的连接，然后将后续的事件处理交给 subReactor；</p>
+</li>
+<li data-nodeid="1441">
+<p data-nodeid="1442"><strong data-nodeid="1639">subReactor</strong>对事件处理的方式，也由阻塞模式变成了多线程处理，引入了任务队列的模式。</p>
+</li>
+</ul>
+<p data-nodeid="1443">熟悉 Netty 的同学可以看到，这个 Reactor 模型就是 Netty 设计的基础。在 Netty 中，Boss 线程对应着对连接的处理和分派，相当于 mainReactor；Worker 线程对应着 subReactor，使用多线程负责读写事件的分发和处理。</p>
+<p data-nodeid="1444">这种模式将每个组件的职责分得更细，耦合度也更低，能有效解决 C10k 问题。</p>
+<h3 data-nodeid="1445">AIO</h3>
+<p data-nodeid="1446">关于 NIO 的概念，误解还是比较多的。</p>
+<p data-nodeid="1447"><strong data-nodeid="1647">面试官可能会问你：为什么我在使用 NIO 时，使用 Channel 进行读写，socket 的操作依然是阻塞的？NIO 的作用主要体现在哪里？</strong></p>
+<pre class="lang-java hljs" data-nodeid="1448"><code data-language="java"><span class="hljs-comment">//这行代码是阻塞的</span>
+<span class="hljs-keyword">int</span> size = sc.read(buf);
+</code></pre>
+<p data-nodeid="1449">这时你可以回答：NIO 只负责对发生在 fd 描述符上的事件进行通知。事件的获取和通知部分是非阻塞的，但收到通知之后的操作，却是阻塞的，即使使用多线程去处理这些事件，它依然是阻塞的。</p>
+<p data-nodeid="1450">AIO 更近一步，将这些对事件的操作也变成非阻塞的。下面是一段典型的 AIO 代码，它通过注册 CompletionHandler&nbsp;回调函数进行事件处理。这里的事件是隐藏的，比如 read 函数，它不仅仅代表 Channel 可读了，而且会把数据自动的读取到 ByteBuffer 中。等完成了读取，就会通过回调函数通知你，进行后续的操作。</p>
+<pre class="lang-java hljs" data-nodeid="1451"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">AIO</span> </span>{
+ &nbsp; &nbsp;<span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">main</span><span class="hljs-params">(String[] args)</span> <span class="hljs-keyword">throws</span> Exception </span>{
+ &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">int</span> port = <span class="hljs-number">8888</span>;
+ &nbsp; &nbsp; &nbsp; &nbsp;AsynchronousServerSocketChannel ssc = AsynchronousServerSocketChannel.open();
+ &nbsp; &nbsp; &nbsp; &nbsp;ssc.bind(<span class="hljs-keyword">new</span> InetSocketAddress(<span class="hljs-string">"localhost"</span>, port));
+ &nbsp; &nbsp; &nbsp; &nbsp;ssc.accept(<span class="hljs-keyword">null</span>, <span class="hljs-keyword">new</span> CompletionHandler&lt;AsynchronousSocketChannel, Object&gt;() {
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">job</span><span class="hljs-params">(<span class="hljs-keyword">final</span> AsynchronousSocketChannel sc)</span> </span>{
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;ByteBuffer buffer = ByteBuffer.allocate(<span class="hljs-number">1024</span>);
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;sc.read(buffer, buffer, <span class="hljs-keyword">new</span> CompletionHandler&lt;Integer, ByteBuffer&gt;() {
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-meta">@Override</span>
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">completed</span><span class="hljs-params">(Integer result, ByteBuffer attachment)</span> </span>{
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;String str = <span class="hljs-keyword">new</span> String(attachment.array()).trim();
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;ByteBuffer wrap = ByteBuffer.wrap((<span class="hljs-string">"PONG:"</span> + str).getBytes());
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;sc.write(wrap, <span class="hljs-keyword">null</span>, <span class="hljs-keyword">new</span> CompletionHandler&lt;Integer, Object&gt;() {
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-meta">@Override</span>
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">completed</span><span class="hljs-params">(Integer result, Object attachment)</span> </span>{
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;job(sc);
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  }
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-meta">@Override</span>
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">failed</span><span class="hljs-params">(Throwable exc, Object attachment)</span> </span>{
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;System.out.println(<span class="hljs-string">"error"</span>);
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  }
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  });
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  }
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-meta">@Override</span>
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">failed</span><span class="hljs-params">(Throwable exc, ByteBuffer attachment)</span> </span>{
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;System.out.println(<span class="hljs-string">"error"</span>);
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  }
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  });
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  }
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-meta">@Override</span>
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">completed</span><span class="hljs-params">(AsynchronousSocketChannel sc, Object attachment)</span> </span>{
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;ssc.accept(<span class="hljs-keyword">null</span>, <span class="hljs-keyword">this</span>);
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;job(sc);
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  }
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-meta">@Override</span>
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">failed</span><span class="hljs-params">(Throwable exc, Object attachment)</span> </span>{
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;exc.printStackTrace();
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;System.out.println(<span class="hljs-string">"error"</span>);
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  }
+ &nbsp; &nbsp; &nbsp;  });
+ &nbsp; &nbsp; &nbsp; &nbsp;Thread.sleep(Integer.MAX_VALUE);
+ &nbsp;  }
+}
+</code></pre>
+<p data-nodeid="1452">AIO 是 Java 1.7 加入的，理论上性能会有提升，但实际测试并不理想。这是因为，AIO主要处理对数据的自动读写操作。这些操作的具体逻辑，假如不放在框架中，也要放在内核中，并没有节省操作步骤，对性能的影响有限。而 Netty 的 NIO 模型加上多线程处理，在这方面已经做得很好，编程模式也比AIO简单。</p>
+<p data-nodeid="1453">所以，市面上对 AIO 的实践并不多，在采用技术选型的时候，一定要谨慎。</p>
+<h3 data-nodeid="1454">响应式编程</h3>
+<p data-nodeid="1455">你可能听说过 Spring 5.0 的 WebFlux，WebFlux 是可以替代 Spring MVC 的一套解决方案，可以编写响应式的应用，两者之间的关系如下图所示：</p>
+<p data-nodeid="1456"><img src="https://s0.lgstatic.com/i/image/M00/48/92/Ciqc1F9My2WAeCGbAACrOS4gYGA066.png" alt="image.png" data-nodeid="1656"></p>
+<p data-nodeid="1457">Spring WebFlux 的底层使用的是 Netty，所以操作是异步非阻塞的，类似的组件还有 vert.x、akka、rxjava 等。</p>
+<p data-nodeid="1458">WebFlux 是运行在 project reactor 之上的一个封装，其根本特性是后者提供的，至于再底层的非阻塞模型，就是由 Netty 保证的了。</p>
+<p data-nodeid="1459">非阻塞的特性我们可以理解，那响应式又是什么概念呢？</p>
+<p data-nodeid="1460"><strong data-nodeid="1664">响应式编程</strong>是一种面向数据流和变化传播的编程范式。这意味着可以在编程语言中很方便地表达静态或动态的数据流，而相关的计算模型会自动将变化的值，通过数据流进行传播。</p>
+<p data-nodeid="1461">这段话很晦涩，在编程方面，它表达的意思就是：<strong data-nodeid="1669">把生产者消费者模式，使用简单的API 表示出来，并自动处理背压（Backpressure）问题。</strong></p>
+<p data-nodeid="1462">背压，指的是生产者与消费者之间的流量控制，通过将操作全面异步化，来减少无效的等待和资源消耗。</p>
+<p data-nodeid="1463">Java 的 Lambda 表达式可以让编程模型变得非常简单，Java 9 更是引入了响应式流（Reactive Stream），方便了我们的操作。</p>
+<p data-nodeid="1464">比如，下面是 Spring Cloud GateWay 的 Fluent API 写法，响应式编程的 API 都是类似的。</p>
+<pre class="lang-java hljs" data-nodeid="1465"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">public</span> RouteLocator <span class="hljs-title">customerRouteLocator</span><span class="hljs-params">(RouteLocatorBuilder builder)</span> </span>{
+ &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">return</span> builder.routes()
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  .route(r -&gt; r.path(<span class="hljs-string">"/market/**"</span>)
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  .filters(f -&gt; f.filter(<span class="hljs-keyword">new</span> RequestTimeFilter())
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  .addResponseHeader(<span class="hljs-string">"X-Response-Default-Foo"</span>, <span class="hljs-string">"Default-Bar"</span>))
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  .uri(<span class="hljs-string">"http://localhost:8080/market/list"</span>)
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  .order(<span class="hljs-number">0</span>)
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  .id(<span class="hljs-string">"customer_filter_router"</span>)
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  )
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  .build();
+ &nbsp;  }
+</code></pre>
+<p data-nodeid="1466">从传统的开发模式过渡到 Reactor 的开发模式，是有一定成本的，不过它确实能够提高我们应用程序的性能，至于是否采用，这取决于你在编程难度和性能之间的取舍。</p>
+<h3 data-nodeid="1467">小结</h3>
+<p data-nodeid="1468">本课时，我们系统地学习了 BIO、NIO、AIO 等概念和基本的编程模型 Reactor，我们了解到：</p>
+<ul data-nodeid="1681">
+<li data-nodeid="1682">
+<p data-nodeid="1683">BIO 的线程模型是一个连接对应一个线程的，非常浪费资源；</p>
+</li>
+<li data-nodeid="1684">
+<p data-nodeid="1685" class="">NIO通过对关键事件的监听，通过主动通知的方式完成非阻塞操作，但它对事件本身的处理依然是阻塞的；</p>
+</li>
+<li data-nodeid="1686">
+<p data-nodeid="1687">AIO 完全是异步非阻塞的，但现实中使用很少。</p>
+</li>
+</ul>
+
+<p data-nodeid="1476">使用 Netty 的多 Acceptor 模式和多线程模式，我们能够方便地完成类似 AIO 这样的操作。Netty 的事件触发机制使用了高效的 ET 模式，使得支持的连接更多，性能更高。</p>
+<p data-nodeid="1477" class="">使用 Netty，能够构建响应式编程的基础，加上类似 Lambda 表达式这样的书写风格，能够完成类似 WebFlux 这样的响应式框架。响应式编程是一个趋势，现在有越来越多的框架和底层的数据库支持响应式编程，我们的应用响应也会更加迅速。</p></div>
+
+</body></html>

@@ -1,0 +1,1420 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>14 | 乐观锁机制和重试机制在实战中应该怎么用?</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>14 | 乐观锁机制和重试机制在实战中应该怎么用?</h1><p data-nodeid="143101">你好，欢迎来到第 14 课时，本课时我要为你揭晓乐观锁机制的“神秘面纱”，在前面的留言中，我看到很多人对这部分内容很感兴趣，因此希望通过我的讲解，你可以打开思路，真正掌握乐观锁机制和重试机制在实战中的用法。那么乐观锁到底是什么呢？它的神奇之处到底在哪？</p>
+
+
+<h3 data-nodeid="142254">什么是乐观锁？</h3>
+<p data-nodeid="142255">乐观锁在实际开发过程中很常用，它没有加锁、没有阻塞，在多线程环境以及高并发的情况下 CPU 的利用率是最高的，吞吐量也是最大的。</p>
+<p data-nodeid="142256">而 Java Persistence API 协议也对乐观锁的操作做了规定：通过指定 @Version 字段对数据增加版本号控制，进而在更新的时候判断版本号是否有变化。如果没有变化就直接更新；如果有变化，就会更新失败并抛出“OptimisticLockException”异常。我们用 SQL 表示一下乐观锁的做法，代码如下：</p>
+<pre class="lang-java hljs" data-nodeid="142257"><code data-language="java">select uid,name,version from user where id=<span class="hljs-number">1</span>;
+update user set name=<span class="hljs-string">'jack'</span>, version=version+<span class="hljs-number">1</span> where id=<span class="hljs-number">1</span> and version=<span class="hljs-number">1</span>
+</code></pre>
+<p data-nodeid="142258">假设本次查询的 version=1，在更新操作时，加上这次查出来的 Version，这样和我们上一个版本相同，就会更新成功，并且不会出现互相覆盖的问题，保证了数据的原子性。</p>
+<p data-nodeid="142259">这就是乐观锁在数据库里面的应用。那么在 Spring Data JPA 里面怎么做呢？我们通过用法来了解一下。</p>
+<h3 data-nodeid="142260">乐观锁的实现方法</h3>
+<p data-nodeid="142261">JPA 协议规定，想要实现乐观锁可以通过 @Version 注解标注在某个字段上面，并且可以持久化到 DB 即可。其支持的类型有如下四种：</p>
+<ul data-nodeid="142262">
+<li data-nodeid="142263">
+<p data-nodeid="142264"><code data-backticks="1" data-nodeid="142383">int</code>or<code data-backticks="1" data-nodeid="142385">Integer</code></p>
+</li>
+<li data-nodeid="142265">
+<p data-nodeid="142266"><code data-backticks="1" data-nodeid="142386">short</code>or<code data-backticks="1" data-nodeid="142388">Short</code></p>
+</li>
+<li data-nodeid="142267">
+<p data-nodeid="142268"><code data-backticks="1" data-nodeid="142389">long</code>or<code data-backticks="1" data-nodeid="142391">Long</code></p>
+</li>
+<li data-nodeid="142269">
+<p data-nodeid="142270"><code data-backticks="1" data-nodeid="142392">java.sql.Timestamp</code></p>
+</li>
+</ul>
+<p data-nodeid="142271">这样就可以完成乐观锁的操作。我比较推荐使用 Integer 类型的字段，因为这样语义比较清晰、简单。</p>
+<blockquote data-nodeid="142272">
+<p data-nodeid="142273">注意：Spring Data JPA 里面有两个 @Version 注解，请使用 @javax.persistence.Version，而不是 @org.springframework.data.annotation.Version。</p>
+</blockquote>
+<p data-nodeid="142274">我们通过如下几个步骤详细讲一下 @Version 的用法。</p>
+<p data-nodeid="142275"><strong data-nodeid="142399">第一步：实体里面添加带 @Version 注解的持久化字段。</strong></p>
+<p data-nodeid="142276">我在上一课时讲到了 BaseEntity，现在直接在这个基类里面添加 @Version 即可，当然也可以把这个字段放在 sub-class-entity 里面。我比较推荐你放在基类里面，因为这段逻辑是公共的字段。改动完之后我们看看会发生什么变化，如下所示：</p>
+<pre class="lang-java hljs" data-nodeid="142277"><code data-language="java"><span class="hljs-meta">@Data</span>
+<span class="hljs-meta">@MappedSuperclass</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">BaseEntity</span> </span>{
+   <span class="hljs-meta">@Id</span>
+   <span class="hljs-meta">@GeneratedValue(strategy= GenerationType.AUTO)</span>
+   <span class="hljs-keyword">private</span> Long id;
+   <span class="hljs-meta">@Version</span>
+   <span class="hljs-keyword">private</span> Integer version;
+   <span class="hljs-comment">//......当然也可以用上一课时讲解的 auditing 字段，这里我们先省略</span>
+}
+</code></pre>
+<p data-nodeid="143665"><strong data-nodeid="143669">第二步：用 UserInfo 实体继承 BaseEntity，就可以实现 @Version 的效果，代码如下：</strong></p>
+
+
+<pre class="lang-java hljs" data-nodeid="142280"><code data-language="java"><span class="hljs-meta">@Entity</span>
+<span class="hljs-meta">@Data</span>
+<span class="hljs-meta">@Builder</span>
+<span class="hljs-meta">@AllArgsConstructor</span>
+<span class="hljs-meta">@NoArgsConstructor</span>
+<span class="hljs-meta">@ToString(callSuper = true)</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">UserInfo</span> <span class="hljs-keyword">extends</span> <span class="hljs-title">BaseEntity</span> </span>{
+   <span class="hljs-meta">@Id</span>
+   <span class="hljs-meta">@GeneratedValue(strategy= GenerationType.AUTO)</span>
+   <span class="hljs-keyword">private</span> Long id;
+   <span class="hljs-keyword">private</span> Integer ages;
+   <span class="hljs-keyword">private</span> String telephone;
+}
+</code></pre>
+<p data-nodeid="144230"><strong data-nodeid="144234">第三步：创建 UserInfoRepository，方便进行 DB 操作。</strong></p>
+
+
+<pre class="lang-java hljs" data-nodeid="142283"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">interface</span> <span class="hljs-title">UserInfoRepository</span> <span class="hljs-keyword">extends</span> <span class="hljs-title">JpaRepository</span>&lt;<span class="hljs-title">UserInfo</span>, <span class="hljs-title">Long</span>&gt; </span>{}
+</code></pre>
+<p data-nodeid="142284"><strong data-nodeid="142412">第四步：创建 UserInfoService 和 UserInfoServiceImpl，用来模拟 Service 的复杂业务逻辑。</strong></p>
+<pre class="lang-java hljs" data-nodeid="142285"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">interface</span> <span class="hljs-title">UserInfoService</span> </span>{
+   <span class="hljs-comment">/**
+    * 根据 UserId 产生的一些业务计算逻辑
+    */</span>
+   <span class="hljs-function">UserInfo <span class="hljs-title">calculate</span><span class="hljs-params">(Long userId)</span></span>;
+}
+<span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">UserInfoServiceImpl</span> <span class="hljs-keyword">implements</span> <span class="hljs-title">UserInfoService</span> </span>{
+   <span class="hljs-meta">@Autowired</span>
+   <span class="hljs-keyword">private</span> UserInfoRepository userInfoRepository;
+   <span class="hljs-comment">/**
+    * 根据 UserId 产生的一些业务计算逻辑
+    * <span class="hljs-doctag">@param</span> userId
+    * <span class="hljs-doctag">@return</span>
+    */</span>
+   <span class="hljs-meta">@Override</span>   <span class="hljs-meta">@org</span>.springframework.transaction.annotation.<span class="hljs-function">Transactional
+   <span class="hljs-keyword">public</span> UserInfo <span class="hljs-title">calculate</span><span class="hljs-params">(Long userId)</span> </span>{
+      UserInfo userInfo = userInfoRepository.getOne(userId);
+      <span class="hljs-keyword">try</span> {
+         <span class="hljs-comment">//模拟复杂的业务计算逻辑耗时操作；</span>
+         Thread.sleep(<span class="hljs-number">500</span>);
+      } <span class="hljs-keyword">catch</span> (InterruptedException e) {
+         e.printStackTrace();
+      }
+      userInfo.setAges(userInfo.getAges()+<span class="hljs-number">1</span>);
+      <span class="hljs-keyword">return</span> userInfoRepository.saveAndFlush(userInfo);
+   }
+}
+</code></pre>
+<p data-nodeid="144793">其中，我们通过 @Transactional 开启事务，并且在查询方法后面模拟复杂业务逻辑，用来呈现多线程的并发问题。</p>
+<p data-nodeid="144794"><strong data-nodeid="144799">第五步：按照惯例写个测试用例测试一下。</strong></p>
+
+<pre class="lang-java hljs" data-nodeid="142287"><code data-language="java"><span class="hljs-meta">@ExtendWith(SpringExtension.class)</span>
+<span class="hljs-meta">@DataJpaTest</span>
+<span class="hljs-meta">@ComponentScan(basePackageClasses=UserInfoServiceImpl.class)</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">UserInfoServiceTest</span> </span>{
+   <span class="hljs-meta">@Autowired</span>
+   <span class="hljs-keyword">private</span> UserInfoService userInfoService;
+   <span class="hljs-meta">@Autowired</span>
+   <span class="hljs-keyword">private</span> UserInfoRepository userInfoRepository;
+   <span class="hljs-meta">@Test</span>
+   <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">testVersion</span><span class="hljs-params">()</span> </span>{
+      <span class="hljs-comment">//加一条数据</span>
+      UserInfo userInfo = userInfoRepository.save(UserInfo.builder().ages(<span class="hljs-number">20</span>).telephone(<span class="hljs-string">"1233456"</span>).build());
+      <span class="hljs-comment">//验证一下数据库里面的值</span>
+      Assertions.assertEquals(<span class="hljs-number">0</span>,userInfo.getVersion());
+      Assertions.assertEquals(<span class="hljs-number">20</span>,userInfo.getAges());
+      userInfoService.calculate(<span class="hljs-number">1L</span>);
+      <span class="hljs-comment">//验证一下更新成功的值</span>
+      UserInfo u2 =  userInfoRepository.getOne(<span class="hljs-number">1L</span>);
+      Assertions.assertEquals(<span class="hljs-number">1</span>,u2.getVersion());
+      Assertions.assertEquals(<span class="hljs-number">21</span>,u2.getAges());
+   }
+   <span class="hljs-meta">@Test</span>
+   <span class="hljs-meta">@Rollback(false)</span>
+   <span class="hljs-meta">@Transactional(propagation = Propagation.NEVER)</span>
+   <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">testVersionException</span><span class="hljs-params">()</span> </span>{
+      <span class="hljs-comment">//加一条数据</span>
+  userInfoRepository.saveAndFlush(UserInfo.builder().ages(<span class="hljs-number">20</span>).telephone(<span class="hljs-string">"1233456"</span>).build());
+      <span class="hljs-comment">//模拟多线程执行两次</span>
+      <span class="hljs-keyword">new</span> Thread(() -&gt; userInfoService.calculate(<span class="hljs-number">1L</span>)).start();
+      <span class="hljs-keyword">try</span> {
+         Thread.sleep(<span class="hljs-number">10L</span>);<span class="hljs-comment">//</span>
+      } <span class="hljs-keyword">catch</span> (InterruptedException e) {
+         e.printStackTrace();
+      }
+      <span class="hljs-comment">//如果两个线程同时执行会发生乐观锁异常；</span>
+      Exception exception = Assertions.assertThrows(ObjectOptimisticLockingFailureException.class, () -&gt; {
+         userInfoService.calculate(<span class="hljs-number">1L</span>);
+         <span class="hljs-comment">//模拟多线程执行两次</span>
+      });
+      System.out.println(exception);
+   }
+}
+</code></pre>
+<p data-nodeid="145908">从上面的测试得到的结果中，我们执行 testVersion()，会发现在 save 的时候， Version 会自动 +1，第一次初始化为 0；update 的时候也会附带 Version 条件。我们通过下图的 SQL，也可以看到 Version 的变化。</p>
+<p data-nodeid="145909" class=""><img src="https://s0.lgstatic.com/i/image/M00/64/E8/CgqCHl-ZUkCASJB6AAH97IuFt1U060.png" alt="Drawing 0.png" data-nodeid="145913"></p>
+
+
+<p data-nodeid="142290">而当面我们调用 testVersionException() 测试方法的时候，利用多线程模拟两个并发情况，会发现两个线程同时取到了历史数据，并在稍后都对历史数据进行了更新。</p>
+<p data-nodeid="147022">由此你会发现，第二次测试的结果是乐观锁异常，更新不成功。请看一下测试的日志。</p>
+<p data-nodeid="147023" class=""><img src="https://s0.lgstatic.com/i/image/M00/64/DC/Ciqc1F-ZUkuAZ6qBAAM4TfMZ9YY533.png" alt="Drawing 1.png" data-nodeid="147027"></p>
+
+
+<p data-nodeid="142293">通过日志又会发现，两个 SQL 同时更新的时候，Version 是一样的，是它导致了乐观锁异常。</p>
+<blockquote data-nodeid="142294">
+<p data-nodeid="142295">注意：乐观锁异常不仅仅是同一个方法多线程才会出现的问题，我们只是为了方便测试而采用同一个方法；不同的方法、不同的项目，都有可能导致乐观锁异常。乐观锁的本质是 SQL 层面发生的，和使用的框架、技术没有关系。</p>
+</blockquote>
+<p data-nodeid="142296">那么我们分析一下，@Version 对 save 的影响是什么，怎么判断对象是新增还是 update?</p>
+<h3 data-nodeid="142297">@Version 对 Save 方法的影响</h3>
+<p data-nodeid="142298">通过上面的实例，你不难发现，@Version 底层实现逻辑和 @EntityListeners 一点关系没有，底层是通过 Hibernate 判断实体里面是否有 @Version 的持久化字段，利用乐观锁机制来创建和使用 Version 的值。</p>
+<p data-nodeid="142299">因此，还是那句话：<strong data-nodeid="142438">Java Persistence API 负责制定协议，Hibernate 负责实现逻辑，Spring Data JPA 负责封装和使用</strong>。那么我们来看下 Save 对象的时候，如何判断是新增的还是 merge 的逻辑呢？</p>
+<h4 data-nodeid="142300">isNew 判断的逻辑</h4>
+<p data-nodeid="148136">通过断点，我们可以进入SimpleJpaRepository.class 的 Save 方法中，看到如下图显示的界面：</p>
+<p data-nodeid="148137" class=""><img src="https://s0.lgstatic.com/i/image/M00/64/DC/Ciqc1F-ZUlKALr4SAAGsINmt1QQ621.png" alt="Drawing 2.png" data-nodeid="148141"></p>
+
+
+<p data-nodeid="149250">然后，我们进入JpaMetamodelEntityInformation.class 的 isNew 方法中，又会看到下图显示的界面：</p>
+<p data-nodeid="149251" class=""><img src="https://s0.lgstatic.com/i/image/M00/64/DC/Ciqc1F-ZUlmAKt-nAATVCuJgboE277.png" alt="Drawing 3.png" data-nodeid="149255"></p>
+
+
+<p data-nodeid="142305">其中，我们先看第一段逻辑，判断其中是否有 @Version 标注的属性，并且该属性是否为基础类型。如果不满足条件，调用 super.isNew(entity) 方法，而 super.isNew 里面只判断了 ID 字段是否有值。</p>
+<p data-nodeid="142306">第二段逻辑表达的是，如果有 @Version 字段，那么看看这个字段是否有值，如果没有就返回 true，如果有值则返回 false。</p>
+<p data-nodeid="142307">由此可以得出结论：如果我们有 @Version 注解的字段，就以 @Version 字段来判断新增 / update；如果没有，那么就以 @ID 字段是否有值来判断新增 / update。</p>
+<p data-nodeid="142308">需要注意的是：虽然我们看到的是 merge 方法，但是不一定会执行 update 操作，里面还有很多逻辑，有兴趣的话你可以再 debug 进去看看。</p>
+<p data-nodeid="142309">我直接说一下结论，merge 方法会判断对象是否为游离状态，以及有无 ID 值。它会先触发一条 select 语句，并根据 ID 查一下这条记录是否存在，如果不存在，虽然 ID 和 Version 字段都有值，但也只是执行 insert 语句；如果本条 ID 记录存在，才会执行 update 的 sql。至于这个具体的 insert 和 update 的 sql、传递的参数是什么，你可以通过控制台研究一下。</p>
+<p data-nodeid="142310">总之，如果我们使用纯粹的 saveOrUpdate方法，那么完全不需要自己写这一段逻辑，只要保证 ID 和 Version 存在该有的值就可以了，JPA 会帮我们实现剩下的逻辑。</p>
+<p data-nodeid="142311">实际工作中，特别是分布式更新的时候，很容易碰到乐观锁，这时候还要结合重试机制才能完美解决我们的问题，接下来看看具体该怎么做。</p>
+<h3 data-nodeid="142312">乐观锁机制和重试机制在实战中应该怎么用?</h3>
+<p data-nodeid="142313">我们先了解一下 Spring 支持的重试机制是什么样的。</p>
+<h4 data-nodeid="142314">重试机制详解</h4>
+<p data-nodeid="142315">Spring 全家桶里面提供了@Retryable 的注解，会帮我们进行重试。下面看一个 @Retryable 的例子。</p>
+<p data-nodeid="142316"><strong data-nodeid="142462">第一步：利用 gradle 引入 spring-retry 的依赖 jar，如下所示：</strong></p>
+<pre class="lang-java hljs" data-nodeid="142317"><code data-language="java">implementation <span class="hljs-string">'org.springframework.retry:spring-retry'</span>
+</code></pre>
+<p data-nodeid="150364"><strong data-nodeid="150369">第二步：在 UserInfoserviceImpl 的方法中添加 @Retryable 注解，就可以实现重试的机制了，代码如下：</strong></p>
+<p data-nodeid="150365" class=""><img src="https://s0.lgstatic.com/i/image/M00/64/E8/CgqCHl-ZUmOAOdGWAADMjETgqAc000.png" alt="Drawing 4.png" data-nodeid="150372"></p>
+
+
+<p data-nodeid="142320"><strong data-nodeid="142473">第三步：新增一个RetryConfiguration并添加@EnableRetry 注解，是为了开启重试机制，使 @Retryable 生效。</strong></p>
+<pre class="lang-java hljs" data-nodeid="142321"><code data-language="java"><span class="hljs-meta">@EnableRetry</span>
+<span class="hljs-meta">@Configuration</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">RetryConfiguration</span> </span>{
+}
+</code></pre>
+<p data-nodeid="142322"><strong data-nodeid="142477">第四步：新建一个测试用例测试一下。</strong></p>
+<pre class="lang-java hljs" data-nodeid="142323"><code data-language="java"><span class="hljs-meta">@ExtendWith(SpringExtension.class)</span>
+<span class="hljs-meta">@DataJpaTest</span>
+<span class="hljs-meta">@ComponentScan(basePackageClasses=UserInfoServiceImpl.class)</span>
+<span class="hljs-meta">@Import(RetryConfiguration.class)</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">UserInfoServiceRetryTest</span> </span>{
+   <span class="hljs-meta">@Autowired</span>
+   <span class="hljs-keyword">private</span> UserInfoService userInfoService;
+   <span class="hljs-meta">@Autowired</span>
+   <span class="hljs-keyword">private</span> UserInfoRepository userInfoRepository;
+   <span class="hljs-meta">@Test</span>
+   <span class="hljs-meta">@Rollback(false)</span>
+   <span class="hljs-meta">@Transactional(propagation = Propagation.NEVER)</span>
+   <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">testRetryable</span><span class="hljs-params">()</span> </span>{
+      <span class="hljs-comment">//加一条数据</span>
+    userInfoRepository.saveAndFlush(UserInfo.builder().ages(<span class="hljs-number">20</span>).telephone(<span class="hljs-string">"1233456"</span>).build());
+      <span class="hljs-comment">//模拟多线程执行两次</span>
+      <span class="hljs-keyword">new</span> Thread(() -&gt; userInfoService.calculate(<span class="hljs-number">1L</span>)).start();
+      <span class="hljs-keyword">try</span> {
+         Thread.sleep(<span class="hljs-number">10L</span>);<span class="hljs-comment">//</span>
+      } <span class="hljs-keyword">catch</span> (InterruptedException e) {
+         e.printStackTrace();
+      }
+      <span class="hljs-comment">//模拟多线程执行两次，由于加了@EnableRetry，所以这次也会成功</span>
+      UserInfo userInfo = userInfoService.calculate(<span class="hljs-number">1L</span>);
+      <span class="hljs-comment">//经过了两次计算，年龄变成了 22</span>
+      Assertions.assertEquals(<span class="hljs-number">22</span>,userInfo.getAges());
+      Assertions.assertEquals(<span class="hljs-number">2</span>,userInfo.getVersion());
+   }
+}
+</code></pre>
+<p data-nodeid="142324">这里要说的是，我们在测试用例里面执行 @Import(RetryConfiguration.class)，这样就开启了重试机制，然后继续在里面模拟了两次线程调用，发现第二次发生了乐观锁异常之后依然成功了。为什么呢？我们通过日志可以看到，它是失败了一次之后又进行了重试，所以第二次成功了。</p>
+<p data-nodeid="142325">通过案例你会发现 Retry 的逻辑其实很简单，只需要利用 @Retryable 注解即可，那么我们看一下这个注解的详细用法。</p>
+<h4 data-nodeid="142326">@Retryable 详细用法</h4>
+<p data-nodeid="151481">其源码里面提供了很多方法，看下面这个图片。</p>
+<p data-nodeid="151482" class=""><img src="https://s0.lgstatic.com/i/image/M00/64/E8/CgqCHl-ZUmyASpCIAAAw6lXSyoU826.png" alt="Drawing 5.png" data-nodeid="151486"></p>
+
+
+<p data-nodeid="142329">下面对常用的 @Retryable 注解中的参数做一下说明：</p>
+<ul data-nodeid="152595">
+<li data-nodeid="152596">
+<p data-nodeid="152597">maxAttempts：最大重试次数，默认为 3，如果要设置的重试次数为 3，可以不写；</p>
+</li>
+<li data-nodeid="152598">
+<p data-nodeid="152599">value：抛出指定异常才会重试；</p>
+</li>
+<li data-nodeid="152600">
+<p data-nodeid="152601">include：和 value 一样，默认为空，当 exclude 也为空时，默认异常；</p>
+</li>
+<li data-nodeid="152602">
+<p data-nodeid="152603">exclude：指定不处理的异常；</p>
+</li>
+<li data-nodeid="152604">
+<p data-nodeid="152605">backoff：重试等待策略，默认使用 @Backoff@Backoff 的 value，默认为 1s，请看下面这个图。</p>
+</li>
+</ul>
+<p data-nodeid="152606" class=""><img src="https://s0.lgstatic.com/i/image/M00/64/DC/Ciqc1F-ZUnKAJlLUAAAlCGiHUTA658.png" alt="Drawing 6.png" data-nodeid="152614"></p>
+
+
+<p data-nodeid="142342">其中：</p>
+<ul data-nodeid="142343">
+<li data-nodeid="142344">
+<p data-nodeid="142345">value=delay：隔多少毫秒后重试，默认为 1000L，单位是毫秒；</p>
+</li>
+<li data-nodeid="142346">
+<p data-nodeid="142347">multiplier（指定延迟倍数）默认为 0，表示固定暂停 1 秒后进行重试，如果把 multiplier 设置为 1.5，则第一次重试为 2 秒，第二次为 3 秒，第三次为 4.5 秒。</p>
+</li>
+</ul>
+<p data-nodeid="142348">下面是一个关于 @Retryable 扩展的使用例子，具体看一下代码：</p>
+<pre class="lang-java hljs" data-nodeid="142349"><code data-language="java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">interface</span> <span class="hljs-title">MyService</span> </span>{
+&nbsp; &nbsp; <span class="hljs-meta">@Retryable( value = SQLException.class,&nbsp;
+&nbsp; &nbsp; &nbsp; maxAttempts = 2, backoff = @Backoff(delay = 100))</span>
+&nbsp; &nbsp; <span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">retryServiceWithCustomization</span><span class="hljs-params">(String sql)</span> <span class="hljs-keyword">throws</span> SQLException</span>;
+}
+</code></pre>
+<p data-nodeid="142350">可以看到，这里明确指定 SQLException.class 异常的时候需要重试两次，每次中间间隔 100 毫秒。</p>
+<pre class="lang-java hljs" data-nodeid="142351"><code data-language="java"><span class="hljs-meta">@Service</span>&nbsp;
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">interface</span> <span class="hljs-title">MyService</span> </span>{&nbsp;
+&nbsp; <span class="hljs-meta">@Retryable( value = SQLException.class, maxAttemptsExpression = "\${retry.maxAttempts}",
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; backoff = @Backoff(delayExpression = "\${retry.maxDelay}"))</span>&nbsp;
+&nbsp; <span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">retryServiceWithExternalizedConfiguration</span><span class="hljs-params">(String sql)</span> <span class="hljs-keyword">throws</span> SQLException</span>;&nbsp;
+}
+</code></pre>
+<p data-nodeid="153173">此外，你也可以利用 SpEL 表达式读取配置文件里面的值。</p>
+<p data-nodeid="153174">关于 Retryable 的语法就介绍到这里，常用的基本就这些，如果你遇到更复杂的场景，可以到 GitHub 中看一下官方的 Retryable 文档：<a href="https://github.com/spring-projects/spring-retry" data-nodeid="153179">https://github.com/spring-projects/spring-retry</a>。下面再给你分享一个我在使用乐观锁+重试机制中的最佳实践。</p>
+
+<h4 data-nodeid="142353">乐观锁+重试机制的最佳实践</h4>
+<p data-nodeid="142354">我比较建议你使用如下配置：</p>
+<pre class="lang-java hljs" data-nodeid="142355"><code data-language="java"><span class="hljs-meta">@Retryable(value = ObjectOptimisticLockingFailureException.class,backoff = @Backoff(multiplier = 1.5,random = true))</span>
+</code></pre>
+<p data-nodeid="142356">这里明确指定 ObjectOptimisticLockingFailureException.class 等乐观锁异常要进行重试，如果引起其他异常的话，重试会失败，没有意义；而 backoff 采用随机 +1.5 倍的系数，这样基本很少会出现连续 3 次乐观锁异常的情况，并且也很难发生重试风暴而引起系统重试崩溃的问题。</p>
+<p data-nodeid="142357">到这里讲的一直都是乐观锁相关内容，那么 JPA 也支持悲观锁吗？</p>
+<h3 data-nodeid="142358">除了乐观锁，悲观锁的类型怎么实现？</h3>
+<p data-nodeid="142359">Java Persistence API 2.0 协议里面有一个 LockModeType 枚举值，里面包含了所有它支持的乐观锁和悲观锁的值，我们看一下。</p>
+<pre class="lang-java hljs" data-nodeid="142360"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">enum</span> <span class="hljs-title">LockModeType</span>
+</span>{
+    <span class="hljs-comment">//等同于OPTIMISTIC，默认，用来兼容2.0之前的协议</span>
+    READ,
+    <span class="hljs-comment">//等同于OPTIMISTIC_FORCE_INCREMENT，用来兼容2.0之前的协议</span>
+    WRITE,
+    <span class="hljs-comment">//乐观锁，默认，2.0协议新增</span>
+    OPTIMISTIC,
+    <span class="hljs-comment">//乐观写锁，强制version加1，2.0协议新增</span>
+    OPTIMISTIC_FORCE_INCREMENT,
+    <span class="hljs-comment">//悲观读锁 2.0协议新增</span>
+    PESSIMISTIC_READ,
+    <span class="hljs-comment">//悲观写锁，version不变，2.0协议新增</span>
+    PESSIMISTIC_WRITE,
+    <span class="hljs-comment">//悲观写锁，version会新增，2.0协议新增</span>
+    PESSIMISTIC_FORCE_INCREMENT,
+    <span class="hljs-comment">//2.0协议新增无锁状态</span>
+    NONE
+}
+</code></pre>
+<p data-nodeid="142361">悲观锁在 Spring Data JPA 里面是如何支持的呢？很简单，只需要在自己的 Repository 里面覆盖父类的 Repository 方法，然后添加 @Lock 注解并指定 LockModeType 即可，请看如下代码：</p>
+<pre class="lang-java hljs" data-nodeid="142362"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">interface</span> <span class="hljs-title">UserInfoRepository</span> <span class="hljs-keyword">extends</span> <span class="hljs-title">JpaRepository</span>&lt;<span class="hljs-title">UserInfo</span>, <span class="hljs-title">Long</span>&gt; </span>{
+    <span class="hljs-meta">@Lock(LockModeType.PESSIMISTIC_WRITE)</span>
+    <span class="hljs-function">Optional&lt;UserInfo&gt; <span class="hljs-title">findById</span><span class="hljs-params">(Long userId)</span></span>;
+}
+</code></pre>
+<p data-nodeid="154289">你可以看到，UserInfoRepository 里面覆盖了父类的 findById 方法，并指定锁的类型为悲观锁。如果我们将 service 改调用为悲观锁的方法，会发生什么变化呢？如下图所示：</p>
+<p data-nodeid="154290" class=""><img src="https://s0.lgstatic.com/i/image/M00/64/DC/Ciqc1F-ZUoGAJBLoAAERlsfoZ0I396.png" alt="Drawing 7.png" data-nodeid="154294"></p>
+
+
+<p data-nodeid="155403">然后再执行上面测试中 testRetryable 的方法，跑完测试用例的结果依然是通过的，我们看下日志。</p>
+<p data-nodeid="155404" class=""><img src="https://s0.lgstatic.com/i/image/M00/64/DC/Ciqc1F-ZUoeAGW2QAAH9g4lZzE4000.png" alt="Drawing 8.png" data-nodeid="155408"></p>
+
+
+<p data-nodeid="142367">你会看到，刚才的串行操作完全变成了并行操作。所以少了一次 Retry 的过程，结果还是一样的。但是，<strong data-nodeid="142525">你在生产环境中要慎用悲观锁，因为它是阻塞的，一旦发生服务异常，可能会造成死锁的现象。</strong></p>
+<h3 data-nodeid="142368">总结</h3>
+<p data-nodeid="142369">本课时的内容到这里就介绍完了。在这一课时中，我为你详细讲解了乐观锁的概念及使用方法、@Version 对 Save 方法的影响，分享了乐观锁与重试机制的最佳实践，此外也提到了悲观锁的使用方法（不推荐使用）。</p>
+<p data-nodeid="142370">那么现在，你又掌握了 JPA 的一项技能，希望你可以多动手实践，不断总结经验，以提高自己的技术水平。</p>
+<p data-nodeid="155967" class="">下一课时，我们看看 JPA 对 Web MVC 开发者都做了哪些支持呢？</p>
+
+<blockquote data-nodeid="142372">
+<p data-nodeid="142373">点击下方链接查看源码（不定时更新）<br>
+<a href="https://github.com/zhangzhenhuajack/spring-boot-guide/tree/master/spring-data/spring-data-jpa" data-nodeid="142534">https://github.com/zhangzhenhuajack/spring-boot-guide/tree/master/spring-data/spring-data-jpa</a></p>
+</blockquote></div>
+
+</body></html>

@@ -1,0 +1,1450 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>13 | 案例：如何基于 Consul 给微服务添加服务注册与发现？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>13 | 案例：如何基于 Consul 给微服务添加服务注册与发现？</h1><p data-nodeid="556" class="">今天我和你分享的是如何基于 Consul 给微服务添加服务注册与发现的案例。</p>
+
+
+<p data-nodeid="3">微服务架构按业务划分微服务的特点，使得原本聚合了大量业务模块的单体应用被划分为众多的微服务。而大量微服务的出现，势必会带来运维管理上的巨大挑战，于是<strong data-nodeid="67">服务注册与发现这类自动化策略应运而生</strong>。但是引入服务注册与发现就可能引入额外技术栈，增加系统总体的复杂性，比如会引入中心化的服务注册与发现中心这类基础组件。</p>
+<p data-nodeid="4">在本课时，我们将基于 Consul 给微服务添加<strong data-nodeid="73">服务注册与发现</strong>的能力。首先，我们会基于 Kubernetes 搭建一个接近生产环境的 Consul 集群；接着再基于搭建好的 Consul 集群，为我们的微服务添加服务注册与发现的基本能力。</p>
+<h3 data-nodeid="924" class="">Consul 集群</h3>
+
+<p data-nodeid="6">在上一课时，我们分别介绍了 Consul、ZooKeeper 和 Etcd 这 3 种服务注册与发现组件，考虑到 <strong data-nodeid="80">Consul 开箱即用、专注于服务注册与发现</strong>的特点，我们就选取 Consul 作为后续实践使用的服务注册与发现中心组件。</p>
+<p data-nodeid="7">Consul 集群中存在 <strong data-nodeid="90">Server</strong> 和 <strong data-nodeid="91">Client</strong> 两种角色节点，Server 中保存了整个集群的数据，而 Client 负责对本地的服务进行健康检查和转发请求到 Server 中，并且也保存有注册到本节点的服务实例数据。</p>
+<p data-nodeid="1652">关于 Server 节点，一般建议你部署 3 个或者 5 个节点，但并不是越多越好，因为这会增加数据同步的成本。Server 节点之间存在<strong data-nodeid="1659">一个 Leader 和多个 Follower</strong>，通过 Raft 协议维护 Server 之间数据的强一致性。一个典型的 Consul 集群和微服务的部署方式如下：</p>
+<p data-nodeid="2031"><img src="https://s0.lgstatic.com/i/image/M00/40/CB/Ciqc1F8zngqAbS-SAAF6iFt7jEw242.png" alt="1.png" data-nodeid="2035"></p>
+<div data-nodeid="2400" class=""><p style="text-align:center">Consul 集群和微服务部署图</p> </div>
+
+
+
+
+
+
+<p data-nodeid="11">在上述图片的 Consul 集群中，存在 3 个 Server 节点，它们分别部署在不同的服务节点上。我们假设 Node2 节点中的 Server <strong data-nodeid="107">被选举为 Leader，那么其他节点上的 Server 则需要与其同步数据</strong>。</p>
+<p data-nodeid="12">在Node4、Node5 和 Node6 节点中分别部署了 Consul Client，各节点中的各个微服务通过它进行服务注册。Consul Client 会将注册信息通过 RPC 调用转发给 Consul Server，这些服务实例元数据会保存到 Server 中的各个节点，并通过 Raft 协议保证数据的强一致性；同时 Consul Client 会对注册到自身的微服务进行健康检查，并将检查到的服务状态同步到 Server 中。</p>
+<p data-nodeid="13">其实服务实例也可以直接注册到 Consul Server，但是每个节点的注册服务实例数量存在上限，因为节点还负责定时对服务实例进行健康检查，因此在服务实例数量较多的时候，建议使用 Consul Client 分担 Consul Server 的处理工作。</p>
+<p data-nodeid="14">当微服务间要发起远程调用时，比如位于 Node5 节点的 Service C 想要调用 Service B 服务，它将首先向节点上的 Consul Client 根据服务名请求 Service B 的服务实例信息列表，Consul Client 会把请求转发到 Consul Server 中，查询 Service B 的服务实例信息列表返回。接着 Service C 根据一定的负载均衡策略，从中选择合适的 Service B 的实例 IP 和端口发起远程调用。</p>
+<p data-nodeid="15">接下来我们就<strong data-nodeid="116">基于 Kubernetes 搭建一个接近生产环境的 Consul 集群，包含 3 个 Server 节点和 1 个 Client 节点</strong>。考虑到 Pod 的意外重启会导致 Consul Server IP 的变化，我们首先为 Consul Server 声明一个 Service，consul-server-service.yaml 定义如下：</p>
+<pre class="lang-yaml hljs" data-nodeid="16"><code data-language="yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">v1</span> 
+<span class="hljs-attr">kind:</span> <span class="hljs-string">Service</span> 
+<span class="hljs-attr">metadata:</span> 
+  <span class="hljs-attr">name:</span> <span class="hljs-string">consul-server</span> 
+  <span class="hljs-attr">labels:</span> 
+    <span class="hljs-attr">name:</span> <span class="hljs-string">consul-server</span> 
+<span class="hljs-attr">spec:</span> 
+  <span class="hljs-attr">selector:</span> 
+    <span class="hljs-attr">name:</span> <span class="hljs-string">consul-server</span> 
+  <span class="hljs-attr">ports:</span> 
+    <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">http</span> 
+      <span class="hljs-attr">port:</span> <span class="hljs-number">8500</span> 
+      <span class="hljs-attr">targetPort:</span> <span class="hljs-number">8500</span> 
+    <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">https</span> 
+      <span class="hljs-attr">port:</span> <span class="hljs-number">8443</span> 
+      <span class="hljs-attr">targetPort:</span> <span class="hljs-number">8443</span> 
+    <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">rpc</span> 
+      <span class="hljs-attr">port:</span> <span class="hljs-number">8400</span> 
+      <span class="hljs-attr">targetPort:</span> <span class="hljs-number">8400</span> 
+    <span class="hljs-string">....</span> <span class="hljs-string">//</span> <span class="hljs-string">其他暴露的端口</span> 
+</code></pre>
+<p data-nodeid="17">Consul Server 对外暴露了诸多接口，包括响应 HTTP 和 HTTPS 请求的 8500 和 8433 端口等，Service 方式使得这些端口在集群内可通过 ClusterIP:Port 的方式访问。</p>
+<p data-nodeid="18">当 Consul Server 所在的 Pod 重启后，新启动的 Consul Server 需要重新加入集群中，这就需要知道 Leader 节点 IP。对此，我们可以使用 Kubernetes 提供的 DNS 功能访问不同 Pod 的 Consul Server，并通过 StatefulSets Controller 管理 Consul Server，使得每个 Consul Server Pod 有固定的标识用于 DNS 解析。通过这样的方式能够使得 Consul Server 集群可以自动处理 Leader 选举和新节点加入的问题，充分利用 Kubernetes 的自动伸缩和调度能力。consul-server.yaml 配置如下:</p>
+<pre class="lang-yaml hljs" data-nodeid="19"><code data-language="yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">apps/v1</span> 
+<span class="hljs-attr">kind:</span> <span class="hljs-string">StatefulSet</span> 
+<span class="hljs-attr">metadata:</span> 
+  <span class="hljs-attr">name:</span> <span class="hljs-string">consul-server</span> 
+  <span class="hljs-attr">labels:</span> 
+    <span class="hljs-attr">name:</span> <span class="hljs-string">consul-server</span> 
+<span class="hljs-attr">spec:</span> 
+  <span class="hljs-attr">serviceName:</span> <span class="hljs-string">consul-server</span> 
+  <span class="hljs-attr">selector:</span> 
+    <span class="hljs-attr">matchLabels:</span> 
+      <span class="hljs-attr">name:</span> <span class="hljs-string">consul-server</span> 
+  <span class="hljs-attr">replicas:</span> <span class="hljs-number">3</span> 
+  <span class="hljs-attr">template:</span> 
+    <span class="hljs-attr">metadata:</span> 
+      <span class="hljs-attr">labels:</span> 
+        <span class="hljs-attr">name:</span> <span class="hljs-string">consul-server</span> 
+    <span class="hljs-attr">spec:</span> 
+      <span class="hljs-attr">terminationGracePeriodSeconds:</span> <span class="hljs-number">10</span> 
+      <span class="hljs-attr">containers:</span> 
+        <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">consul</span> 
+          <span class="hljs-attr">image:</span> <span class="hljs-string">consul:latest</span> 
+          <span class="hljs-attr">imagePullPolicy:</span> <span class="hljs-string">IfNotPresent</span> 
+          <span class="hljs-attr">args:</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-string">"agent"</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-string">"-server"</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-string">"-bootstrap-expect=3"</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-string">"-ui"</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-string">"-data-dir=/consul/data"</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-string">"-bind=0.0.0.0"</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-string">"-client=0.0.0.0"</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-string">"-advertise=$(POD_IP)"</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-string">"-retry-join=consul-server-0.consul-server.$(NAMESPACE).svc.cluster.local"</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-string">"-retry-join=consul-server-1.consul-server.$(NAMESPACE).svc.cluster.local"</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-string">"-retry-join=consul-server-2.consul-server.$(NAMESPACE).svc.cluster.local"</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-string">"-domain=cluster.local"</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-string">"-disable-host-node-id"</span> 
+          <span class="hljs-attr">env:</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">POD_IP</span> 
+              <span class="hljs-attr">valueFrom:</span> 
+                <span class="hljs-attr">fieldRef:</span> 
+                  <span class="hljs-attr">fieldPath:</span> <span class="hljs-string">status.podIP</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">NAMESPACE</span> 
+              <span class="hljs-attr">valueFrom:</span> 
+                <span class="hljs-attr">fieldRef:</span> 
+                  <span class="hljs-attr">fieldPath:</span> <span class="hljs-string">metadata.namespace</span> 
+          <span class="hljs-attr">ports:</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-attr">containerPort:</span> <span class="hljs-number">8500</span> 
+              <span class="hljs-attr">name:</span> <span class="hljs-string">http</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-attr">containerPort:</span> <span class="hljs-number">8400</span> 
+              <span class="hljs-attr">name:</span> <span class="hljs-string">rpc</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-attr">containerPort:</span> <span class="hljs-number">8443</span> 
+              <span class="hljs-attr">name:</span> <span class="hljs-string">https-port</span> 
+           <span class="hljs-string">//</span> <span class="hljs-string">...其他端口</span> 
+</code></pre>
+<p data-nodeid="20">上述配置中指定了 Controller 为 StatefulSet，这使得被管理的 Pod 具备固定的命名规则，可用于 DNS 解析，它们的 Pod 名称分别为 consul-server-0、consul-server-1 和 consul-server-2。配置还通过 -retry-join 选项让新加入的节点逐一尝试加入每一个 Consul Server，直到发现真正的 Leader 节点并加入 Consul Server 集群中。</p>
+<p data-nodeid="21">为了方便在 Kubernetes 集群外访问 Consul UI，可以通过 NodePort 暴露 Consul Server 的 8500 端口，如下 consul-server-http.yaml 配置所示：</p>
+<pre class="lang-yaml hljs" data-nodeid="22"><code data-language="yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">v1</span> 
+<span class="hljs-attr">kind:</span> <span class="hljs-string">Service</span> 
+<span class="hljs-attr">metadata:</span> 
+  <span class="hljs-attr">name:</span> <span class="hljs-string">consul-server-http</span> 
+<span class="hljs-attr">spec:</span> 
+  <span class="hljs-attr">selector:</span> 
+    <span class="hljs-attr">name:</span> <span class="hljs-string">consul-server</span> 
+  <span class="hljs-attr">type:</span> <span class="hljs-string">NodePort</span> 
+  <span class="hljs-attr">ports:</span> 
+    <span class="hljs-bullet">-</span> <span class="hljs-attr">protocol:</span> <span class="hljs-string">TCP</span> 
+      <span class="hljs-attr">port:</span> <span class="hljs-number">8500</span> 
+      <span class="hljs-attr">targetPort:</span> <span class="hljs-number">8500</span> 
+      <span class="hljs-attr">nodePort:</span> <span class="hljs-number">30098</span> 
+      <span class="hljs-attr">name:</span> <span class="hljs-string">consul-server-tcp</span> 
+</code></pre>
+<p data-nodeid="3123">依次通过 kubectl apply -f {yaml} 启动上述 3 个 yaml 配置后，即可在集群外通过 30098 端口访问 Consul UI，结果图如下：</p>
+<p data-nodeid="3495"><img src="https://s0.lgstatic.com/i/image/M00/40/CB/Ciqc1F8znluACJ3GAAEJfZ-XRZ8007.png" alt="Drawing 1.png" data-nodeid="3499"></p>
+<div data-nodeid="9409" class=""><p style="text-align:center">Consul Server 部署效果图</p> </div>
+<p></p>
+
+
+
+
+
+
+
+<p data-nodeid="26">从上图可以看到目前 Consul 集群中有 3 个 Consul Server，带小星星的 consul-server-0 为 Leader 节点。在前面介绍 Consul 集群的部署图时，为方便 Consul Client 对服务节点上的微服务进行管理，建议在每一个服务节点上部署 Consul Client，对此我们可以通过 DaemonSet Controller 的方式部署 Consul Client。</p>
+<p data-nodeid="27">DaemonSet Controller 能够确保在集群所有的 Node 中或者指定的 Node 中都运行一个副本 Pod。consul-client.yaml 的配置如下：</p>
+<pre class="lang-yaml hljs" data-nodeid="28"><code data-language="yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">apps/v1</span> 
+<span class="hljs-attr">kind:</span> <span class="hljs-string">DaemonSet</span> 
+<span class="hljs-attr">metadata:</span> 
+ <span class="hljs-attr">name:</span> <span class="hljs-string">consul-client</span> 
+ <span class="hljs-attr">labels:</span> 
+  <span class="hljs-attr">name:</span> <span class="hljs-string">consul-client</span> 
+<span class="hljs-attr">spec:</span> 
+  <span class="hljs-attr">selector:</span> 
+    <span class="hljs-attr">matchLabels:</span> 
+      <span class="hljs-attr">name:</span> <span class="hljs-string">consul-client</span> 
+  <span class="hljs-attr">template:</span> 
+    <span class="hljs-attr">metadata:</span> 
+      <span class="hljs-attr">labels:</span> 
+        <span class="hljs-attr">name:</span> <span class="hljs-string">consul-client</span> 
+    <span class="hljs-attr">spec:</span> 
+      <span class="hljs-attr">volumes:</span> 
+        <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">consul-data-dir</span> 
+          <span class="hljs-attr">hostPath:</span> 
+            <span class="hljs-attr">path:</span> <span class="hljs-string">/data/consul/data</span> 
+            <span class="hljs-attr">type:</span> <span class="hljs-string">DirectoryOrCreate</span> 
+      <span class="hljs-attr">containers:</span> 
+        <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">consul</span> 
+          <span class="hljs-attr">image:</span> <span class="hljs-string">consul:latest</span> 
+          <span class="hljs-attr">imagePullPolicy:</span> <span class="hljs-string">IfNotPresent</span> 
+          <span class="hljs-attr">args:</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-string">"agent"</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-string">"-data-dir=/consul/data"</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-string">"-bind=0.0.0.0"</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-string">"-client=0.0.0.0"</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-string">"-advertise=$(POD_IP)"</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-string">"-retry-join=consul-server-0.consul-server.$(NAMESPACE).svc.cluster.local"</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-string">"-retry-join=consul-server-1.consul-server.$(NAMESPACE).svc.cluster.local"</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-string">"-retry-join=consul-server-2.consul-server.$(NAMESPACE).svc.cluster.local"</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-string">"-domain=cluster.local"</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-string">"-disable-host-node-id"</span> 
+          <span class="hljs-attr">env:</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">POD_IP</span> 
+              <span class="hljs-attr">valueFrom:</span> 
+                <span class="hljs-attr">fieldRef:</span> 
+                  <span class="hljs-attr">fieldPath:</span> <span class="hljs-string">status.podIP</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">NAMESPACE</span> 
+              <span class="hljs-attr">valueFrom:</span> 
+                <span class="hljs-attr">fieldRef:</span> 
+                  <span class="hljs-attr">fieldPath:</span> <span class="hljs-string">metadata.namespace</span> 
+          <span class="hljs-attr">lifecycle:</span> 
+            <span class="hljs-attr">postStart:</span> 
+              <span class="hljs-attr">exec:</span> 
+                <span class="hljs-attr">command:</span> 
+                  <span class="hljs-bullet">-</span> <span class="hljs-string">/bin/sh</span> 
+                  <span class="hljs-bullet">-</span> <span class="hljs-string">-c</span> 
+                  <span class="hljs-bullet">-</span> <span class="hljs-string">consul</span> <span class="hljs-string">reload</span> 
+            <span class="hljs-attr">preStop:</span> 
+              <span class="hljs-attr">exec:</span> 
+                <span class="hljs-attr">command:</span> 
+                  <span class="hljs-bullet">-</span> <span class="hljs-string">/bin/sh</span> 
+                  <span class="hljs-bullet">-</span> <span class="hljs-string">-c</span> 
+                  <span class="hljs-bullet">-</span> <span class="hljs-string">consul</span> <span class="hljs-string">leave</span> 
+          <span class="hljs-attr">volumeMounts:</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">consul-data-dir</span> 
+              <span class="hljs-attr">mountPath:</span> <span class="hljs-string">/consul/data</span> 
+          <span class="hljs-attr">ports:</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-attr">containerPort:</span> <span class="hljs-number">8500</span> 
+              <span class="hljs-attr">hostPort:</span> <span class="hljs-number">8500</span> 
+              <span class="hljs-attr">name:</span> <span class="hljs-string">http</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-attr">containerPort:</span> <span class="hljs-number">8400</span> 
+              <span class="hljs-attr">name:</span> <span class="hljs-string">rpc</span> 
+            <span class="hljs-bullet">-</span> <span class="hljs-attr">containerPort:</span> <span class="hljs-number">8443</span> 
+              <span class="hljs-attr">name:</span> <span class="hljs-string">https</span> 
+            <span class="hljs-string">//</span> <span class="hljs-string">...</span> <span class="hljs-string">其他端口</span>   
+</code></pre>
+<p data-nodeid="29">在上述配置中，我们指定 Controller 为 DaemonSet，并修改 Consul 的启动命令，去除 -server 等选项，使得 Consul 以 Client 的角色启动并加入集群中。除此之外，还通过 volumes 配置将 Consul Client 的数据目录 /consul/data 挂载到 Node 节点上，使得意外宕机的 Consul Client 重启时能够复用相同的 node-id 等元数据，避免导致 Consul 中出现同一个 IP 对应不同主机名的服务注册错误的情况。</p>
+<p data-nodeid="5331">运行上述的 yaml 配置文件后，就能在 Consul UI 中发现 Consul 集群中出现了 Consul Client。（由于这里我们搭建的 Kubernetes 集群只有一个 Node 节点，因此 Consul 集群中仅有一个 Consul Client。）</p>
+<p data-nodeid="9042"><img src="https://s0.lgstatic.com/i/image/M00/40/D7/CgqCHl8znnKARYXJAAEo3aSRZ1o062.png" alt="Drawing 2.png" data-nodeid="9046"></p>
+<div data-nodeid="9043" class=""><p style="text-align:center">Consul Client 出现在集群</p> </div>
+<p></p>
+
+<p></p>
+
+<p></p>
+
+<h2 data-nodeid="33">注册服务到 Consul</h2>
+<p data-nodeid="34">Consul 提供 <strong data-nodeid="144">HTTP</strong> 和 <strong data-nodeid="145">DNS</strong> 两种方式访问服务注册与发现接口，我们接下来的实践主要是基于 HTTP API 进行的。</p>
+<p data-nodeid="35">由于我们是通过 Consul Client 进行服务注册与发现，所以接下来我们会首先介绍 Consul Client 中提供的用于服务注册、服务注销和服务发现的 HTTP API，如下所示：</p>
+<pre class="lang-java hljs" data-nodeid="6815"><code data-language="java">/v1/agent/service/register <span class="hljs-comment">// 服务注册接口 </span>
+/v1/agent/service/deregister/\${instanceId} <span class="hljs-comment">// 服务注销接口 </span>
+/v1/health/service/\${serviceName} <span class="hljs-comment">// 服务发现接口 </span>
+</code></pre>
+
+
+
+
+<p data-nodeid="37"><strong data-nodeid="159">服务注册接口</strong>用于服务启动成功后，服务实例将自身所属的服务名和服务元数据，包括服务实例 ID、服务 IP、服务端口等提交到 Consul Client 中完成服务注册。当服务关闭时，为了避免无效的请求，服务实例会调用<strong data-nodeid="160">服务注销接口</strong>主动将自身服务实例数据从 Consul 中移除。<strong data-nodeid="161">服务发现接口</strong>用于在发起远程调用时根据服务名获取该服务可用的服务实例信息列表，然后调用方就可以使用一定的负载均衡策略选择某个服务实例发起远程调用，该接口会把查询请求转发到 Consul Server 处理。另外，还存在 /v1/agent/health/service/ 接口用于获取注册到本地 Consul Client 的可用服务实例信息列表。</p>
+<p data-nodeid="38">需要提交到 Consul 的服务实例信息主要有以下这些：</p>
+<pre class="lang-go hljs" data-nodeid="39"><code data-language="go"><span class="hljs-comment">// 服务实例信息结构体 </span>
+<span class="hljs-keyword">type</span> InstanceInfo <span class="hljs-keyword">struct</span> { 
+	ID         <span class="hljs-keyword">string</span>                     <span class="hljs-string">\`json:"ID"\`</span>                <span class="hljs-comment">// 服务实例ID </span>
+	Service           <span class="hljs-keyword">string</span>                     <span class="hljs-string">\`json:"Service,omitempty"\`</span> <span class="hljs-comment">// 服务发现时返回的服务名 </span>
+	Name              <span class="hljs-keyword">string</span>                     <span class="hljs-string">\`json:"Name"\`</span>              <span class="hljs-comment">// 服务名 </span>
+	Tags              []<span class="hljs-keyword">string</span>                   <span class="hljs-string">\`json:"Tags,omitempty"\`</span>    <span class="hljs-comment">// 标签，可用于进行服务过滤 </span>
+	Address           <span class="hljs-keyword">string</span>                     <span class="hljs-string">\`json:"Address"\`</span>           <span class="hljs-comment">// 服务实例HOST </span>
+	Port              <span class="hljs-keyword">int</span>                        <span class="hljs-string">\`json:"Port"\`</span>              <span class="hljs-comment">// 服务实例端口 </span>
+	Meta              <span class="hljs-keyword">map</span>[<span class="hljs-keyword">string</span>]<span class="hljs-keyword">string</span>          <span class="hljs-string">\`json:"Meta,omitempty"\`</span>    <span class="hljs-comment">// 元数据 </span>
+	EnableTagOverride <span class="hljs-keyword">bool</span>                       <span class="hljs-string">\`json:"EnableTagOverride"\`</span> <span class="hljs-comment">// 是否允许标签覆盖 </span>
+	Check             <span class="hljs-string">\`json:"Check,omitempty"\`</span>   <span class="hljs-comment">// 健康检查相关配置 </span>
+	Weights           <span class="hljs-string">\`json:"Weights,omitempty"\`</span> <span class="hljs-comment">// 权重 </span>
+} 
+<span class="hljs-keyword">type</span> Check <span class="hljs-keyword">struct</span> { 
+	DeregisterCriticalServiceAfter <span class="hljs-keyword">string</span>   <span class="hljs-string">\`json:"DeregisterCriticalServiceAfter"\`</span> <span class="hljs-comment">// 多久之后注销服务 </span>
+	Args                           []<span class="hljs-keyword">string</span> <span class="hljs-string">\`json:"Args,omitempty"\`</span>                 <span class="hljs-comment">// 请求参数 </span>
+	HTTP                           <span class="hljs-keyword">string</span>   <span class="hljs-string">\`json:"HTTP"\`</span>                           <span class="hljs-comment">// 健康检查地址 </span>
+	Interval                       <span class="hljs-keyword">string</span>   <span class="hljs-string">\`json:"Interval,omitempty"\`</span>             <span class="hljs-comment">// Consul 被动回调检查间隔 </span>
+	TTL                            <span class="hljs-keyword">string</span>   <span class="hljs-string">\`json:"TTL,omitempty"\`</span>                  <span class="hljs-comment">// 服务实例主动维持心跳间隔，与Interval只存其一 </span>
+} 
+</code></pre>
+<p data-nodeid="40">这其中，ID 用来唯一标识服务实例，Name 代表服务实例归属的服务集群，Address、Port 表示服务的 IP 地址和监听端口，Check 用于指定健康检查的配置，Consul 中提供主动上报和被动回调两种方式维持心跳。</p>
+<p data-nodeid="41">接下来我们以服务注册为例，演示服务实例如何注册自身数据到 Consul，discovery_client.go 中服务注册的代码如下所示：</p>
+<pre class="lang-go hljs" data-nodeid="42"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(consulClient *DiscoveryClient)</span> <span class="hljs-title">Register</span><span class="hljs-params">(ctx context.Context, serviceName, instanceId, healthCheckUrl <span class="hljs-keyword">string</span>, instanceHost <span class="hljs-keyword">string</span>, instancePort <span class="hljs-keyword">int</span>, meta <span class="hljs-keyword">map</span>[<span class="hljs-keyword">string</span>]<span class="hljs-keyword">string</span>, weights *Weights)</span> <span class="hljs-title">error</span></span> { 
+	instanceInfo := &amp;InstanceInfo{ 
+		ID:                instanceId, 
+		Name:              serviceName, 
+		Address:           instanceHost, 
+		Port:              instancePort, 
+		Meta:              meta, 
+		EnableTagOverride: <span class="hljs-literal">false</span>, 
+		Check: Check{ 
+			DeregisterCriticalServiceAfter: <span class="hljs-string">"30s"</span>, 
+			HTTP:                           <span class="hljs-string">"http://"</span> + instanceHost + <span class="hljs-string">":"</span> + strconv.Itoa(instancePort) + healthCheckUrl, 
+			Interval:                       <span class="hljs-string">"15s"</span>, 
+		}, 
+	} 
+	<span class="hljs-keyword">if</span> weights != <span class="hljs-literal">nil</span>{ 
+		instanceInfo.Weights = *weights 
+	}<span class="hljs-keyword">else</span> { 
+		instanceInfo.Weights = Weights{ 
+			Passing: <span class="hljs-number">10</span>, 
+			Warning: <span class="hljs-number">1</span>, 
+		} 
+	} 
+	byteData, err := json.Marshal(instanceInfo) 
+	<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span>{ 
+		log.Printf(<span class="hljs-string">"json format err: %s"</span>, err) 
+		<span class="hljs-keyword">return</span> err 
+	} 
+	req, err := http.NewRequest(<span class="hljs-string">"PUT"</span>, 
+		<span class="hljs-string">"http://"</span>+consulClient.host+<span class="hljs-string">":"</span>+strconv.Itoa(consulClient.port)+<span class="hljs-string">"/v1/agent/service/register"</span>, 
+		bytes.NewReader(byteData)) 
+	<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span>{ 
+		<span class="hljs-keyword">return</span> err 
+	} 
+	req.Header.Set(<span class="hljs-string">"Content-Type"</span>, <span class="hljs-string">"application/json;charset=UTF-8"</span>) 
+	client := http.Client{} 
+	client.Timeout = time.Second * <span class="hljs-number">2</span> 
+	resp, err := client.Do(req) 
+	<span class="hljs-comment">// 检查 HTTP 请求是否发送成功，判断是否注册成功 </span>
+	.... 
+} 
+</code></pre>
+<p data-nodeid="43">上述代码的关键在于将服务实例信息封装为 InstanceInfo，并通过 HTTP 请求访问 Consul Client 的 /v1/agent/service/register 接口，将服务实例信息提交 Consul 中。我们在 InstanceInfo 中设定了服务实例 ID、服务名、服务地址、服务端口等关键数据，并指定了健康检查的地址用于与 Consul 维持心跳。类似的，服务发现和服务注销的实现也是通过调用上面介绍的 HTTP API 完成，在此就不演示代码了。</p>
+<p data-nodeid="44">微服务需要在准备就绪后，向服务注册与发现中心发起服务注册，并在服务关闭前及时从服务注册与发现中心注销自身服务实例信息，这些我们都可以在 main 函数中添加对应的行为，代码如下所示：</p>
+<pre class="lang-go hljs" data-nodeid="45"><code data-language="go">	<span class="hljs-comment">// ... 通过命令行参数或者环境变量获取服务配置信息 </span>
+	flag.Parse() 
+	client := discovery.NewDiscoveryClient(*consulAddr, *consulPort) 
+	<span class="hljs-comment">//... 省略 注册 endpoint，构建 transport </span>
+	 
+	<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> { 
+		errChan &lt;- http.ListenAndServe(<span class="hljs-string">":"</span> + strconv.Itoa(*servicePort), handler) 
+	}() 
+	<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> { 
+		<span class="hljs-comment">// 监控系统信号，等待 ctrl + c 系统信号通知服务关闭 </span>
+		c := <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> os.Signal, <span class="hljs-number">1</span>) 
+		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM) 
+		errChan &lt;- fmt.Errorf(<span class="hljs-string">"%s"</span>, &lt;-c) 
+	}() 
+	instanceId := *serviceName + <span class="hljs-string">"-"</span> + uuid.New().String() 
+	err := client.Register(context.Background(), *serviceName, instanceId, <span class="hljs-string">"/health"</span>, *serviceAddr, *servicePort, <span class="hljs-literal">nil</span>, <span class="hljs-literal">nil</span>) 
+	<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span>{ 
+		log.Printf(<span class="hljs-string">"register service err : %s"</span>, err) 
+		os.Exit(<span class="hljs-number">-1</span>) 
+	} 
+	err = &lt;-errChan 
+	log.Printf(<span class="hljs-string">"listen err : %s"</span>, err) 
+	client.Deregister(context.Background(), instanceId) 
+</code></pre>
+<p data-nodeid="46">在 main 函数中启动 http.ListenAndServe 监听对应的服务端口时，我们同时调用了 DiscoveryClient.Register 方法向 Consul 发起服务注册，并采用监控系统信号的方式，在服务关闭时调用 DiscoveryClient.Deregister 进行服务注销，以避免无效的请求发送到已关闭的服务实例。</p>
+<p data-nodeid="47">为了保证 Consul Client 主动进行健康检查成功，我们还需要在 transport 层中定义 /health 接口用于响应 Consul Client 的调用，代码如下所示：</p>
+<pre class="lang-go hljs" data-nodeid="48"><code data-language="go">	r.Methods(<span class="hljs-string">"GET"</span>).Path(<span class="hljs-string">"/health"</span>).Handler(kithttp.NewServer( 
+		endpoints.HealthCheckEndpoint, 
+		decodeHealthCheckRequest, 
+		encodeJSONResponse, 
+		options..., 
+	)) 
+</code></pre>
+<p data-nodeid="49">在 Kubernetes 部署微服务实例时，可以通过获取服务实例所在的 Pod IP 作为服务实例 IP 提交到 Consul，使用 Kubernetes 的 valueFrom 即可获取服务实例所在 Pod 的相关信息。部署 register 微服务的 Kubernetes 简单配置如下所示：</p>
+<pre class="lang-yaml hljs" data-nodeid="50"><code data-language="yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">v1</span> 
+<span class="hljs-attr">kind:</span> <span class="hljs-string">Pod</span> 
+<span class="hljs-attr">metadata:</span> 
+  <span class="hljs-attr">name:</span> <span class="hljs-string">register</span> 
+  <span class="hljs-attr">labels:</span> 
+    <span class="hljs-attr">name:</span> <span class="hljs-string">register</span> 
+<span class="hljs-attr">spec:</span> 
+  <span class="hljs-attr">containers:</span> 
+    <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">register</span> 
+      <span class="hljs-attr">image:</span> <span class="hljs-string">register</span> 
+      <span class="hljs-attr">ports:</span> 
+        <span class="hljs-bullet">-</span> <span class="hljs-attr">containerPort:</span> <span class="hljs-number">12312</span> 
+      <span class="hljs-attr">imagePullPolicy:</span> <span class="hljs-string">IfNotPresent</span> 
+      <span class="hljs-attr">env:</span> 
+        <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">consulAddr</span> 
+          <span class="hljs-attr">valueFrom:</span> 
+            <span class="hljs-attr">fieldRef:</span> 
+              <span class="hljs-attr">fieldPath:</span> <span class="hljs-string">spec.nodeName</span> 
+        <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">serviceAddr</span> 
+          <span class="hljs-attr">valueFrom:</span> 
+            <span class="hljs-attr">fieldRef:</span> 
+              <span class="hljs-attr">fieldPath:</span> <span class="hljs-string">status.podIP</span> 
+</code></pre>
+<p data-nodeid="7546">由于 Consul Client 部署在每一个 Node 节点中，我们可以直接获取 spec.nodeName（即 Pod 所在 Node 节点的主机名）作为 Consul Client 的地址传递给 Go 微服务，而 Go 微服务的 IP 地址即其所在 Pod 的 IP。在 Kubernetes 中启动该配置后即可在 Consul UI 中查看到该服务实例注册到 Consul 中，如图所示：</p>
+<p data-nodeid="8671"><img src="https://s0.lgstatic.com/i/image/M00/40/D7/CgqCHl8znpOAUpWzAAHjz85ST4g127.png" alt="Drawing 3.png" data-nodeid="8675"></p>
+<div data-nodeid="8672" class=""><p style="text-align:center">register 服务注册到 Consul</p> </div>
+<p></p>
+
+
+
+
+
+<p data-nodeid="54">进入到 register 服务所在的 Pod，通过 curl 访问 /discovery/name?serviceName={serviceName} 即可根据服务名获取注册到 Consul 中的服务实例信息列表。</p>
+<h3 data-nodeid="8299" class="">小结</h3>
+
+<p data-nodeid="56"><strong data-nodeid="182">在微服务架构中，服务注册与发现能够管理集群中大量动态变化的服务实例，有效提高服务治理的效率。</strong></p>
+<p data-nodeid="57">本课时我们主要介绍了如何结合 Consul 给 Go 微服务整合服务注册与发现能力。首先。我们借助 Kubernetes 搭建了具备 3 个 Consul Server 的 Consul 集群；接着，我们又基于 Consul Client 提供的 HTTP API 完成了 Go 微服务与 Consul 的服务注册与发现。</p>
+<p data-nodeid="58">希望通过本课时能够加深你对 Consul 的理解，并掌握如何为 Go 微服务添加服务注册与发现能力，在下一课时我们将介绍更多关于 Go 微服务服务注册与发现的实践，比如基于 Service Mesh 进行服务注册与发现等。</p>
+<p data-nodeid="59">最后，关于 Consul 和 Go 微服务的服务注册与发现，你有什么其他的见解？欢迎在评论区与我分享。</p></div>
+
+</body></html>

@@ -1,0 +1,1353 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第29讲：深入 query-graphql 插件，SW Rocketbot 背后的英雄（下）</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>第29讲：深入 query-graphql 插件，SW Rocketbot 背后的英雄（下）</h1><h3 data-nodeid="107471" class="">TopN 查询</h3>
+
+
+
+<p data-nodeid="108365">在 aggregation.graphqls 和 top-n-records.graphqls 两个 GraphQL Schema 文件中定义了所有关于 TopN 数据的查询，如下图所示：</p>
+<p data-nodeid="108366" class=""><img src="https://s0.lgstatic.com/i/image/M00/26/46/CgqCHl7xuW2AVBsLAAa7U3_glbg954.png" alt="Drawing 12.png" data-nodeid="108370"></p>
+
+
+<p data-nodeid="106345">在分析 MultiScopesSpanListener 的课时中，我们了解到 OAP 可以从存储请求的相关 Trace 中解析得到慢查询信息并转换成 TopNDatabaseStatement 存储到 ES 中。&nbsp;这里定义的&nbsp; getTopNRecords() 方法就是用来查询此类 TopN 数据的，为了便于理解，这里以 DB 慢查询为例分析 getTopNRecords() 方法的实现。</p>
+<p data-nodeid="106346">在对应的 TopNRecordsQuery.getTopNRecords() 方法中，多个入参被封装成了一个 TopNRecordsCondition 对象，其中包含了如下信息：</p>
+<pre class="lang-java hljs" data-nodeid="109047"><code data-language="java"><span class="hljs-keyword">private</span>&nbsp;<span class="hljs-keyword">int</span>&nbsp;serviceId;&nbsp;<span class="hljs-comment">//&nbsp;查询哪个&nbsp;DB的慢查询</span>
+<span class="hljs-keyword">private</span>&nbsp;String&nbsp;metricName;&nbsp;<span class="hljs-comment">//&nbsp;查询的&nbsp;Index别名，即 top_n_database_statement</span>
+<span class="hljs-keyword">private</span>&nbsp;<span class="hljs-keyword">int</span>&nbsp;topN;&nbsp;<span class="hljs-comment">//&nbsp;返回 N个耗时最大的慢查询，默认20</span>
+<span class="hljs-keyword">private</span>&nbsp;Order&nbsp;order;&nbsp;<span class="hljs-comment">//&nbsp;排序方式，查询&nbsp;DB慢查询自然是 DES</span>
+<span class="hljs-keyword">private</span>&nbsp;Duration&nbsp;duration;&nbsp;<span class="hljs-comment">//&nbsp;查询的时间范围</span>
+</code></pre>
+
+
+<p data-nodeid="106348">请求会经过&nbsp;TopNRecordsQuery -&gt; TopNRecordsQueryService -&gt; TopNRecordsQueryEsDAO&nbsp;最终形成&nbsp;SearchRequest 请求发送给 ElasticSearch，在&nbsp;TopNRecordsQueryEsDAO&nbsp;中会设置查询条件以及排序方式，相关代码片段如下：</p>
+<pre class="lang-java hljs" data-nodeid="109498"><code data-language="java">SearchSourceBuilder sourceBuilder = SearchSourceBuilder.searchSource();
+BoolQueryBuilder boolQueryBuilder = QueryBuilders.boolQuery();
+<span class="hljs-comment">//&nbsp;指定查询的时间范围</span>
+boolQueryBuilder.must().add(QueryBuilders.rangeQuery(TopN.TIME_BUCKET).gte(startSecondTB).lte(endSecondTB));
+<span class="hljs-comment">//&nbsp;指定查询的&nbsp;DB对应的 serviceId</span>
+boolQueryBuilder.must().add(QueryBuilders.termQuery(TopN.SERVICE_ID, serviceId));
+sourceBuilder.query(boolQueryBuilder);
+<span class="hljs-comment">//&nbsp;按照&nbsp;latency进行排序，指定返回&nbsp;topN条记录</span>
+sourceBuilder.size(topN).sort(TopN.LATENCY, order.equals(Order.DES) ? SortOrder.DESC : SortOrder.ASC);
+SearchResponse response = getClient().search(metricName, sourceBuilder);
+</code></pre>
+
+<p data-nodeid="109949">之后会将查询到的每个 Document 中的 statement、traceId 以及 latency 字段值封装成 TopNRecord 对象返回。</p>
+<p data-nodeid="110845">除了上述 DB 慢查询的 TopN &nbsp;查询之外，在 AggregationQuery 中还提供了为 Service 、ServiceInstance 以及 Endpoint 提供了其他维度的 TopN查询，如下图所示：</p>
+<p data-nodeid="110846" class=""><img src="https://s0.lgstatic.com/i/image/M00/26/46/CgqCHl7xuYaALcPBAAQkaAzAsZQ746.png" alt="Drawing 13.png" data-nodeid="110850"></p>
+
+
+
+<p data-nodeid="106352">简单介绍下这些方法的功能：</p>
+<ul data-nodeid="106353">
+<li data-nodeid="106354">
+<p data-nodeid="106355">getServiceeTopN()/getAllServiceInstanceTopN()/getAllEndpointTopN() 方法：按照 name 参数指定监控维度对所有 Service/ServiceInstance/Endpoint 进行排序并获取 TopN。</p>
+</li>
+<li data-nodeid="106356">
+<p data-nodeid="106357">getServiceInstance()/getEndpointTopN() 方法：在 serviceId 参数指定&nbsp;Service 中，按照 name 参数指定的监控维度对 ServiceInstance/Endpoint 进行排序并获取 TopN。</p>
+</li>
+</ul>
+<p data-nodeid="111743">在 SkyWalking Rocketbot 中我们可以看到 Global Top Throughout 的监控，如下图所示：</p>
+<p data-nodeid="111744" class=""><img src="https://s0.lgstatic.com/i/image/M00/26/3B/Ciqc1F7xuZKAHD0IAAA25djPgC4804.png" alt="Drawing 14.png" data-nodeid="111748"></p>
+
+
+<p data-nodeid="106360">其底层是通过 getServiceTopN() 方法统计指定时间段内所有 Service 的 CPM 平均值并获取 Top10 实现的。这里就以该示例为主线介绍&nbsp;AggregationQuery&nbsp;查询的核心流程。</p>
+<p data-nodeid="106361">AggregationQuery&nbsp;收到的请求会经过&nbsp;AggregationQuery&nbsp;-&gt; AggregationQueryService -&gt; AggregationQueryEsDAO，其中会格式化查询起止时间、根据 DownSampling 生成相应的 Index 别名等操作，前面已经简单介绍过这些通用操作，不再重复。</p>
+<p data-nodeid="106362">在&nbsp;AggregationQueryEsDAO.getServiceTopN() 方法中会构造 SearchRequest 的查询条件，如下所示：</p>
+<pre class="lang-java hljs" data-nodeid="112199"><code data-language="java">SearchSourceBuilder sourceBuilder = SearchSourceBuilder.searchSource();
+<span class="hljs-comment">// 指定查询的起止时间，示例中起止时间分别是201901072044~201901072059</span>
+sourceBuilder.query(QueryBuilders.rangeQuery(Metrics.TIME_BUCKET).lte(endTB).gte(startTB));
+<span class="hljs-keyword">boolean</span> asc = <span class="hljs-keyword">false</span>; <span class="hljs-comment">// 确定排序方式，示例中查询服务的吞吐量是从高到低排序的</span>
+<span class="hljs-keyword">if</span>&nbsp;(order.equals(Order.ASC))&nbsp;{&nbsp;asc&nbsp;=&nbsp;<span class="hljs-keyword">true</span>; }
+TermsAggregationBuilder aggregationBuilder = AggregationBuilders
+    .terms(Metrics.ENTITY_ID) <span class="hljs-comment">// 按照entity_id进行聚合，在以 service_cpm 为别名的 Index中 entity_id字段记录的是 serviceId</span>
+    .field(Metrics.ENTITY_ID)
+    .order(BucketOrder.aggregation(valueCName, asc)) <span class="hljs-comment">// 按照指定字段排序，示例中以 service_cpm 为别名的 Index会按照 value字段进行排序</span>
+    .size(topN) <span class="hljs-comment">// 返回记录的数量，Skywalking Rocketbot传递的topN参数为10</span>
+    .subAggregation( <span class="hljs-comment">// 根据 entity_id分组后会计算 valueCName字段的平均值，生成的新字段名称也为valueCName</span>
+        AggregationBuilders.avg(valueCName).field(valueCName)
+    );
+sourceBuilder.aggregation(aggregationBuilder);
+<span class="hljs-comment">// 发送SearchRequest请求</span>
+SearchResponse response = getClient().search(indexName, sourceBuilder);
+</code></pre>
+
+<p data-nodeid="106364">完成查询之后会从 SearchResponse 中解析得到每个 Service 的 CPM 平均值，并封装成 TopNEntity 集合返回，具体实现如下：</p>
+<pre class="lang-java hljs" data-nodeid="112650"><code data-language="java">List&lt;TopNEntity&gt; topNEntities = <span class="hljs-keyword">new</span> ArrayList&lt;&gt;();
+Terms idTerms = response.getAggregations().get(Metrics.ENTITY_ID);
+<span class="hljs-keyword">for</span> (Terms.Bucket termsBucket : idTerms.getBuckets()) {
+    TopNEntity topNEntity = <span class="hljs-keyword">new</span> TopNEntity();
+    topNEntity.setId(termsBucket.getKeyAsString()); <span class="hljs-comment">// 获取 ServiceId</span>
+    Avg value = termsBucket.getAggregations().get(valueCName); <span class="hljs-comment">// 获取 cpm平均值</span>
+    topNEntity.setValue((<span class="hljs-keyword">long</span>)value.getValue());
+    topNEntities.add(topNEntity);
+}
+<span class="hljs-keyword">return</span> topNEntities;
+</code></pre>
+
+<p data-nodeid="113101">在将 TopNEntitiy&nbsp;集合返回给前端展示之前，还会在 AggregationService&nbsp;中查询&nbsp;ServiceInventoryCache 获取对应的&nbsp;serviceName&nbsp;并记录到 TopNEntity.name字段中，查询&nbsp;ServiceInventoryCache&nbsp;的过程前面已经详细分析过，这里不再重复。</p>
+<p data-nodeid="113102">AggregationQuery 提供的其他 TopN 查询与 getServiceTopN() 方法实现基本类似，相信你看完 getServiceTopN() 方法的分析之后，完全可以读懂其他方法的实现。</p>
+
+<h3 data-nodeid="113555" class="">TopologyQuery</h3>
+
+<p data-nodeid="106368">首先请你回顾一下，在分析 MultiScopesSpanListener 的课时中，可以看到 OAP 会根据 Trace 的调用关系创建相应的 Relation 指标来记录调用链上的监控信息，例如，ServiceRelationServerCpmMetrics&nbsp;指标记录了一个服务调用另一个服务的 cpm 值。</p>
+<p data-nodeid="114449">在 SkyWalking Rocketbot 中有一个“拓扑图”的视图，如下所示：</p>
+<p data-nodeid="114450" class=""><img src="https://s0.lgstatic.com/i/image/M00/26/46/CgqCHl7xuayAIvTUAAJojFh6YyE235.png" alt="Drawing 15.png" data-nodeid="114454"></p>
+
+
+<p data-nodeid="115347">该拓扑图中展示的拓扑关系以及调用链上的指标数据是通过 query-graphql-plugin&nbsp;插件提供的三个 get*Topology()&nbsp;方法实现的，如下图所示：</p>
+<p data-nodeid="115348" class=""><img src="https://s0.lgstatic.com/i/image/M00/26/3B/Ciqc1F7xubKAVtfzAAC2lq_kx4o043.png" alt="Drawing 16.png" data-nodeid="115354"></p>
+
+
+<p data-nodeid="106373">在上述拓扑图展示的时候只需要请求 getGlobalTopology() 方法即可，在 TopologyQueryService.getGlobalTopology() 方法中会通过下面两个方法完成查询。</p>
+<ul data-nodeid="116245">
+<li data-nodeid="116246">
+<p data-nodeid="116247">loadServerSideServiceRelations() 方法：查询 Index&nbsp;别名为&nbsp;service_relation_server_side&nbsp;的 Index，该类 Index 中只记录了服务端视角的调用关系，并没有记录其他指标信息。在前面示例中，该查询的结果如下图所示：</p>
+</li>
+</ul>
+<p data-nodeid="116248" class=""><img src="https://s0.lgstatic.com/i/image/M00/26/46/CgqCHl7xubuAU0x0AApr3mz8Xig844.png" alt="Drawing 17.png" data-nodeid="116258"></p>
+
+
+<ul data-nodeid="117151">
+<li data-nodeid="117152">
+<p data-nodeid="117153">loadClientSideServiceRelations() 方法：查询&nbsp;Index 别名为&nbsp;service_relation_client_side&nbsp;的 Index，该类 Index 中只记录了客户端视角的调用关系，并没有记录其他指标信息。在前面示例中，该查询的结果如下图所示：</p>
+</li>
+</ul>
+<p data-nodeid="117154" class=""><img src="https://s0.lgstatic.com/i/image/M00/26/46/CgqCHl7xucOAKVAYAAcAU9rWAdI587.png" alt="Drawing 18.png" data-nodeid="117164"></p>
+
+
+<p data-nodeid="106382">接下来，TopologyQueryService 会将上述两个查询结果集合进行合并和整理，最终得到一个 Topology 对象。在&nbsp;Topology&nbsp;对象中包含两个集合。</p>
+<ul data-nodeid="118055">
+<li data-nodeid="118056">
+<p data-nodeid="118057">nodes 集合：包含了拓扑图中所有的节点信息，示例中的结果如下图所示，总共有 3 个节点，分别是 User、demo-webapp、demo-provider：</p>
+</li>
+</ul>
+<p data-nodeid="118058" class=""><img src="https://s0.lgstatic.com/i/image/M00/26/3B/Ciqc1F7xucuAZ-UvAAiQRLtPrz8281.png" alt="Drawing 19.png" data-nodeid="118062"></p>
+
+
+<ul data-nodeid="118955">
+<li data-nodeid="118956">
+<p data-nodeid="118957">calls 集合：包含了拓扑图中所有的边（即调用关系），示例中的结果如下图所示，总共有 2 条边，一条边是 User 调用 demo-webapp（即 1_2），另一条边是 demo-webapp 调用 demo-provider（即2_3）：</p>
+</li>
+</ul>
+<p data-nodeid="118958" class=""><img src="https://s0.lgstatic.com/i/image/M00/26/3B/Ciqc1F7xudSAYy9DAAzv4IcETLc263.png" alt="Drawing 20.png" data-nodeid="118966"></p>
+
+
+<p data-nodeid="106391">在侦察端面板中展示的监控图都是通过 getLinearIntValues() 方法查询相应 Index 实现的，例如上图中侦察端面板中展示的“平均响应时间”监控图，就是查询别名为 service_relation_server_resp_time 的这组 Index 实现的，其中指定了 entity_id 为 “2_3”（即 demo-webapp 调用 demo-provider 的这条调用链路的平均响应时间）。</p>
+<p data-nodeid="106392">除了查询完整的拓扑图之外，我们还可以以一个 Service 或 Endpoint 为中心进行拓扑图查询，分别对应前文提到的 getServiceTopology() 方法和 getEndpointTopology() 方法，这两个方法的查询逻辑与 getGlobalTopology() 方法基本类似，主要区别在于添加了 serviceId（或是 endpointId）的查询条件，具体实现不再展开，如果你感兴趣可以翻看一下源码。</p>
+<h3 data-nodeid="119417" class="">TraceQuery</h3>
+
+<p data-nodeid="120311">在 SkyWalking Rocketbot 的“追踪”面板中，我们可以查询到所有收集到的 Trace 信息，如下图所示：</p>
+<p data-nodeid="120312" class=""><img src="https://s0.lgstatic.com/i/image/M00/26/3B/Ciqc1F7xueKAMOe1AAOBgdOJVb0240.png" alt="Drawing 21.png" data-nodeid="120316"></p>
+
+
+<p data-nodeid="121203">该面板可以分为三个区域，在区域 1 中，我们可以选择 TraceSegment 关联的 Service、ServiceInstance 以及 Endpoint，这些下拉表中的数据是通过前文介绍的 MetadataQuery 查询到的。在区域 2 中展示了 TraceSegment 的简略信息，通过 queryBasicTraces() 方法查询得到，如下图所示。在区域 3 中展示了一条完整 Trace 的详细信息，通过 queryTrace() 方法查询得到，如下图所示。</p>
+<p data-nodeid="121204" class=""><img src="https://s0.lgstatic.com/i/image/M00/26/3B/Ciqc1F7xue6AFKXNAAEBPbJC8sE357.png" alt="Drawing 23.png" data-nodeid="121208"></p>
+
+
+<p data-nodeid="106398">TraceQuery.queryBasicTraces() 方法的入参被封装成了一个 TraceQueryCondition</p>
+<p data-nodeid="106399">对象，其中包含了一些查询 Trace 简略信息的条件，如下所示：</p>
+<ul data-nodeid="106400">
+<li data-nodeid="106401">
+<p data-nodeid="106402">serviceId、serviceInstanceId、endpointId 字段：TraceSegment 关联的 Service、ServiceInstance、Endpoint。</p>
+</li>
+<li data-nodeid="106403">
+<p data-nodeid="106404">traceId 字段：指定 TraceSegment 的 traceId。</p>
+</li>
+<li data-nodeid="106405">
+<p data-nodeid="106406">queryDuration 字段：指定查询的时间跨度。</p>
+</li>
+<li data-nodeid="106407">
+<p data-nodeid="106408">minTraceDuration 和 maxTraceDuration 字段：指定 TraceSegment 耗时范围，只查询耗时在 minTraceDuration~maxTraceDuration 之间的 Trace。</p>
+</li>
+<li data-nodeid="106409">
+<p data-nodeid="106410">traceState 字段：Trace 的状态信息，枚举，可选值有 ALL、SUCC、ERROR 三个值。</p>
+</li>
+<li data-nodeid="106411">
+<p data-nodeid="106412">queryOrder 字段：查询结果的排序方式，枚举，可选值有 BY_DURATION、BY_START_TIME 两个值。</p>
+</li>
+<li data-nodeid="106413">
+<p data-nodeid="106414">paging 字段：分页信息，类似于 SQL 语句中的 limit 部分，指定了此次查询的起始位置以及结果条数。</p>
+</li>
+</ul>
+<p data-nodeid="106415">同样的，最终创建以及执行 SearchRequest 请求的逻辑在底层的 TraceQueryEsDAO 中，具体代码逻辑如下，基本与 TraceCondition 中的字段一一对应：</p>
+<pre class="lang-java hljs" data-nodeid="121653"><code data-language="java">SearchSourceBuilder sourceBuilder = SearchSourceBuilder.searchSource();
+BoolQueryBuilder boolQueryBuilder = QueryBuilders.boolQuery();
+sourceBuilder.query(boolQueryBuilder);
+List&lt;QueryBuilder&gt;&nbsp;mustQueryList&nbsp;=&nbsp;boolQueryBuilder.must();
+<span class="hljs-keyword">if</span> (startSecondTB != <span class="hljs-number">0</span> &amp;&amp; endSecondTB != <span class="hljs-number">0</span>) { <span class="hljs-comment">// 查询时间范围，即过滤 time_bucket字段</span>
+    mustQueryList.add(QueryBuilders.rangeQuery(SegmentRecord.TIME_BUCKET).gte(startSecondTB).lte(endSecondTB));
+}
+<span class="hljs-keyword">if</span> (minDuration != <span class="hljs-number">0</span> || maxDuration != <span class="hljs-number">0</span>) { <span class="hljs-comment">// 查询TraceSegment的耗时范围，即过滤 latency字段</span>
+    RangeQueryBuilder rangeQueryBuilder = QueryBuilders.rangeQuery(SegmentRecord.LATENCY);
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(minDuration&nbsp;!=&nbsp;<span class="hljs-number">0</span>)&nbsp;{&nbsp;rangeQueryBuilder.gte(minDuration); }
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(maxDuration&nbsp;!=&nbsp;<span class="hljs-number">0</span>)&nbsp;{&nbsp;rangeQueryBuilder.lte(maxDuration); }
+    boolQueryBuilder.must().add(rangeQueryBuilder);
+}
+<span class="hljs-keyword">if</span> (!Strings.isNullOrEmpty(endpointName)) { <span class="hljs-comment">// 过滤 endpoint_name字段</span>
+    String matchCName = MatchCNameBuilder.INSTANCE.build(SegmentRecord.ENDPOINT_NAME);
+    mustQueryList.add(QueryBuilders.matchPhraseQuery(matchCName, endpointName));
+}
+<span class="hljs-keyword">if</span> (serviceId != <span class="hljs-number">0</span>) { <span class="hljs-comment">// 查询 TraceSegment所属的Service，即过滤 service_id字段</span>
+    boolQueryBuilder.must().add(QueryBuilders.termQuery(SegmentRecord.SERVICE_ID, serviceId));
+}
+<span class="hljs-keyword">if</span> (serviceInstanceId != <span class="hljs-number">0</span>) { <span class="hljs-comment">// 查询 TraceSegment所属的ServiceInstance，即过滤 service_instance_id字段</span>
+    boolQueryBuilder.must().add(QueryBuilders.termQuery(SegmentRecord.SERVICE_INSTANCE_ID, serviceInstanceId));
+}
+<span class="hljs-keyword">if</span> (endpointId != <span class="hljs-number">0</span>) {<span class="hljs-comment">// 查询 TraceSegment所属的 Endpoint，即过滤endpoint_id字段</span>
+    boolQueryBuilder.must().add(QueryBuilders.termQuery(SegmentRecord.ENDPOINT_ID, endpointId));
+}
+<span class="hljs-keyword">if</span> (!Strings.isNullOrEmpty(traceId)) { <span class="hljs-comment">// 查询 TraceSegment所属的 traceId，即过滤 trace_id字段</span>
+    boolQueryBuilder.must().add(QueryBuilders.termQuery(SegmentRecord.TRACE_ID, traceId));
+}
+<span class="hljs-keyword">switch</span> (traceState) { <span class="hljs-comment">// 查询 TraceSegment覆盖的逻辑是否发生异常，即过滤 is_error字段</span>
+    <span class="hljs-keyword">case</span> ERROR:
+        mustQueryList.add(QueryBuilders.matchQuery(SegmentRecord.IS_ERROR, BooleanUtils.TRUE));
+        <span class="hljs-keyword">break</span>;
+    <span class="hljs-keyword">case</span> SUCCESS:
+        mustQueryList.add(QueryBuilders.matchQuery(SegmentRecord.IS_ERROR, BooleanUtils.FALSE));
+        <span class="hljs-keyword">break</span>;
+}
+<span class="hljs-keyword">switch</span> (queryOrder) { <span class="hljs-comment">// 查询得到的多个 TraceSegment的排序字段，可以按照 start_time字段或是 latency字段逆序排序</span>
+    <span class="hljs-keyword">case</span> BY_START_TIME:
+        sourceBuilder.sort(SegmentRecord.START_TIME, SortOrder.DESC);
+        <span class="hljs-keyword">break</span>;
+    <span class="hljs-keyword">case</span> BY_DURATION:
+        sourceBuilder.sort(SegmentRecord.LATENCY, SortOrder.DESC);
+        <span class="hljs-keyword">break</span>;
+}
+sourceBuilder.size(limit); <span class="hljs-comment">// 指定此次查询返回的Document个数</span>
+sourceBuilder.from(from); <span class="hljs-comment">// 指定查询的起始位置</span>
+<span class="hljs-comment">// 执行上述 SearchRequest请求，查询的是别名为 segment的Index</span>
+SearchResponse&nbsp;response&nbsp;=&nbsp;getClient().search(SegmentRecord.INDEX_NAME,&nbsp;sourceBuilder);
+</code></pre>
+
+<p data-nodeid="122098">完成查询之后会将查询得到的所有 TraceSegment 的&nbsp;segmentId、traceId、耗时（latency）、起始时间（startTime）以及 isError 状态封装成 BasicTrace 集合返回给前端进行展示，相应的逻辑比较简单，这里不再展开。</p>
+<p data-nodeid="122099">在“追踪”面板的区域 2 中展示了&nbsp;BasicTrace 集合（即 TraceSegment 的简略信息）之后，我们可以点击任意一个 TraceSegment，可通过 queryTrace() 方法查询其所在 Trace 的全部 TraceSegment 并展示在区域 3 中，该请求会直接委托给 TraceQueryEsDAO.queryByTraceId() 方法，使用的 SearchRequest 请求比较简单：</p>
+
+<pre class="lang-java hljs" data-nodeid="122546"><code data-language="java">SearchSourceBuilder sourceBuilder = SearchSourceBuilder.searchSource();
+<span class="hljs-comment">//&nbsp;精确匹配&nbsp;trace_id字段</span>
+sourceBuilder.query(QueryBuilders.termQuery(SegmentRecord.TRACE_ID, traceId));
+<span class="hljs-comment">//&nbsp;一条Trace中TraceSegment的个数上限默认是200，application.yml文件中有相应配置项可调整</span>
+sourceBuilder.size(segmentQueryMaxSize);
+<span class="hljs-comment">//&nbsp;执行&nbsp;SearchRequest请求，查询的依旧是别名为&nbsp;segment的Index</span>
+SearchResponse response = getClient().search(SegmentRecord.INDEX_NAME, sourceBuilder);
+</code></pre>
+
+<p data-nodeid="122991">查询完成之后会为每个 Document 创建相应的 SegmentRecord 对象（前面 trace-receiver-plugin 写入 ES 的时候也是用的该对象）并将 Document 中的字段填充到 SegmentRecord 对象的字段。</p>
+<p data-nodeid="122992">接下来会创建一个&nbsp;Trace 对象作为请求返回值，主要分为下面两个操作：</p>
+
+<p data-nodeid="123439" class="">1、创建 Trace 返回值，收集全部 Span 对象。</p>
+
+<p data-nodeid="106423">TraceQueryService&nbsp;会逐个反序列化上述&nbsp;SegmentRecord 中的 dataBinary 字段，拿到该 TraceSegment 中的所有 Span ，然后将这些 Span 统统记录到&nbsp;Trace&nbsp;对象的spans 集合中。记得在 Trace 数据写入的过程中，有字符串转换到唯一 id 的过程（即&nbsp;Exchange 过程），这里填充 Trace.spans 集合的时候会完成&nbsp;id 到可读的字符串的逆转换，比如，serviceId 会被恢复成 serviceName、endpointId 会被恢复成 endpointName、componentId 会被恢复成 componentName 等等，这些都会伴随着一些前面介绍过的 Cache 以及 ES 查询。另外，还会反序列化每个 Span 携带的额外信息。例如 Log 信息和 Tag 信息。</p>
+<p data-nodeid="106424">Trace 类以及 Span 类对应的是 GraphQL Schema 中的 Trace 以及 Span 定义，是 Java 与前端代码交互的 DTO，而 SegmentRecord 则是 OAP 内部以及 OAP 与 ElasticSearch 交互的 Domain，虽然都表示TraceSegment、字段类似、携带的信息差不多，但是使用的位置不同，是常见的一种解耦方式。</p>
+<p data-nodeid="124319" class="">2、 排序 Span。</p>
+
+
+<p data-nodeid="106428">TraceQueryService 会按照&nbsp;parentSpanId&nbsp;排序 Trace.spans 集合中&nbsp;Span 对象（父 Span 在前，子 Span 在后），大致实现如下：</p>
+<pre class="lang-java hljs" data-nodeid="124757"><code data-language="java">List&lt;Span&gt; sortedSpans = <span class="hljs-keyword">new</span> LinkedList&lt;&gt;();
+<span class="hljs-comment">// 查找该Trace中最顶层的rootSpan，即第一个 Span</span>
+List&lt;Span&gt; rootSpans = findRoot(trace.getSpans());
+rootSpans.forEach(span -&gt; {
+    List&lt;Span&gt; childrenSpan = <span class="hljs-keyword">new</span> ArrayList&lt;&gt;();
+    childrenSpan.add(span); 
+    <span class="hljs-comment">// 这里会递归查找当前span的子Span，并添加到sortedSpans这个List中</span>
+    findChildren(trace.getSpans(), span, childrenSpan);
+    sortedSpans.addAll(childrenSpan);
+});
+<span class="hljs-comment">// 重新设置 Trace.spans字段</span>
+trace.getSpans().clear();
+trace.getSpans().addAll(sortedSpans);
+<span class="hljs-keyword">return</span> trace;
+</code></pre>
+
+<p data-nodeid="125624">下面通过一个示例描述该递归排序 Span 的大致执行逻辑：</p>
+<p data-nodeid="125625" class=""><img src="https://s0.lgstatic.com/i/image/M00/26/47/CgqCHl7xuheAOMFAAATOX_NF5CU262.png" alt="Drawing 24.png" data-nodeid="125629"></p>
+
+
+<p data-nodeid="106431">query-graphql-plugin 插件的分析就到此结束了，我们下一课时见。</p></div>
+
+</body></html>

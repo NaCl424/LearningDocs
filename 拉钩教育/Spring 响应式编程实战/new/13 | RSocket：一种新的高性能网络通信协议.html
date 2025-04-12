@@ -1,0 +1,1248 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>13 | RSocket：一种新的高性能网络通信协议</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>13 | RSocket：一种新的高性能网络通信协议</h1><p data-nodeid="484" class="">前面几讲我们讨论了如何使用 WebFlux 构建响应式 Web 服务的实现方案。WebFlux 和 WebMVC 一样，都是基于 HTTP 协议实现请求-响应式的交互方式。这种交互方案很简单，但不够灵活，也无法应对所有的响应式应用场景。那么，有没有在网络协议层上提供更加丰富的交互方式呢？答案是肯定的，那就是我们今天要讨论的 RSocket 协议。</p>
+<p data-nodeid="485">这一讲，我将从 RSocket 协议的特性、交互模式以及与主流开发框架之间的集成等几个方面来和你讨论，相信学完之后，你就会发现 <strong data-nodeid="562">RSocket 是一款全新的协议，它基于响应式数据流，为我们提供了高性能的网络通信机制</strong>。</p>
+<h3 data-nodeid="486">RSocket 协议</h3>
+<p data-nodeid="487">在引入 RSocket 协议之前，我们先来讨论为什么需要这样一个协议。关于它的背景，让我从传统的请求-响应模式所存在的问题开始说起。</p>
+<h4 data-nodeid="488">请求-响应模式的问题</h4>
+<p data-nodeid="489">我们知道常用的 HTTP 协议的优势在于其广泛的适用性，有非常多的服务器和客户端实现工具的支持，但 HTTP 协议本身比较简单，只支持请求-响应模式。而这种模式对于很多应用场景来说是不合适的。</p>
+<p data-nodeid="490">典型的例子就是消息推送，以 HTTP 协议为例，如果客户端需要获取最新的推送消息，就必须使用轮询。客户端不停地发送请求到服务器来检查更新，这无疑造成了大量的资源浪费。请求-响应模式的另外一个问题是，如果某个请求的响应时间过长，会阻塞之后的其他请求的处理，正如“09 | 框架升级：WebFlux 比 Web MVC 到底好在哪里”中所分析的那样。</p>
+<p data-nodeid="491">虽然服务器发送事件（Server-Sent Events，SSE）可以用来推送消息，不过，SSE 是一个简单的文本协议，仅提供有限的功能。此外，WebSocket 可以进行双向数据传输，但长连接会造成服务之间的紧密耦合，WebSocket 的使用就不符合响应式系统要求，因为协议不提供控制背压的可能性，而背压是回弹性系统的重要组成部分。</p>
+<p data-nodeid="492">事实上，响应式编程的实施目前主要有两个障碍，一个是关系型数据访问，我们将在“17 | R2DBC：关系型数据库能具备响应式数据访问特性吗”中专门讨论这个话题；而另一个就是网络协议。幸运的是，响应式流规范背后的开发团队理解了跨网络、异步、低延迟通信的必要性。2015 年，RSocket 协议就在这样的背景下诞生了。</p>
+<h4 data-nodeid="493">RSocket 协议与交互模式</h4>
+<p data-nodeid="494">RSocket 是一种新的第 7 层语言无关的应用网络协议，用来解决单一的请求-响应模式以及现有网络传输协议所存在的问题，提供 Java、JavaScript、C++ 和 Kotlin 等多种语言的实现版本。</p>
+<p data-nodeid="495">RSocket 是一个二进制的协议，以异步消息的方式提供 4 种交互模式，除了请求-响应（request/response）模式之外，还包括请求-响应流（request/stream）、即发-即忘（fire-and-forget）和通道（channel）这三种新的交互模式。这些模式的基本特性如下所示。</p>
+<ul data-nodeid="496">
+<li data-nodeid="497">
+<p data-nodeid="498">请求-响应模式：这是最典型也最常见的模式。发送方在发送消息给接收方之后，等待与之对应的响应消息。</p>
+</li>
+<li data-nodeid="499">
+<p data-nodeid="500">请求-响应流模式：发送方的每个请求消息，都对应于接收方的一个消息流作为响应。</p>
+</li>
+<li data-nodeid="501">
+<p data-nodeid="502">即发-即忘模式：发送方的请求消息没有与之对应的响应。</p>
+</li>
+<li data-nodeid="503">
+<p data-nodeid="504">通道模式：在发送方和接收方之间建立一个双向传输的通道。</p>
+</li>
+</ul>
+<p data-nodeid="505">RSocket 专门设计用来与响应式风格应用程序进行配合使用，在使用 RSocket 协议时，背压和流量控制仍然有效。</p>
+<p data-nodeid="506">为了更好地理解 RSocket 协议，让我们将它与 HTTP 协议做一些对比。在第 9 讲中，我已经提到过 Servlet 是基于 HTTP 协议之上的一套 Java API 规范，将 HTTP 请求转化为一个 ServletRequest 对象，并将处理结果封装成一个 ServletResponse 对象进行返回。HTTP 协议为了兼容各种应用方式，本身有一定的复杂性，性能一般。而 RSocket 采用的是自定义二进制协议，其本身的定位就是高性能通信协议，性能上比 HTTP 高出一个数量级。</p>
+<p data-nodeid="957">在交互模式上，与 HTTP 的请求-响应这种单向的交互模式不同，RSocket 倡导的是对等通信，不再使用传统的客户端-服务器端单向通信模式，而是在两端之间可以自由地相互发送和处理请求。RSocket 协议在交互方式上可以参考下图。</p>
+<p data-nodeid="958" class="te-preview-highlight"><img src="https://s0.lgstatic.com/i/image6/M01/37/06/CioPOWB1XhiAZv3EAACVQCujHBw318.png" alt="图片1.png" data-nodeid="963"></p>
+<div data-nodeid="959"><p style="text-align:center">RSocket 协议的交互方式</p></div>
+
+
+
+
+<h3 data-nodeid="510">使用 RSocket 实现远程交互</h3>
+<p data-nodeid="511">想要在应用程序中使用 RSocket 协议，我们需要引入如下依赖。</p>
+<pre class="lang-java hljs" data-nodeid="512"><code data-language="java">&lt;dependency&gt;
+&nbsp;&nbsp;&nbsp; &lt;groupId&gt;io.rsocket&lt;/groupId&gt;
+&nbsp;&nbsp;&nbsp; &lt;artifactId&gt;rsocket-core&lt;/artifactId&gt;
+&lt;/dependency&gt;
+&lt;dependency&gt;
+&nbsp;&nbsp;&nbsp; &lt;groupId&gt;io.rsocket&lt;/groupId&gt;
+&nbsp;&nbsp;&nbsp; &lt;artifactId&gt;rsocket-transport-netty&lt;/artifactId&gt;
+&lt;/dependency&gt;
+</code></pre>
+<p data-nodeid="513">可以看到，这里使用了 rsocket-transport-netty 包，该包的底层实现就是 Reactor Netty 组件，支持 TCP 和 WebSocket 协议。如果你想使用 UDP 协议，那么可以引入 rsocket-transport-aeron 包。在引入这些包之后，就可以使用该协议中最核心的 RSocket 接口了，我们一起来看一下。</p>
+<h4 data-nodeid="514">RSocket 接口</h4>
+<p data-nodeid="515">RSocket 接口的定义如下所示。</p>
+<pre class="lang-java hljs" data-nodeid="516"><code data-language="java"><span class="hljs-keyword">import</span> org.reactivestreams.Publisher;
+<span class="hljs-keyword">import</span> reactor.core.publisher.Flux;
+<span class="hljs-keyword">import</span> reactor.core.publisher.Mono;
+&nbsp;
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">interface</span> <span class="hljs-title">RSocket</span> <span class="hljs-keyword">extends</span> <span class="hljs-title">Availability</span>, <span class="hljs-title">Closeable</span> </span>{
+
+	<span class="hljs-comment">//推送元信息，数据可以自定义</span>
+	<span class="hljs-function">Mono&lt;Void&gt; <span class="hljs-title">metadataPush</span><span class="hljs-params">(Payload payload)</span></span>;
+	&nbsp;
+&nbsp;&nbsp;&nbsp; <span class="hljs-comment">//请求-响应模式，发送一个请求并接收一个响应。该协议也比 HTTP 更具优势，因为它是异步且多路复用的</span>
+	<span class="hljs-function">Mono&lt;Payload&gt; <span class="hljs-title">requestResponse</span><span class="hljs-params">(Payload payload)</span></span>;
+	&nbsp;
+&nbsp;&nbsp;&nbsp; <span class="hljs-comment">//即发-即忘模式，请求-响应的优化，在不需要响应时非常有用</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-function">Mono&lt;Void&gt; <span class="hljs-title">fireAndForget</span><span class="hljs-params">(Payload payload)</span></span>;
+
+&nbsp;&nbsp;&nbsp; <span class="hljs-comment">//请求-响应流模式，类似返回集合的请求/响应，集合将以流的方式返回，而不是等到查询完成</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-function">Flux&lt;Payload&gt; <span class="hljs-title">requestStream</span><span class="hljs-params">(Payload payload)</span></span>;
+&nbsp;
+&nbsp;&nbsp;&nbsp; <span class="hljs-comment">//通道模式，允许任意交互模型的双向消息流</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-function">Flux&lt;Payload&gt; <span class="hljs-title">requestChannel</span><span class="hljs-params">(Publisher&lt;Payload&gt; payloads)</span></span>;
+}
+</code></pre>
+<p data-nodeid="517">显然，RSocket 接口通过四个方法分别实现了它所提供的四种交互模式，其中 requestResponse 方法返回的是一个 Mono<code data-backticks="1" data-nodeid="595">&lt;Payload&gt;</code> 对象，这里的 Payload 代表的就是一种消息对象，它由两部分组成：元信息 metadata 和数据 data，类似常见的消息通信中的消息头和消息体的概念。</p>
+<p data-nodeid="518">然后，我们发现 fireAndForget 方法返回的是一个 Mono<code data-backticks="1" data-nodeid="598">&lt;Void&gt;</code> 流，符合即发-即忘模式的语义。而 requestStream 作为请求-响应流模式的实现，与 requestResponse 的区别在于它的返回值是一个 Flux 流，而不是一个 Mono 对象。</p>
+<p data-nodeid="519">最后，我们注意到这几个方法的输入都是一个 Payload 消息对象，而不是一个响应式流对象。但 requestChannel 方法就不一样了，它的输入同样是一个代表响应式流的 Publisher 对象，这意味着此种模式下的输入输出都是响应式流，也就是说可以进行客户端和服务器端之间的双向交互。</p>
+<p data-nodeid="520">rsocket-core 包针对 RSocket 接口提供了一个抽象的实现类 AbstractRSocket，对上述方法做了简单的实现封装。在使用过程中，我们可以基于这个 AbstractRSocket 类来提供某一个交互模式的具体实现逻辑，而不需要完全实现 RSocket 接口中的所有方法。</p>
+<h4 data-nodeid="521">使用 RSocket 的交互模式</h4>
+<p data-nodeid="522">介绍完 RSocket 接口之后，我们来看看具体如何使用它所提供的四种交互模式。这里以最常见的请求-响应交互模式为例，给出使用 RSocket 协议的使用方法。与使用 HTTP 协议一样，这个过程需要构建服务器端和客户端，并通过客户端发起请求。</p>
+<p data-nodeid="523">我们先来看如何构建 RSocket 服务器端，示例代码如下所示。</p>
+<pre class="lang-java hljs" data-nodeid="524"><code data-language="java">RSocketFactory.receive()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .acceptor(((setup, sendingSocket) -&gt; Mono.just(
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">new</span> AbstractRSocket() {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-meta">@Override</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> Mono&lt;Payload&gt; <span class="hljs-title">requestResponse</span><span class="hljs-params">(Payload payload)</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> Mono.just(DefaultPayload.create(<span class="hljs-string">"Hello: "</span> + payload.getDataUtf8()));
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; }
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; }
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; )))
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .transport(TcpServerTransport.create(<span class="hljs-string">"localhost"</span>, <span class="hljs-number">7000</span>))
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .start()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .subscribe();
+</code></pre>
+<p data-nodeid="525">这里的 RSocketFactory.receive() 方法返回用来创建服务器的 ServerRSocketFactory 类的对象。ServerRSocketFactory 的 acceptor() 方法的输入参数是 SocketAcceptor 接口。</p>
+<p data-nodeid="526">上述代码中，我们用到了前面介绍的 RSocket 抽象实现类 AbstractRSocket，重写了其中的 requestResponse() 方法，对输入的参数前面添加一个 "Hello: " 前缀并返回；接下来的 transport() 方法指定 ServerTransport 接口的实现类 TcpServerTransport 作为 RSocket 底层的传输层实现，通过该方法，服务器端就启动了本地 7000 端口并监听来自客户端的请求；最后，我们通过 start().subscribe() 来触发整个启动过程。</p>
+<p data-nodeid="527">构建完服务器端，我们来构建客户端组件，如下所示。</p>
+<pre class="lang-java hljs" data-nodeid="528"><code data-language="java">RSocket socket = RSocketFactory.connect()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .transport(TcpClientTransport.create(<span class="hljs-string">"localhost"</span>, <span class="hljs-number">7000</span>))
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .start()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .block();
+</code></pre>
+<p data-nodeid="529">RSocketFactory.connect() 方法用来创建 RSocket 客户端，返回 ClientRSocketFactory 类的实例对象；接下来的 transport() 方法指定传输层 ClientTransport 实现；和服务器端组件 TcpServerTransport 对应，这里使用的是 TcpClientTransport 来连接本地服务器上的 7000 端口；最后调用 start().block() 方法等待客户端启动并返回 RSocket 对象。</p>
+<p data-nodeid="530">现在，我们就可以使用 RSocket 的 requestResponse() 方法来发送请求并获取响应了，如下所示。</p>
+<pre class="lang-java hljs" data-nodeid="531"><code data-language="java">socket.requestResponse(DefaultPayload.create(<span class="hljs-string">"World"</span>))
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .map(Payload::getDataUtf8)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .doOnNext(System.out::println)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .doFinally(signalType -&gt; socket.dispose())
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .then()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .block();
+</code></pre>
+<p data-nodeid="532">我们可以使用 DefaultPayload.create() 方法来简单地创建 Payload 对象，然后通过 RSocket 类的 dispose() 方法用来销毁客户端对象。这样，整个调用过程就结束了。执行这次请求，我们会在控制台上获取“Hello: World”。</p>
+<h3 data-nodeid="533">RSocket 与框架集成</h3>
+<p data-nodeid="534">通常，我们不会直接使用 RSocket 原生开发库进行应用程序的开发，而是借助特定的开发框架。在 Java 领域中，Spring Boot、Spring Cloud 以及 Dubbo 等主流开发框架都集成了 RSocket 协议。下面我就分别为你说明。</p>
+<h4 data-nodeid="535">集成 RSocket 与 Spring 框架</h4>
+<p data-nodeid="536">想要在 Spring Boot 中使用 RSocket 协议，我们需要引入如下依赖。</p>
+<pre class="lang-java hljs" data-nodeid="537"><code data-language="java">&lt;dependency&gt;
+&nbsp;&nbsp;&nbsp; &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+&nbsp;&nbsp;&nbsp; &lt;artifactId&gt;spring-boot-starter-rsocket&lt;/artifactId&gt;
+&lt;/dependency&gt;
+</code></pre>
+<p data-nodeid="538">然后，我们同样先来构建一个请求-响应式交互方式。基于“10 | WebFlux（上）：如何使用注解编程模式构建异步非阻塞服务”中的内容，我们可以构建如下所示一个简单 Controller。</p>
+<pre class="lang-java hljs" data-nodeid="539"><code data-language="java"><span class="hljs-meta">@Controller</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">HelloController</span> </span>{
+&nbsp;
+&nbsp; <span class="hljs-meta">@MessageMapping("hello")</span>
+&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> Mono&lt;String&gt; <span class="hljs-title">hello</span><span class="hljs-params">(String input)</span> </span>{
+&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> Mono.just(<span class="hljs-string">"Hello: "</span> + input);
+&nbsp; }
+}
+</code></pre>
+<p data-nodeid="540">你可以注意到，这里我引入了一个新的注解 @MessageMapping。跟 @RequestMapping 注解类似，@MessageMapping 是 Spring 提供的一个注解，用来指定 WebSocket、RSocket 等协议中消息处理的目的地。然后，我们输入了一个 String 类型的参数并返回一个 Mono 对象，符合请求-响应交互模式的定义。</p>
+<p data-nodeid="541">为了访问这个 RSocket 端点，我们需要构建一个 RSocketRequester 对象，构建方式如下所示。</p>
+<pre class="lang-java hljs" data-nodeid="542"><code data-language="java"><span class="hljs-meta">@Autowired</span>
+RSocketRequester.Builder builder;
+&nbsp;
+RSocketRequester requester = builder.dataMimeType(MimeTypeUtils.TEXT_PLAIN)
+&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .connect(TcpClientTransport.create(<span class="hljs-number">7000</span>)).block();
+</code></pre>
+<p data-nodeid="543">基于这个 RSocketRequester 对象，我们就可以通过它的 route 方法路由到前面通过 @MessageMapping 注解构建的 "hello" 端点，如下所示。</p>
+<pre class="lang-java hljs" data-nodeid="544"><code data-language="java">Mono&lt;String&gt; response = requester.route(<span class="hljs-string">"hello"</span>)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .data(<span class="hljs-string">"World"</span>)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .retrieveMono(String.class);
+</code></pre>
+<p data-nodeid="545">我们再来看一个请求-响应流的示例，如下所示。</p>
+<pre class="lang-java hljs" data-nodeid="546"><code data-language="java"><span class="hljs-meta">@MessageMapping("stream")</span>
+<span class="hljs-function">Flux&lt;Message&gt; <span class="hljs-title">stream</span><span class="hljs-params">(Message request)</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> Flux
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .interval(Duration.ofSeconds(<span class="hljs-number">1</span>))
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .map(index -&gt; <span class="hljs-keyword">new</span> Message(request.getParam, index));
+}
+</code></pre>
+<p data-nodeid="547">这里根据输入的 Message 对象，返回一个 Flux 流，每一秒发送一个添加了 Index 的新 Message 对象。</p>
+<h4 data-nodeid="548">集成 RSocket 与其他框架</h4>
+<p data-nodeid="549">针对其他开发框架，Dubbo 在 3.0.0-SNAPSHOT 版本里基于 RSocket 对响应式编程提供了支持，开发人员可以非常方便地使用 RSocket 的 API。而随着 Spring 框架的持续升级，5.2 版本中也把 RSocket 作为缺省的通信协议。</p>
+<h3 data-nodeid="550">小结与预告</h3>
+<p data-nodeid="551">作为构建响应式 Web 服务的最后一环，本讲讨论了 RSocket 这款新的高性能网络通信协议。与 HTTP 协议相比，RSocket 提供了四种不同的交互模式来提供多样化的网络通信体验。同时，RSocket 也无缝集成了响应式流。我们可以通过 Spring Boot 框架来使用这款异步、非阻塞式通信协议。</p>
+<p data-nodeid="552">这里给你留一道思考题：你知道 RSocket 提供了哪四种交互模式，各自与响应式流是怎么整合的？</p>
+<p data-nodeid="553">下一讲就要开始讨论响应式数据访问层的构建过程，Spring 家族专门提供了 Spring Boot 框架来实现这一目标，我们下一讲再见。</p>
+<blockquote data-nodeid="554">
+<p data-nodeid="555" class="">点击链接，获取课程相关代码 ↓↓↓<br>
+<a href="https://github.com/lagoueduCol/ReactiveProgramming-jianxiang.git?fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="643">https://github.com/lagoueduCol/ReactiveProgramming-jianxiang.git</a></p>
+</blockquote></div>
+
+</body></html>

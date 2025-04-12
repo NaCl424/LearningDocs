@@ -1,0 +1,1286 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>加餐3：SkyWalking OAP 存储体系剖析</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>加餐3：SkyWalking OAP 存储体系剖析</h1><p>前面的课时提到，SkyWalking OAP 底层支持 ElasticSearch、H2、MySQL 等多种持久化存储，同时也支持读取其他分布式链路追踪系统的数据，例如，jaeger（Uber 开源的分布式跟踪系统）、zipkin（Twitter 开源的分布式跟踪系统）。下图展示了 OAP 提供的针对不同持久化存储的插件模块：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/11/F6/Ciqc1F7M1mOAdkinAAUHgWAh2x8972.png" alt="image001.png"></p>
+<p>在 server-core 模块中对整个 OAP 的持久化有一个整体的抽象，具体位置如下图所示，而上述这些插件都是在此基础上扩展实现的：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/11/F6/Ciqc1F7M1nCAO5cwAAKxM_2j59I530.png" alt="image003.png"></p>
+<p>首先，OAP 存储了两种类型的数据：时间相关的数据和非时间相关的数据（与“时序”这个专有名词区分一下）。注册到 OAP 集群的 Service、ServiceInstance 以及同步的 EndpointName、NetworkAddress 都是非时间相关的数据，一个稳定的服务产生的这些数据是有限的，我们可以用几个固定的 ES 索引（或数据库表）来存储这些数据。</p>
+<p>而像 JVM 监控等都属于时间相关的数据，它们的数据量会随时间流逝而线性增加。如果将这些时间相关的数据存储到几个固定的 ES 索引中，就会导致这些 ES 索引（或数据库表）非常大，这种显然是不能落地的。既然一个 ES 索引（或数据库表）存不下，一般会考虑切分，常见的切分方式按照时间窗口以及 DownSampling 进行切分。</p>
+<p>这里简单介绍一下 DownSampling 这个概念。DownSampling（翻译为"向下采样"或是"降采样"）是降低数据采样率或分辨率的过程。这里通过一个示例进行说明，假设 Agent 每隔一分钟进行一次 JVM Old GC 时间的采样，并发送到 Skywalking OAP 集群，一小时之后，我们可以到 60 个点（Timestamp 和 Value 构成一个点），在一张二维图（横轴是时间戳，纵轴是 Old GC 耗时）上将这些点连接起来，可以绘制出该 JVM 实例在这一小时内的 Old GC 监控曲线。</p>
+<p>假设我们查询该 JVM 实例跨度为一周的 Old GC 监控，将获得 10080 个点，监控图中点与点之间的距离会变得非常密。此时，就可以通过 DownSampling 的方式，将一个时间范围内的多个监控数据点聚合成单个点，从而减少需要绘制的点的个数。这里我们可以按照小时为时间窗口，计算一小时内 60 点的平均值，作为该小时的 DownSampling 聚合结果。下图为 13:00 ~ 14:00 以及 14:00 ~ 15:00 两小时的 DownSampling 示意图，经过 DownSampling 之后，一周的监控数据只有 168 个点了。</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/11/F6/Ciqc1F7M1nyAFfhMAAP8mBituI8522.png" alt="image005.png"></p>
+<p>另外，Trace 也是时间相关的数据，其数据量会随时间不断增加，但不具备可聚合的特性。</p>
+<h3>Model 与 ES 索引</h3>
+<p>明确了 OAP 要存储的数据特性，我们回到 server-core 模块继续分析。常见的 ORM 框架会将数据中的表结构映射成 Java 类，表中的一个行数据会映射成一个 Java Bean 对象，在 OAP 的存储抽象中也有类似的操作。SkyWalking 会将 [Metric + DownSampling] 对应的一系列 ES 索引与一个 Model 对象进行映射，下图展示了 instance_jvm_old_gc_time 这个 Metric（指标）涉及的全部 ES 索引以及对应的 Model 对象：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/12/02/CgqCHl7M1qqAWJwzAAJI_qj62kA075.png" alt="image007.png"></p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/12/02/CgqCHl7M1rCAF_BRAAIjEdyxGKM865.png" alt="image009.png"></p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/11/F6/Ciqc1F7M1riAbapoAAIgfkX2Ecw638.png" alt="image011.png"></p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/12/02/CgqCHl7M1saAc6guAAIMU20bW9s987.png" alt="image013.png"></p>
+<p>Model 对象记录了对应 ES 索引的核心信息：</p>
+<ul>
+<li><strong>name（String类型）</strong>：Metric 名称，在 OAP 创建 ES 索引时会使用</li>
+<li><strong>columns（List<modelcolumn>类型）</modelcolumn></strong>：ES 索引 中的 Field 集合，一个 ModelColumn 对象记录了一个 Field 的名称、类型等信息。</li>
+<li><strong>capableOfTimeSeries（boolean类型）</strong>：对应 ES 索引中存储的数据是否为时间相关的数据。</li>
+<li><strong>downsampling（Downsampling类型）</strong>：如果是时间相关的数据，则需要指定其 Downsampling 单位，可选值有 Second、 Minute、 Hour、 Day、 Month。对于非时间相关的数据，则该字段值为 Downsampling.NONE。</li>
+<li><strong>deleteHistory（boolean类型）</strong>：是否删除历史数据。</li>
+<li><strong>scopeId（int类型）</strong>：对应指标的全局唯一 ID。</li>
+</ul>
+<p>很明显，ES 索引的名称由三部分构成：Metric 名称、DownSampling、时间窗口（后面两部分只有时序数据才会有），而 ES 索引的别名由 Metric 名称和 DownSampling 构成。</p>
+<p>下图展示了 Model.columns 集合与 ES 索引中 Field 之间的映射关系，除了名称之间的映射关系之外，ModelColumn 中记录了每个 Field 的类型。</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/11/F7/Ciqc1F7M1tWAGod6AAXHbG78X9I245.png" alt="image015.png"></p>
+<p>在 CoreModuleProvider 启动过程中，会扫描 @Stream 注解，创建相应的 Model 对象，并由 StorageModels 统一管理（底层维护了 List<model> 集合）。 @Stream 扫描过程后面介绍，这里只需知道 @Stream 中会包含 Model 需要的信息即可。StorageModels 同时实现了 IModelSetter、IModelGetter、IModelOverride 三个 Service 接口，如下图所示。</model></p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/12/02/CgqCHl7M1uGAFsn_AAHpuk8RDn4882.png" alt="image017.png"></p>
+<p>IModelGetter、IModelSetter 定义了读取和新增 Model 实例的方法，IModelOverride 接口提供的 overrideColumnName() 方法一般用在以 DB 为存储的插件模块中，当列名与数据库关键字冲突时，会通过该方法修改列名。</p>
+<p>在 CoreModuleProvider 的 prepare() 方法中会将 StorageModels 作为上述三个 Service 接口的实现注册到 services 集合中。</p>
+<h3>初始化存储结构</h3>
+<p>很多 ORM 框架（例如，Hibernate ）提供了在应用启动时根据 Java Bean 初始化表结构的功能。SkyWalking OAP 也提供了类似的功能，主要在 ModelInstaller 中完成，核心在 install() 方法中：</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">final</span> <span class="hljs-keyword">void</span> <span class="hljs-title">install</span><span class="hljs-params">(Client client)</span> <span class="hljs-keyword">throws</span> StorageException </span>{
+    <span class="hljs-comment">// 获取全部Model对象</span>
+    IModelGetter modelGetter = moduleManager.find(CoreModule.NAME)
+      .provider().getService(IModelGetter<span class="hljs-class">.<span class="hljs-keyword">class</span>)</span>;
+    List&lt;Model&gt; models = modelGetter.getModels();
+    <span class="hljs-comment">// 根据mode这个环境变量决定是否创建底层存储结构</span>
+    <span class="hljs-keyword">if</span> (RunningMode.isNoInitMode()) {  
+        ... <span class="hljs-comment">// mode环境变量为no-init，则只会输出日志，不会初始化ES索引</span>
+    } <span class="hljs-keyword">else</span> { <span class="hljs-comment">// mode环境变量为非non-init值，走这个分支</span>
+        <span class="hljs-keyword">for</span> (Model model : models) {
+            <span class="hljs-comment">// 检查Model对应的底层存储结构是否存在，如果不存在则通过</span>
+            <span class="hljs-comment">//&nbsp;createTable()方法进行创建</span>
+            <span class="hljs-keyword">if</span> (!isExists(client, model)) { 
+                createTable(client, model); 
+            }
+        }
+    }
+}
+</code></pre>
+<p>ModelInstaller 是一个抽象类，其中的 createTable() 是个抽象方法，针对具体存储的具体创建流程由对应的子类完成，继承关系如下图所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/11/F7/Ciqc1F7M1vSAKUcCAACnS4z1sy0205.png" alt="image019.png"></p>
+<p>StorageEsInstaller 是针对 ElasticSearch 的实现，位于 storage-elasticsearch-plugin 模块中，该模块的 ModuleProvider 实现是 StorageModuleElasticsearchProvider（依赖于 CoreModule），在其 start() 方法中会调用 StorageEsInstaller.intall() 方法完成 ES 索引的初始化。</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">start</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> ModuleStartException </span>{
+&nbsp; &nbsp; elasticSearchClient.connect();
+&nbsp; &nbsp; StorageEsInstaller installer = <span class="hljs-keyword">new</span> StorageEsInstaller(...);
+&nbsp; &nbsp; installer.install(elasticSearchClient);
+}
+</code></pre>
+<p>这里使用的  ElasticSearchClient 是 SkyWalking 在 RestHighLevelClient 之上的封装，帮上层使用方屏蔽了一些通用的 Request 请求构造以及 Response 处理逻辑。</p>
+<p>下面深入到 StorageEsInstaller 中的 createTable() 方法， 在存储 Metric 、Trace 等数据时会随时间推移新创建多个索引，一般会先创建统一的模板，指定公共参数、字段类型等，之后再创建索引；存储服务注册等信息的索引都只有一个，直接创建索引即可。</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-function"><span class="hljs-keyword">protected</span> <span class="hljs-keyword">void</span> <span class="hljs-title">createTable</span><span class="hljs-params">(Client client, Model model)</span> </span>{
+&nbsp; &nbsp; ElasticSearchClient esClient = (ElasticSearchClient)client;
+&nbsp; &nbsp; <span class="hljs-comment">// 创建settings，其中指定了索引的分片数量、副本数量以及refresh时间间隔</span>
+&nbsp; &nbsp; JsonObject settings = createSetting();
+&nbsp; &nbsp; <span class="hljs-comment">// 创建mapping，其中指定了各个Field的类型等配置</span>
+&nbsp; &nbsp; JsonObject mapping = createMapping(model);
+&nbsp; &nbsp; <span class="hljs-keyword">if</span> (model.isCapableOfTimeSeries()) {
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-comment">// 对于时间相关的索引，先创建Template，其中除了指定settings和mapping</span>
+&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;<span class="hljs-comment">//&nbsp;之外，还会指定该Template匹配的索引名称(index_patterns)以及</span>
+        <span class="hljs-comment">// 别名(aliases)</span>
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">if</span> (!esClient.isExistsTemplate(model.getName())) {
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">boolean</span> isAcknowledged = esClient.createTemplate(
+                model.getName(), settings, mapping);
+&nbsp; &nbsp; &nbsp; &nbsp; }
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">if</span> (!esClient.isExistsIndex(model.getName())) {
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-comment">// ElasticSearch中真正的索引名称会添加时间戳后缀</span>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; String timeSeriesIndexName = TimeSeriesUtils
+                      .timeSeries(model);
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">boolean</span> isAcknowledged = esClient.createIndex(
+                      timeSeriesIndexName);
+&nbsp; &nbsp; &nbsp; &nbsp; }
+&nbsp; &nbsp; } <span class="hljs-keyword">else</span> {
+        <span class="hljs-comment">// 与时间无关的索引只会创建一个索引，直接使用Model.name作为索引名</span>
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-comment">//&nbsp;称创建(没有时间戳后缀)，另外，同样会设置settings和mapping</span>
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">boolean</span> isAcknowledged = esClient.createIndex(model.getName(), 
+            settings, mapping);
+&nbsp; &nbsp; }
+}
+</code></pre>
+<p>这里有几个点需要关注一下，首先是模板的相关内容，以 instance_jvm_old_gc_time 这个指标为例，每个 DownSampling 维度对应一个模板，每个模板中的 index_patterns 、aliases 配置以及匹配的索引名称，如下表所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/11/F7/Ciqc1F7M1wGAI3qgAACMKwr5nRI057.png" alt="image021.png"></p>
+<p>可以看到模板中指定的别名与 Model.name 是相同的，在后续查询操作中，我们可以直接通过别名查询该模板匹配的全部索引，但是写入时还是要明确指定具体索引名称的。</p>
+<p>另一个点是索引名称的时间后缀。在 TimeBucket 工具类中会根据指定的 DownSampling 将毫秒级时间进行整理，得到相应的时间窗口，如下图所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/12/02/CgqCHl7M1yCAbH7cAAmLbCfxgJc857.png" alt="image023.png"></p>
+<p>拿到时间戳所在的窗口之后，TimeSeriesUtils 工具类会将其转换成对应索引的时间戳后缀：</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> String <span class="hljs-title">timeSeries</span><span class="hljs-params">(String modelName, 
+        <span class="hljs-keyword">long</span> timeBucket, Downsampling downsampling)</span> </span>{
+&nbsp; &nbsp; <span class="hljs-keyword">switch</span> (downsampling) {
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">case</span> None:
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">return</span> modelName;
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">case</span> Hour: <span class="hljs-comment">// 一天内的Hour级别数据存储到同一个索引之中</span>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">return</span> modelName + Const.LINE + timeBucket / <span class="hljs-number">100</span>;
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">case</span> Minute: <span class="hljs-comment">// 一天内的分钟级数据存储到一个索引之中</span>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">return</span> modelName + Const.LINE + timeBucket / <span class="hljs-number">10000</span>;
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">case</span> Second: <span class="hljs-comment">// 一天内的秒级数据存储到一个索引之中</span>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">return</span> modelName + Const.LINE + timeBucket / <span class="hljs-number">1000000</span>;
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">default</span>: <span class="hljs-comment">// 对于Day、Month以及Year不做处理，直接用时间窗口作为后缀</span>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">return</span> modelName + Const.LINE + timeBucket;
+&nbsp; &nbsp; }
+}
+</code></pre>
+<p>到此为止，StorageEsInstaller 初始化 ES 索引的核心流程就介绍完了。</p>
+<h3>数据抽象</h3>
+<p>了解了索引（或是数据库表结构）的初始化流程之后，再来看 SkyWalking OAP是如何对持久化数据进行抽象的。</p>
+<p>SkyWalking 与 ORM 类似，会将索引中的一个 Document （或是数据库表中的一条数据）映射为一个 StorageData 对象。StorageData 接口中定义了一个 id() 方法，负责返回该条数据的唯一标识。实现 StorageData 接口的有三类数据，分别对应三个抽象类，如下图所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/11/F7/Ciqc1F7M1y2AAEnMAACsBUVPIcg418.png" alt="image025.png"></p>
+<ul>
+<li>
+<p><strong>Metrics</strong>：所有监控指标的顶级抽象，其中定义了一个 timeBucket 字段（long类型），它是所有监控指标的公共字段，用于表示该监控点所处的时间窗口。另外，timeBucket 字段被 @Column 注解标记，在 OAP 启动时会被扫描到转换成 Model 中的 ModelColumn，在初始化 ES 索引时就会创建相应的 Field。Metrics 抽象类中还定义了计算监控数据的一些公共方法：</p>
+<ul>
+<li>
+<p>calculate() 方法：大部分 Metrics 都会有一个 value 字段来记录该监控点的值，例如，CountMetrics 中的 value 字段记录了时间窗口内事件的次数，MaxLongMetrics 中的 value 字段记录时间窗口内的最大值。calculate() 方法就是用来计算该 value 值。</p>
+</li>
+<li>
+<p>combine() 方法：合并两个监控点。对于不同含义的监控数据，合并方式也有所不同，例如，CountMetrics 中 combine() 方法的实现是将两个监控点的值进行求和；MaxLongMetrics 中 combine() 方法的实现是取两个监控点的最大值。</p>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>Record</strong>：抽象了所有记录类型的数据，其子类如下图所示。其中 SegmentRecord 对应的是 TraceSegment 数据、AlarmRecord 对应一条告警、TopNDatabaseStatement 对应一条慢查询记录，这些数据都是一条条的记录。</p>
+</li>
+</ul>
+<p><img src="https://s0.lgstatic.com/i/image/M00/12/03/CgqCHl7M1ziAUV3lAADO8_KdBjs730.png" alt="image027.png"></p>
+<p>上述记录类型的数据也有一个公共字段 —— timeBucket（long 类型），表示该条记录数据所在的时间窗口，也同样被 @Column 注解标记。Record 抽象类中没有定义其他的公共方法。</p>
+<ul>
+<li><strong>RegisterSource</strong>：抽象了服务注册、服务实例注册、EndpointName（以及 NetworkAddress）同步三个过程中产生的数据。其中，定义了三个公共字段，且这三个字段都被 @Column 注解标注了：
+<ul>
+<li>sequence（int 类型）：上述三个过程中的数据都会产生一个全局唯一的 ID，该全局 ID 就保存在该字段中。</li>
+<li>registerTime（long 类型）：第一注册（或同步）时的时间戳。</li>
+<li>heartbeatTime（long 类型）：心跳时间戳。</li>
+</ul>
+</li>
+</ul>
+<p>在这三个抽象类下还有很多具体的实现类，这些实现类会根据对应的具体数据，扩展新的字段和方法，在后面介绍具体模块时会展开细说。</p>
+<p>最后，我们来看 StorageBuilder 这个接口，它与 StorageData 接口的关系非常紧密，在 StorageData 的全部实现类中，都有一个内部 Builder 类实现类了 StorageBuilder 接口。StorageBuilder 接口中定义了 map2Data() 和 data2Map() 两个方法，实现了 StorageData 对象与 Map 之间的相互转换。</p>
+<h3>DAO 层架构</h3>
+<p>在创建 ES 索引时使用到的 ElasticSearchClient， 是对 RestHighLevelClient 进行了一层封装，位于 library-client 模块，其中还提供了 JDBC 以及 gRPC 的 Client，如下图所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/11/F7/Ciqc1F7M10iAQOQeAACK78d1tQw384.png" alt="image029.png"></p>
+<p>GRPCClient 底层会与指定地址创建 gRPC ManagedChannel 连接，在后面的课程中会看到， OAP 节点之间的通信就是依赖 GRPCClient 实现的。</p>
+<p>JDBCHikariCPClient 底层封装了 HikariCP 连接池，对外提供了 execute()、executeQuery() 等执行 SQL 语句的方法。</p>
+<p>library-client 模块相对独立，如果同学们在实际开发中需要封装 ElasticSearch 客户端或是 JDBC 客户端，都可以直接拿来使用。</p>
+<p>虽然  ElasticSearchClient 对 RestHighLevelClient 的通用操作进行了封装，但如果上层逻辑直接使用，还是必须了解 RestHighLevelClient 的相关概念，所以在实践中会针对业务封装出一套 DAO 层。在 DAO 层会完成业务概念与存储概念的转换，如下图所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/11/F7/Ciqc1F7M11iAEBxFAAGikNTBius816.png" alt="image031.png"></p>
+<p>SkyWalking OAP 也提供了DAO 层抽象，如下图所示，大致可以分为三类：Receiver DAO、Cache DAO、Query DAO。</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/11/F7/Ciqc1F7M12iAYJt9AAIIw288AD4900.png" alt="image033.png"></p>
+<ul>
+<li><strong>Receiver DAO 接口</strong>：在各个 receiver 模块接收到 Agent 上报的 Metrics 数据、Trace 数据以及注册请求的时候，会通过 Receiver DAO 将数据持久化到底层存储，具体的接口如下图所示：</li>
+</ul>
+<p><img src="https://s0.lgstatic.com/i/image/M00/11/F7/Ciqc1F7M13SAGmxvAADxT4960Jo386.png" alt="image035.png"></p>
+<ul>
+<li><strong>IRegisterDAO 接口</strong>：负责增删改查 RegisterSource 数据。</li>
+<li><strong>IMetricsDAO 接口</strong>：负责增删改查 Metrics 数据。</li>
+<li><strong>IRecordDAO 接口</strong>：负责增删改查 Record 数据。</li>
+<li><strong>IBatchDAO 接口</strong>：上述接口都是单条数据的操作接口，IBatchDAO 接口提供了批量写入的功能。</li>
+<li><strong>IRegisterLockDAO 接口</strong>：在处理 RegisterSource 数据的时候，需要维护一把全局的锁，这样才能保证写入生成的 ID 全局唯一。IRegisterLockDAO 接口的实现就提供了全局锁的功能。</li>
+<li><strong>Cache DAO 接口</strong>：在稳定集群中，RegisterSource 类型数据基本不会变化，这里的 Cache DAO 接口主要提供了 RegisterSource 数据的查询，相较于 IRegisterDAO，Cache DAO 的接口提供了更多维度的查询方式。</li>
+</ul>
+<p>如下图所示，每一种 RegisterSource 数据都对应一个 Cache，通过 Cache 的方式提高查询性能，每个 Cache 底层都关联了一个 Cache DAO 接口实现。</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/11/F7/Ciqc1F7M132AMFlHAACbaBYDnW8720.png" alt="image037.png"></p>
+<p>另外，在 CoreModule 中还会启动 CacheUpdateTimer，其中会启动一个后台线程，定期更新 ServiceInventoryCache 缓存。</p>
+<ul>
+<li><strong>Query DAO 接口</strong>：Query DAO 接口负责支撑 query 模块处理 SkyWalking Rocketbot 发来的查询请求，接口参数更加贴近用户请求参数。下图展示了所有 Query DAO 接口，从接口名称即可看出查询的是哪些数据。</li>
+</ul>
+<p><img src="https://s0.lgstatic.com/i/image/M00/11/F7/Ciqc1F7M14eAfVPdAABls_BG5tE854.png" alt="image039.png"></p>
+<p>SkyWalking OAP 中 DAO 层的整体架构以及核心接口就介绍完了。</p>
+<h3>数据 TTL</h3>
+<p>前文提到，Metrics、Trace 等（时间相关的数据）对应的 ES 索引都是按照时间进行切分的，随着时间的推移，ES 索引会越来越多。为了解决这个问题，SkyWalking 只会在 ES 中存储一段时间内的数据，CoreModuleProvider 会启动 DataTTLKeeperTimer 定时清理过期数据。</p>
+<p>在 DataTTLKeeperTimer 中会启动一个后台线程，每 5 分钟执行一次清理操作，具体执行步骤如下：</p>
+<ol>
+<li>通过 ClusterNodesQuery 查询到当前 OAP 集群中全部节点列表，如果当前节点为列表中第一个节点，才能继续执行后续的清理操作。这就保证不会出现多个 OAP 节点并发执行清理任务。</li>
+<li>从 IModelGetter 中拿到全部 Model 对象，根据 Model 数据的 DownSampling 计算每个 Model 保留 ES 索引的范围。这里使用到了 StorageTTL 接口，其中会根据每个 Model 不同的 DownSampling 返回相应的 TTLCalculator，如下图所示：</li>
+</ol>
+<p><img src="https://s0.lgstatic.com/i/image/M00/11/F7/Ciqc1F7M15KASkiEAABTiYqEwqw229.png" alt="image041.png"></p>
+<p>对于一个 Model，通过 TTLCalculator 计算之后会得到一个时间，在该时间之前的 ES 索引将被删除。</p>
+<p>在删除 ES 索引的过程成还有一些细节：</p>
+<ol>
+<li>首先根据模板别名（也就是 Model.name）拿到该 Model 对应的全部 ES 索引。</li>
+<li>根据 ES 索引的时间后缀，以及 TTLCalculator 计算得到的时间，确定哪些索引会要被删除。</li>
+<li>如果该 Model 对应的全部索引都要被删除，则会创建一个新索引，为后面写入数据做准备。</li>
+<li>循环调用 ElasticSearchClient.delete() 方法删除索引。</li>
+</ol>
+<h3>总结</h3>
+<p>本课时重点介绍了 SkyWalking OAP 持久化存储方面的架构设计以及核心接口功能。首先介绍了 Model 与底层 ES 索引之间的映射关系，之后介绍了 ModelInstaller 是如何在 OAP 启动时初始化 ES 索引的。接下来，介绍了 OAP 对不同持久化数据的抽象，以及对应的 DAO 层设计。最后介绍了定期删除过期数据的核心原理。</p>
+<p>特别注意，本课时重在顶层设计，不在具体实现，在后面深入分析各个模块的具体实现时，会深入上述接口的实现细节。</p></div>
+
+</body></html>

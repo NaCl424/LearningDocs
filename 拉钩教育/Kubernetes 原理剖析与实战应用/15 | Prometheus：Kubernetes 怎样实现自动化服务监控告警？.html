@@ -1,0 +1,843 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>15 | Prometheus：Kubernetes 怎样实现自动化服务监控告警？</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>15 | Prometheus：Kubernetes 怎样实现自动化服务监控告警？</h1><p data-nodeid="57917">通过之前的学习，我们已经对 Kubernetes 有了一定的理解，也知道如何在 Kubernetes 中部署自己的业务系统。</p>
+
+
+
+<p data-nodeid="57377">Kubernetes 强大的能力让我们非常方便地使用容器部署业务。Kubernetes 自带的副本保持能力，可以避免部署的业务系统出现单点故障，提高可用性。各种探针也可以帮助我们对运行中的容器进行一些简单的周期性检查。</p>
+<p data-nodeid="57378">但是要想知道业务真实运行的一些指标，比如并发请求数、IOPS、线程数，等等，就需要通过监控系统来获取了。此外，我们还需要监控系统支持将不同数据源的指标进行收集、分类、汇总聚合以及可视化的展示等。</p>
+<p data-nodeid="57379">今天我们就来聊聊 Kubernetes 的监控体系，以及目前主流的监控方案。首先来看看 Kubernetes 监控系统所遇到的挑战。</p>
+<h3 data-nodeid="57380">Kubernetes 监控系统面临的挑战</h3>
+<p data-nodeid="57381">以往的业务应用在部署的时候，大都固定在某几台节点上，各种指标监控起来也很方便。通过在每个节点上部署对应的监控 agent，用来收集对应的监控指标。</p>
+<p data-nodeid="57382">而到了Kubernetes 体系中，监控的问题开始变得复杂起来。</p>
+<p data-nodeid="57383">首先，业务应用的 Pod 会在集群中“漂移”且捉摸不定。你无法预知 Pod 会在哪些节点上运行，而且运行时间有可能也只是短暂的，随时可能会被新的、健康的 Pod 所取代。而且业务还有需要扩缩容的场景，你无法提前预知哪些 Pod 会被销毁掉。这里还有两点非常值得关注，那就是：</p>
+<ol data-nodeid="57384">
+<li data-nodeid="57385">
+<p data-nodeid="57386">除了 StatefulSet 管理的 Pod 名字是固定不变的以外，通过 Deployment/ReplicaSet/DaemonSet 等工作负载管理的 Pod 的名字是随机的；</p>
+</li>
+<li data-nodeid="57387">
+<p data-nodeid="57388">Pod 的 IP 不是固定不变的。</p>
+</li>
+</ol>
+<p data-nodeid="57389">这样的话，如果我们还是通过以往固定 IP 或者固定域名的方式去拿监控数据，这就不太可行了。</p>
+<p data-nodeid="57390">其次，转向了微服务架构以后，就不可避免地出现“碎片化”的问题。从以前的单体架构，变成微服务架构，模块和功能被逐步拆解成一组小的、松耦合的服务。各个小的服务可以单独部署，这也给监控带来了麻烦。</p>
+<p data-nodeid="57391">再次，通过前面的学习，你已经知道Kubernetes 通过 label 和 annotation 来管理 Pod ，这一全新的理念对以往传统的监控方式带来了冲击。所以评判一个监控方案是不是能够完美适配 Kubernetes 体系的标准就是，它有没有采用 label 和 annotation 这套思路来收集监控指标。</p>
+<p data-nodeid="57392">最后，Kubernetes 强大的能力，让我们在部署应用的时候更加随心所欲。Kubernetes可以对接各个 Cloud Provider （云服务提供商），比如 AWS、GCP、阿里云、VMWare，等等。这就意味着我们部署业务的时候，可以选择让 Pod 运行在公有云、私有云或者混合云中。这也给监控体系带来前所未有的挑战。</p>
+<p data-nodeid="57393">尽管存在这么多的挑战，我们还是有很多方案可以采用的。现在我们先来看看 Kubernetes 中几种常见的监控数据类别。</p>
+<h3 data-nodeid="57394">常见的监控数据类别</h3>
+<p data-nodeid="57395">在 Kubernetes 中，监控数据大致分为两大类。</p>
+<p data-nodeid="57396">一种是<strong data-nodeid="57467">应用级别的数据</strong>，主要帮助我们了解应用自身的一些监控指标。常见的应用级别的监控数据包括：CPU 使用率、内存使用率、磁盘空间、网络延迟、并发请求数、请求失败率、线程数，等等。其中并发请求数这类指标，就需要应用自己暴露出监控指标的接口。</p>
+<p data-nodeid="57397">除了应用自身的监控数据外，另外一种就是<strong data-nodeid="57473">集群级别的数据</strong>。这个数据非常重要，它可以帮助我们时刻了解集群自身的运行状态。通过监控各个 Kubelet 所在节点的 CPU、Memory、网络吞吐量等指标，方便我们及时了解 Kubelet 的负载情况。还有 Kubernetes 各个组件的状态，比如 ETCD、kube-scheduler、kube-controller-manager、coredns 等。</p>
+<p data-nodeid="57398">在集群运行过程中，Kubernetes 产生的各种 Event 数据，以及 Deployment/StatefulSet/DaemonSet/Pod 等的状态、资源请求、调度和 API 延迟等数据指标也是必须要收集的。</p>
+<p data-nodeid="57399">下面我们先来看看如何来收集这些监控数据。</p>
+<h3 data-nodeid="57400">常见的监控数据采集工具</h3>
+<p data-nodeid="57401">Kubernetes 集群的数据采集工具主要有以下几种工具。</p>
+<h4 data-nodeid="59693" class="">1. cAdvisor</h4>
+
+
+
+
+
+<p data-nodeid="62460" class="">cAdvisor 是 Google 专门为容器资源监控和性能分析而开发的开源工具，且不支持跨主机的数据监控，需要将采集的数据存到外部数据库中，比如 influxdb，再通过图形展示工具进行可视化。一开始 cAdvisor 也内置到了 Kubelet 中，不需要额外部署。但是社区从 v1.10 版本开始，废弃了 cAdvisor 的端口，即默认不开启，并于 <a href="https://github.com/kubernetes/kubernetes/pull/65707" data-nodeid="62464">v1.12 版本正式移除</a>，转而使用 Kubelet 自身的<code data-backticks="1" data-nodeid="62466">/metrics</code>接口进行暴露。</p>
+
+<h4 data-nodeid="62124" class="">2. Heapster</h4>
+
+
+
+
+
+
+
+<p data-nodeid="57409">Heapster 是一个比较早期的方案，通过 cAdvisor 来收集汇总各种性能数据，是做自动伸缩（Autoscale）所依赖的组件。你在网上查找 Kubernetes 各种监控方案的时候可能还会见到。但是现在 Heapster 已经被社区废弃掉了，后续版本中推荐你使用 metrics-server 代替。我们在下一节中，会来介绍如何通过 metrics-server 来实现自动扩缩容，控制资源水位。</p>
+<h4 data-nodeid="64145" class="">3. metrics-server</h4>
+
+
+
+
+
+<p data-nodeid="57413"><a href="https://github.com/kubernetes-sigs/metrics-server" data-nodeid="57500">metrics-server</a>是一个集群范围内的监控数据聚合工具，用来替代 Heapster 。下一节我们会学习具体如何使用，这里先了解一下就可以了。</p>
+<h4 data-nodeid="64471" class="">4. Kube-state-metrics</h4>
+
+<p data-nodeid="65111" class=""><a href="https://github.com/kubernetes/kube-state-metrics" data-nodeid="65114">Kube-state-metrics</a> 可以监听 kube-apiserver 中的数据，并生成有关资源对象的新的状态指标，比如 Deployment、Node、Pod。这也是 kube-state-metrics 和 metrics-server 的<a href="https://github.com/kubernetes/kube-state-metrics#kube-state-metrics-vs-metrics-server" data-nodeid="65118">最大区别</a>。</p>
+
+<h4 data-nodeid="64793" class="">5. node-exporter</h4>
+
+<p data-nodeid="65762" class=""><a href="https://github.com/prometheus/node_exporter" data-nodeid="65765">node-exporter</a> 是 Prometheus 的一个 exporter，可以帮助我们获取到节点级别的监控指标，比如 CPU、Memory、磁盘空间、网络流量，等等。</p>
+
+
+
+<p data-nodeid="57422">当然，还有很多类似的工具可以采集数据，在此不一一列举。有了这么多数据采集工具可以帮助我们采集数据，<strong data-nodeid="57521">我们就可以根据自己的需要自由组合</strong>，形成我们的监控方案体系。</p>
+<p data-nodeid="57423">在 Kubernetes 1.12 版本以后，我们通常选择 Prometheus + Grafana 来搭建我们的监控体系，这也是社区推荐的方式。</p>
+<h3 data-nodeid="57424">Prometheus + Grafana</h3>
+<p data-nodeid="57425">Prometheus 功能非常强大，于 2012 年由 SoundCloud&nbsp; 公司开发的开源项目，并于 2016 年加入 CNCF，成为继 Kubernetes 之后第二个被 CNCF 接管的项目，<a href="https://www.cncf.io/announcements/2018/08/09/prometheus-graduates/" data-nodeid="57527">于 2018 年8月份毕业</a>，这意味着 Prometheus 具备了一定的成熟度和稳定性，我们可以放心地在生产环境中使用，也可以集成到我们自建的监控体系中（很多厂商的自建监控体系就是这么打造的）。</p>
+<p data-nodeid="57426">Prometheus 在早期开发的时候，参考了Google 内部 Borg 的监控实现 Borgmon。所以非常合适和源自 Borg 的 Kubernetes 搭配使用。</p>
+<p data-nodeid="66397">我们来看一个例子，如下图是 Prometheus + Grafana 组成的监控方案。</p>
+<p data-nodeid="66398" class=""><img src="https://s0.lgstatic.com/i/image/M00/5D/C8/Ciqc1F-FUAaABRE2AAFto-2ifvc966.png" alt="image.png" data-nodeid="66402"><br>
+(<a href="https://www.prometheus.io/assets/architecture.png" data-nodeid="66407">https://www.prometheus.io/assets/architecture.png</a>)</p>
+
+
+
+
+<p data-nodeid="57430">最左边的 Prometheus targets 就是我们要采集的数据。Retrieval 负责采集这些数据，并同时支持 Push 和 Pull 两种采集方式。</p>
+<ul data-nodeid="57431">
+<li data-nodeid="57432">
+<p data-nodeid="57433">Pull 模式是最常用的拉取式数据采集方式，大部分使用数据都是通过这种方式采集的。只需要在应用里面实现一个<code data-backticks="1" data-nodeid="57541">/metrics</code>接口，然后把这个接口写到Prometheus 的配置文件即可。你可以参照<a href="https://prometheus.io/docs/guides/go-application/" data-nodeid="57545">这份官方文档</a>，学习如何在自己的应用中添加监控指标。</p>
+</li>
+<li data-nodeid="57434">
+<p data-nodeid="57435">Push 模式则是由各个数据采集目标主动向 PushGateway 推送指标，再由服务器端拉取。</p>
+</li>
+</ul>
+<p data-nodeid="57436">为了保证数据持久化，Prometheus 采集到的这些监控数据会通过时间序列数据库 TSDB 进行存储，支持以时间为索引进行存储。TSDB 在提供存储的同时，还提供了非常强大的数据查询、数据处理功能，这也是告警系统以及可视化页面的基础。</p>
+<p data-nodeid="57437">此外，Prometheus 还内置了告警模块 Alertmanager，它支持多种告警方式，比如 pagerduty、邮件等，还有对告警进行动态分组等功能。</p>
+<p data-nodeid="57438">最后这些监控数据通过 Grafana 进行多维度的可视化展示，方便通过大盘进行分析。</p>
+<p data-nodeid="57439">我们会在第 17 讲中来详细说明这套监控系统的搭建过程及相关配置。</p>
+<h3 data-nodeid="57440">写在最后</h3>
+<p data-nodeid="57441">Kubernetes 的副本保持及自愈能力，可以尽可能地保持应用程序的运行，但这并不意味着我们就不需要了解应用程序运行的情况了。因此，当我们开始将业务部署到 Kubernetes 中时，还需要去部署一套监控系统，来帮助我们了解到业务内部运行的一些细节情况，同时我们也需要监控 Kubernetes 系统本身，帮助我们了解整个集群当前的形态，指导我们作出决策。Prometheus 和 Grafana 是目前使用较广泛的监控组合方案，很多监控方案也都是基于此做了二次开发和定制。</p>
+<p data-nodeid="57442">这节课到这里就结束了，如果你有什么想法或者疑问，欢迎你在留言区留言，我们一起讨论。</p></div>
+
+</body></html>

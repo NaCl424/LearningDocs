@@ -1,0 +1,1324 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>13 | ReactDOM.render 是如何串联渲染链路的？（上）</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>13 | ReactDOM.render 是如何串联渲染链路的？（上）</h1><p data-nodeid="1277" class="">由于 ReactDOM.render 的内容比较多，所以这里拆分了上中下三讲来讲解。</p>
+<p data-nodeid="1278">在上一讲，我们站在宏观角度对 Fiber 的架构分层和迭代动机有了充分的把握。从本讲开始，我们将以首次渲染为切入点，拆解 Fiber 架构下 ReactDOM.render 所触发的渲染链路，结合源码理解整个链路中所涉及的初始化、render 和 commit 等过程。</p>
+<h3 data-nodeid="1279">ReactDOM.render 调用栈的逻辑分层</h3>
+<p data-nodeid="1280">开篇先给到你一个简单的 React AppDemo：</p>
+<pre class="lang-java hljs" data-nodeid="1281"><code data-language="java">import React from "react";
+import ReactDOM from "react-dom";
+
+function App() {
+    return (
+      &lt;div className="App"&gt;
+        &lt;div className="container"&gt;
+          &lt;h1&gt;我是标题&lt;/h1&gt;
+          &lt;p&gt;我是第一段话&lt;/p&gt;
+          &lt;p&gt;我是第二段话&lt;/p&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+    );
+}
+
+const rootElement = document.getElementById("root");
+ReactDOM.render(&lt;App /&gt;, rootElement);
+</code></pre>
+<p data-nodeid="1282">Demo 启动后，渲染出的界面如下图所示：</p>
+<p data-nodeid="1283"><img src="https://s0.lgstatic.com/i/image/M00/6E/D9/CgqCHl-zmEOAGbJ5AAAxGM0SPWA261.png" alt="Drawing 0.png" data-nodeid="1379"></p>
+<p data-nodeid="1284">现在请你打开 Chrome 的 Performance 面板，点击下图红色圈圈所圈住的这个“记录”按钮：</p>
+<p data-nodeid="1285"><img src="https://s0.lgstatic.com/i/image/M00/6E/D9/CgqCHl-zmEuALVycAAEENjoXJ6E407.png" alt="Drawing 1.png" data-nodeid="1383"></p>
+<p data-nodeid="1286">然后重新访问 Demo 页面对应的本地服务地址，待页面刷新后，终止记录，便能够得到如下图右下角所示的这样一个调用栈大图：</p>
+<p data-nodeid="1287"><img src="https://s0.lgstatic.com/i/image/M00/6E/D9/CgqCHl-zmFKAFeHBAAQn6ZuFPrI619.png" alt="Drawing 2.png" data-nodeid="1387"></p>
+<p data-nodeid="1288">放大该图，定位“src/index.js”这个文件路径，我们就可以找到 ReactDOM.render 方法对应的调用栈，如下图所示：</p>
+<p data-nodeid="1289"><img src="https://s0.lgstatic.com/i/image/M00/6E/CE/Ciqc1F-zmFmAXkYlAAI2ONTKc9s081.png" alt="Drawing 3.png" data-nodeid="1391"></p>
+<p data-nodeid="1290">从图中你可以看到，ReactDOM.render 方法对应的调用栈非常深，中间涉及的函数量也比较大。如果这张图使你心里发虚，请先不要急于撤退——分析调用栈只是我们理解渲染链路的一个手段，我们的目的是借此提取关键逻辑，而非理解调用栈中的每一个方法。就这张图来说，你首先需要把握的，就是整个调用链路中所包含的三个阶段：</p>
+<p data-nodeid="1291"><img src="https://s0.lgstatic.com/i/image/M00/6E/D9/CgqCHl-zmGKAFb5NAAItD2ouVoc061.png" alt="Drawing 4.png" data-nodeid="1395"></p>
+<p data-nodeid="1292">图中 scheduleUpdateOnFiber 方法的作用是调度更新，在由 ReactDOM.render 发起的首屏渲染这个场景下，它触发的就是 performSyncWorkOnRoot。performSyncWorkOnRoot 开启的正是我们反复强调的 <strong data-nodeid="1405">render 阶段</strong>；而 commitRoot 方法开启的则是真实 DOM 的渲染过程（<strong data-nodeid="1406">commit 阶段</strong>）。因此以scheduleUpdateOnFiber 和 commitRoot 两个方法为界，我们可以大致把 ReactDOM.render 的调用栈划分为三个阶段：</p>
+<ol data-nodeid="1293">
+<li data-nodeid="1294">
+<p data-nodeid="1295">初始化阶段</p>
+</li>
+<li data-nodeid="1296">
+<p data-nodeid="1297">render 阶段</p>
+</li>
+<li data-nodeid="1298">
+<p data-nodeid="1299">commit 阶段</p>
+</li>
+</ol>
+<p data-nodeid="1300">接下来，我们就一起来看看这三个阶段分别做了哪些事情。</p>
+<blockquote data-nodeid="1301">
+<p data-nodeid="1302">注：渲染链路串讲已被拆分为 3 个课时，本课时讲解的是初始化阶段。</p>
+</blockquote>
+<h3 data-nodeid="1303">拆解 ReactDOM.render 调用栈——初始化阶段</h3>
+<p data-nodeid="1304">首先我们提取出初始化过程中涉及的调用栈大图：</p>
+<p data-nodeid="1305"><img src="https://s0.lgstatic.com/i/image/M00/6E/D9/CgqCHl-zmGqAU-42AABcbqaOzFc800.png" alt="Drawing 5.png" data-nodeid="1416"></p>
+<p data-nodeid="1306">图中的方法虽然看上去又多又杂，但做的事情清清爽爽，那就是<strong data-nodeid="1422">完成 Fiber 树中基本实体的创建</strong>。</p>
+<p data-nodeid="1307">什么是基本实体？基本实体有哪些？问题的答案藏在源码里，这里我为你提取了源码中的关键逻辑，首先是 legacyRenderSubtreeIntoContainer 方法。在 ReactDOM.render 函数体中，以下面代码所示的姿势调用了它：</p>
+<pre class="lang-java hljs" data-nodeid="1308"><code data-language="java"><span class="hljs-keyword">return</span> legacyRenderSubtreeIntoContainer(<span class="hljs-keyword">null</span>, element, container, <span class="hljs-keyword">false</span>, callback);
+</code></pre>
+<p data-nodeid="1309">而 legacyRenderSubtreeIntoContainer 的关键逻辑如下（解析在注释里）：</p>
+<pre class="lang-java hljs" data-nodeid="1310"><code data-language="java"><span class="hljs-function">function <span class="hljs-title">legacyRenderSubtreeIntoContainer</span><span class="hljs-params">(parentComponent, children, container, forceHydrate, callback)</span> </span>{
+  <span class="hljs-comment">// container 对应的是我们传入的真实 DOM 对象</span>
+  <span class="hljs-keyword">var</span> root = container._reactRootContainer;
+  <span class="hljs-comment">// 初始化 fiberRoot 对象</span>
+  <span class="hljs-keyword">var</span> fiberRoot;
+  <span class="hljs-comment">// DOM 对象本身不存在 _reactRootContainer 属性，因此 root 为空</span>
+  <span class="hljs-keyword">if</span> (!root) {
+    <span class="hljs-comment">// 若 root 为空，则初始化 _reactRootContainer，并将其值赋值给 root</span>
+    root = container._reactRootContainer = legacyCreateRootFromDOMContainer(container, forceHydrate);
+    <span class="hljs-comment">// legacyCreateRootFromDOMContainer 创建出的对象会有一个 _internalRoot 属性，将其赋值给 fiberRoot</span>
+    fiberRoot = root._internalRoot;
+
+    <span class="hljs-comment">// 这里处理的是 ReactDOM.render 入参中的回调函数，你了解即可</span>
+    <span class="hljs-keyword">if</span> (typeof callback === <span class="hljs-string">'function'</span>) {
+      <span class="hljs-keyword">var</span> originalCallback = callback;
+      callback = function () {
+        <span class="hljs-keyword">var</span> instance = getPublicRootInstance(fiberRoot);
+        originalCallback.call(instance);
+      };
+    } <span class="hljs-comment">// Initial mount should not be batched.</span>
+    <span class="hljs-comment">// 进入 unbatchedUpdates 方法</span>
+    unbatchedUpdates(function () {
+      updateContainer(children, fiberRoot, parentComponent, callback);
+    });
+  } <span class="hljs-keyword">else</span> {
+    <span class="hljs-comment">// else 逻辑处理的是非首次渲染的情况（即更新），其逻辑除了跳过了初始化工作，与楼上基本一致</span>
+    fiberRoot = root._internalRoot;
+    <span class="hljs-keyword">if</span> (typeof callback === <span class="hljs-string">'function'</span>) {
+      <span class="hljs-keyword">var</span> _originalCallback = callback;
+      callback = function () {
+        <span class="hljs-keyword">var</span> instance = getPublicRootInstance(fiberRoot);
+        _originalCallback.call(instance);
+      };
+    } <span class="hljs-comment">// Update</span>
+
+    updateContainer(children, fiberRoot, parentComponent, callback);
+  }
+  <span class="hljs-keyword">return</span> getPublicRootInstance(fiberRoot);
+}
+</code></pre>
+<p data-nodeid="1311">这里我为你总结一下首次渲染过程中 legacyRenderSubtreeIntoContainer 方法的主要逻辑链路：</p>
+<p data-nodeid="1312"><img src="https://s0.lgstatic.com/i/image/M00/70/03/CgqCHl-3mfWABLi5AADUzMV7iHA320.png" alt="Lark20201120-182606.png" data-nodeid="1428"></p>
+<p data-nodeid="1313">在这个流程中，你需要关注到 fiberRoot 这个对象。fiberRoot 到底是什么呢？这里我将运行时的 root 和 fiberRoot 为你截取出来，其中 root 对象的结构如下图所示：</p>
+<p data-nodeid="1314"><img src="https://s0.lgstatic.com/i/image/M00/6E/D9/CgqCHl-zmH6AKzPPAADcEbfK6K4199.png" alt="Drawing 6.png" data-nodeid="1432"></p>
+<p data-nodeid="1315">可以看出，root 对象（container._reactRootContainer）上有一个 _internalRoot 属性，这个 _internalRoot 也就是 fiberRoot。fiberRoot 的本质是一个 FiberRootNode 对象，其中包含一个 current 属性，该属性同样需要划重点。这里我为你高亮出 current 属性的部分内容：</p>
+<p data-nodeid="1316"><img src="https://s0.lgstatic.com/i/image/M00/6E/D9/CgqCHl-zmISANlmfAADLqX8jue0154.png" alt="Drawing 7.png" data-nodeid="1442"></p>
+<p data-nodeid="1317">或许你会对 current 对象包含的海量属性感到陌生和头大，但这并不妨碍你 Get 到“current 对象是一个 FiberNode 实例”这一点，<strong data-nodeid="1452">而 FiberNode，正是 Fiber 节点对应的对象类型</strong>。current 对象是一个 Fiber 节点，不仅如此，它还是<strong data-nodeid="1453">当前 Fiber 树的头部节点</strong>。</p>
+<p data-nodeid="1318">考虑到 current 属性对应的 FiberNode 节点，在调用栈中实际是由 createHostRootFiber 方法创建的，React 源码中也有多处以 rootFiber 代指 current 对象，因此下文中我们将以 rootFiber 指代 current 对象。</p>
+<p data-nodeid="1319">读到这里，你脑海中应该不难形成一个这样的指向关系：</p>
+<p data-nodeid="1320"><img src="https://s0.lgstatic.com/i/image/M00/6F/F8/Ciqc1F-3mh-AZrlvAABgy8S1u44402.png" alt="Lark20201120-182610.png" data-nodeid="1458"></p>
+<p data-nodeid="1321">其中，fiberRoot 的关联对象是真实 DOM 的容器节点；而 rootFiber 则作为虚拟 DOM 的根节点存在。<strong data-nodeid="1464">这两个节点，将是后续整棵 Fiber 树构建的起点</strong>。</p>
+<p data-nodeid="1322">接下来，fiberRoot 将和 ReactDOM.render 方法的其他入参一起，被传入 updateContainer 方法，从而形成一个回调。这个回调，正是接下来要调用的 unbatchedUpdates 方法的入参。我们一起看看 unbatchedUpdates 做了什么，下面代码是对 unbatchedUpdates 主体逻辑的提取：</p>
+<pre class="lang-java hljs" data-nodeid="1323"><code data-language="java"><span class="hljs-function">function <span class="hljs-title">unbatchedUpdates</span><span class="hljs-params">(fn, a)</span> </span>{
+  <span class="hljs-comment">// 这里是对上下文的处理，不必纠结</span>
+  <span class="hljs-keyword">var</span> prevExecutionContext = executionContext;
+  executionContext &amp;= ~BatchedContext;
+  executionContext |= LegacyUnbatchedContext;
+  <span class="hljs-keyword">try</span> {
+    <span class="hljs-comment">// 重点在这里，直接调用了传入的回调函数 fn，对应当前链路中的 updateContainer 方法</span>
+    <span class="hljs-keyword">return</span> fn(a);
+  } <span class="hljs-keyword">finally</span> {
+    <span class="hljs-comment">// finally 逻辑里是对回调队列的处理，此处不用太关注</span>
+    executionContext = prevExecutionContext;
+    <span class="hljs-keyword">if</span> (executionContext === NoContext) {
+      <span class="hljs-comment">// Flush the immediate callbacks that were scheduled during this batch</span>
+      resetRenderTimer();
+      flushSyncCallbackQueue();
+    }
+  }
+}
+</code></pre>
+<p data-nodeid="1324">在 unbatchedUpdates 函数体里，当下你只需要 Get 到一个信息：它直接调用了传入的回调 fn。而在当前链路中，fn 是什么呢？<strong data-nodeid="1471">fn 是一个针对 updateContainer 的调用</strong>：</p>
+<pre class="lang-java hljs" data-nodeid="1325"><code data-language="java">unbatchedUpdates(function () {
+  updateContainer(children, fiberRoot, parentComponent, callback);
+});
+</code></pre>
+<p data-nodeid="1326">接下来我们很有必要去看看 updateContainer 里面的逻辑。这里我将主体代码提取如下（解析在注释里，如果没有耐心读完可以直接看文字解读）：</p>
+<pre class="lang-java hljs" data-nodeid="1327"><code data-language="java"><span class="hljs-function">function <span class="hljs-title">updateContainer</span><span class="hljs-params">(element, container, parentComponent, callback)</span> </span>{
+  ......
+
+  <span class="hljs-comment">// 这是一个 event 相关的入参，此处不必关注</span>
+  <span class="hljs-keyword">var</span> eventTime = requestEventTime();
+
+  ......
+
+  <span class="hljs-comment">// 这是一个比较关键的入参，lane 表示优先级</span>
+  <span class="hljs-keyword">var</span> lane = requestUpdateLane(current$<span class="hljs-number">1</span>);
+  <span class="hljs-comment">// 结合 lane（优先级）信息，创建 update 对象，一个 update 对象意味着一个更新</span>
+  <span class="hljs-keyword">var</span> update = createUpdate(eventTime, lane); 
+
+  <span class="hljs-comment">// update 的 payload 对应的是一个 React 元素</span>
+  update.payload = {
+    element: element
+  };
+
+  <span class="hljs-comment">// 处理 callback，这个 callback 其实就是我们调用 ReactDOM.render 时传入的 callback</span>
+  callback = callback === undefined ? <span class="hljs-keyword">null</span> : callback;
+  <span class="hljs-keyword">if</span> (callback !== <span class="hljs-keyword">null</span>) {
+    {
+      <span class="hljs-keyword">if</span> (typeof callback !== <span class="hljs-string">'function'</span>) {
+        error(<span class="hljs-string">'render(...): Expected the last optional \`callback\` argument to be a '</span> + <span class="hljs-string">'function. Instead received: %s.'</span>, callback);
+      }
+    }
+    update.callback = callback;
+  }
+
+  <span class="hljs-comment">// 将 update 入队</span>
+  enqueueUpdate(current$<span class="hljs-number">1</span>, update);
+  <span class="hljs-comment">// 调度 fiberRoot </span>
+  scheduleUpdateOnFiber(current$<span class="hljs-number">1</span>, lane, eventTime);
+  <span class="hljs-comment">// 返回当前节点（fiberRoot）的优先级</span>
+  <span class="hljs-keyword">return</span> lane;
+}
+</code></pre>
+<p data-nodeid="1328">updateContainer 的逻辑相对来说丰富了点，但大部分逻辑也是在干杂活，它做的最关键的事情可以总结为三件：</p>
+<ol data-nodeid="1329">
+<li data-nodeid="1330">
+<p data-nodeid="1331">请求当前 Fiber 节点的 lane（优先级）；</p>
+</li>
+<li data-nodeid="1332">
+<p data-nodeid="1333">结合 lane（优先级），创建当前 Fiber 节点的 update 对象，并将其入队；</p>
+</li>
+<li data-nodeid="1334">
+<p data-nodeid="1335">调度当前节点（rootFiber）。</p>
+</li>
+</ol>
+<p data-nodeid="1336">函数体中的 scheduleWork 其实就是 scheduleUpdateOnFiber，scheduleUpdateOnFiber 函数的任务是调度当前节点的更新。在这个函数中，会处理一系列与优先级、打断操作相关的逻辑。但是<strong data-nodeid="1482">在 ReactDOM.render 发起的首次渲染链路中，这些意义都不大，因为这个渲染过程其实是同步的</strong>。我们可以尝试在 Source 面板中为该函数打上断点，逐行执行代码，会发现逻辑最终会走到下图的高亮处：</p>
+<p data-nodeid="1337"><img src="https://s0.lgstatic.com/i/image/M00/6E/D9/CgqCHl-zmJGATpFIAAPP-sFYf70749.png" alt="Drawing 8.png" data-nodeid="1485"></p>
+<p data-nodeid="1338">performSyncWorkOnRoot直译过来就是“执行根节点的同步任务”，<strong data-nodeid="1491">这里的“同步”二字需要注意，它明示了接下来即将开启的是一个同步的过程</strong>。这也正是为什么在整个渲染链路中，调度（Schedule）动作没有存在感的原因。</p>
+<p data-nodeid="1339">前面我们曾经提到过，performSyncWorkOnRoot 是 render 阶段的起点，render 阶段的任务就是完成 Fiber 树的构建，它是整个渲染链路中最核心的一环。在异步渲染的模式下，render 阶段应该是一个可打断的异步过程（下一讲我们就将针对 render 过程作详细的逻辑拆解）。</p>
+<p data-nodeid="1340">而现在，我相信你心里更多的疑惑在于：<strong data-nodeid="1498">都说 Fiber 架构带来的异步渲染是 React 16 的亮点，为什么分析到现在，竟然发现 ReactDOM.render 触发的首次渲染是个同步过程呢</strong>？</p>
+<h3 data-nodeid="1341">同步的 ReactDOM.render，异步的 ReactDOM.createRoot</h3>
+<p data-nodeid="1342">其实在 React 16，包括近期发布的 React 17 小版本中，React 都有以下 3 种启动方式：</p>
+<p data-nodeid="1343"><strong data-nodeid="1516">legacy 模式</strong>：<br>
+<code data-backticks="1" data-nodeid="1506">ReactDOM.render(&lt;App /&gt;, rootNode)</code>。这是当前 React App 使用的方式，当前没有计划删除本模式，但是这个模式可能不支持这些新功能。<br>
+<strong data-nodeid="1517">blocking 模式</strong>：<br>
+<code data-backticks="1" data-nodeid="1514">ReactDOM.createBlockingRoot(rootNode).render(&lt;App /&gt;)</code>。目前正在实验中，作为迁移到 concurrent 模式的第一个步骤。</p>
+<p data-nodeid="1344"><strong data-nodeid="1525">concurrent 模式</strong>：<br>
+<code data-backticks="1" data-nodeid="1523">ReactDOM.createRoot(rootNode).render(&lt;App /&gt;)</code>。目前在实验中，未来稳定之后，打算作为 React 的默认开发模式，这个模式开启了所有的新功能。</p>
+<p data-nodeid="1345">在这 3 种模式中，<strong data-nodeid="1535">我们常用的 ReactDOM.render 对应的是 legacy 模式，它实际触发的仍然是同步的渲染链路</strong>。blocking 模式可以理解为 legacy 和 concurrent 之间的一个过渡形态，之所以会有这个模式，是因为 React 官方希望能够提供<a href="https://zh-hans.reactjs.org/docs/faq-versioning.html#commitment-to-stability" data-nodeid="1533">渐进的迁移策略</a>，帮助我们更加顺滑地过渡到 Concurrent 模式。blocking 在实际应用中是比较低频的一个模式，了解即可。</p>
+<p data-nodeid="1346">按照官方的说法，“<strong data-nodeid="1541">长远来看，模式的数量会收敛，不用考虑不同的模式</strong>，但就目前而言，模式是一项重要的迁移策略，让每个人都能决定自己什么时候迁移，并按照自己的速度进行迁移”。由此可以看出，Concurrent 模式确实是 React 的终极目标，也是其创作团队使用 Fiber 架构重写核心算法的动机所在。</p>
+<h3 data-nodeid="1347">拓展：关于异步模式下的首次渲染链路</h3>
+<p data-nodeid="1348">当下，如果想要开启异步渲染，我们需要调用 <code data-backticks="1" data-nodeid="1544">ReactDOM.createRoot</code>方法来启动应用，那<code data-backticks="1" data-nodeid="1546">ReactDOM.createRoot</code>开启的渲染链路与 ReactDOM.render 有何不同呢？</p>
+<p data-nodeid="1349">这里我修改一下调用方式，给你展示一下调用栈。由于本讲的源码取材于 React 17.0.0 版本，在这个版本中，createRoot 仍然是一个 unstable 的方法。因此实际调用的 API 应该是“unstable_createRoot”：</p>
+<pre class="lang-java hljs" data-nodeid="1350"><code data-language="java">ReactDOM.unstable_createRoot(rootElement).render(&lt;App /&gt;);
+</code></pre>
+<p data-nodeid="1351">Concurrent 模式开启后，首次渲染的调用栈变成了如下图所示的样子：</p>
+<p data-nodeid="1352"><img src="https://s0.lgstatic.com/i/image/M00/6E/D9/CgqCHl-zmJyAbYZNAAFI67qKm98019.png" alt="Drawing 9.png" data-nodeid="1554"></p>
+<p data-nodeid="1353">乍一看，好像和 ReactDOM.render 差别很大，其实不然。图中 createRoot 所触发的逻辑仍然是一些准备性质的初始化工作，此处不必太纠结。关键在于下面我给你框出来的这部分，如下图所示：</p>
+<p data-nodeid="1354"><img src="https://s0.lgstatic.com/i/image/M00/6E/CE/Ciqc1F-zmKKAF0ODAADhhdYWzo0441.png" alt="Drawing 10.png" data-nodeid="1558"></p>
+<p data-nodeid="1355">我们拉近一点来看，如下图所示：</p>
+<p data-nodeid="1356"><img src="https://s0.lgstatic.com/i/image/M00/70/75/CgqCHl-7GiaAUY_zAAxz8mfEvT0309.png" alt="图片1.png" data-nodeid="1562"><br>
+你会发现这地方也调用了一个 render。再顺着这个调用往下看，发现有大量的熟悉面孔：updateContainer、requestUpdateLane、createUpdate、scheduleUpdateOnFiber......这些函数在 ReactDOM.render 的调用栈中也出现过。</p>
+<p data-nodeid="1357">其实，当前你看到的这个 render 调用链路，和 ReactDOM.render 的调用链路是非常相似的，主要的区别在 scheduleUpdateOnFiber 的这个判断里：</p>
+<p data-nodeid="1358"><img src="https://s0.lgstatic.com/i/image/M00/6E/CE/Ciqc1F-zmMKAJFKYAAMfoIVWxeM650.png" alt="image.png" data-nodeid="1568"></p>
+<p data-nodeid="1359">在异步渲染模式下，由于请求到的 lane 不再是 SyncLane（同步优先级），故不会再走到 performSyncWorkOnRoot 这个调用，而是会转而执行 else 中调度相关的逻辑。</p>
+<p data-nodeid="1360">这里有个点要给你点出来——React 是如何知道当前处于哪个模式的呢？我们可以以 requestUpdateLane 函数为例，下面是它局部的代码：</p>
+<pre class="lang-java hljs" data-nodeid="1361"><code data-language="java"><span class="hljs-function">function <span class="hljs-title">requestUpdateLane</span><span class="hljs-params">(fiber)</span> </span>{
+  <span class="hljs-comment">// 获取 mode 属性</span>
+  <span class="hljs-keyword">var</span> mode = fiber.mode;
+  <span class="hljs-comment">// 结合 mode 属性判断当前的</span>
+  <span class="hljs-keyword">if</span> ((mode &amp; BlockingMode) === NoMode) {
+    <span class="hljs-keyword">return</span> SyncLane;
+  } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> ((mode &amp; ConcurrentMode) === NoMode) {
+    <span class="hljs-keyword">return</span> getCurrentPriorityLevel() === ImmediatePriority$<span class="hljs-number">1</span> ? SyncLane : SyncBatchedLane;
+  }
+  ......
+  <span class="hljs-keyword">return</span> lane;
+}
+</code></pre>
+<p data-nodeid="1362">上面代码中需要注意 fiber节点上的 mode 属性：<strong data-nodeid="1576">React 将会通过修改 mode 属性为不同的值，来标识当前处于哪个渲染模式；在执行过程中，也是通过判断这个属性，来区分不同的渲染模式</strong>。</p>
+<p data-nodeid="1363">因此不同的渲染模式在挂载阶段的差异，本质上来说并不是工作流的差异（其工作流涉及 初始化 → render → commit 这 3 个步骤），而是 mode 属性的差异。mode 属性决定着这个工作流是一气呵成（同步）的，还是分片执行（异步）的。</p>
+<p data-nodeid="1364">关于异步挂载/更新的实现细节，我们将在后续的第 16 讲“Fiber 架构实现原理与编码形态”中详细探讨。</p>
+<h3 data-nodeid="1365">Fiber 架构一定是异步渲染吗？</h3>
+<p data-nodeid="1366">之前我曾经被读者朋友问到过这样的问题：<strong data-nodeid="1585">React 16 如果没有开启 Concurrent 模式，那它还能叫 Fiber 架构吗</strong>？</p>
+<p data-nodeid="1367">这个问题很有意思，从动机上来看，Fiber 架构的设计确实主要是为了 Concurrent 而存在。但经过了本讲紧贴源码的讲解，相信你也能够看出，在 React 16，包括已发布的 React 17 版本中，不管是否是 Concurrent，整个数据结构层面的设计、包括贯穿整个渲染链路的处理逻辑，已经完全用 Fiber 重构了一遍。站在这个角度来看，Fiber 架构在 React 中并不能够和异步渲染画严格的等号，它是一种<strong data-nodeid="1591">同时兼容了同步渲染与异步渲染的设计</strong>。</p>
+<h3 data-nodeid="1368">总结</h3>
+<p data-nodeid="1369">从本讲开始，我们以 ReactDOM.render 所触发的首次渲染为切入点，试图串联 React Fiber 架构下完整的工作链路，本讲为整个源码链路分析的前半部分。</p>
+<p data-nodeid="1370">正所谓“磨刀不误砍柴工”。虽然当前的进度条只推到了初始化这个位置，但在这部分的分析过程中，相信你已经对Fiber 树的初始形态、Fiber 根节点的创建过程建立了感性的认知，同时把握住了 ReactDOM.render 同步渲染的过程特征，理解了 React 当下共存的3种渲染方式。在此基础上，我们再去理解 render 过程，就会轻松得多。</p>
+<p data-nodeid="1371" class="te-preview-highlight">整个初始化的工作过程都是在为后续的 render 阶段做准备。现在，我们的 Fiber Tree 还处在只有根节点的起始状态。接下来，我们就要进入到最最关键的 render 阶段里去，一起去看看这棵树是怎么一点点丰满起来的，加油！</p></div>
+
+</body></html>

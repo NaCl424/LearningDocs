@@ -1,0 +1,927 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>25 | 稳定基石：带你剖析容器运行时以及 CRI 原理</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>25 | 稳定基石：带你剖析容器运行时以及 CRI 原理</h1><p data-nodeid="478">当一个 Pod 在 Kube-APIServer 中被创建出来以后，会被调度器调度，然后确定一个合适的节点，最终被这个节点上的 Kubelet 拉起，以容器状态运行。</p>
+
+
+
+<p data-nodeid="4">那么 Kubelet 是如何跟容器打交道的呢，它是如何进行创建容器、获取容器状态等操作的呢？</p>
+<p data-nodeid="5">今天我们就来了解一下。</p>
+<h3 data-nodeid="6">容器运行时 （Container Runtime）</h3>
+<p data-nodeid="790" class="">Kubelet 负责运行具体的 Pod，并维护其整个生命周期，为 Pod 提供存储、网络等必要的资源。但 Kubelet 本身并不负责真正的容器创建和逻辑管理，这些全部都是通过容器运行时（Container Runtime）完成的。大家平常熟知的 Docker 其实就是一种容器运行时，除此之外，还有<a href="https://kubernetes.io/zh/docs/setup/production-environment/container-runtimes/#containerd" data-nodeid="794">containerd</a>、<a href="https://kubernetes.io/zh/docs/setup/production-environment/container-runtimes/#cri-o" data-nodeid="798">cri-o</a>、<a href="https://katacontainers.io/" data-nodeid="802">kata</a>、<a href="https://gvisor.dev/" data-nodeid="806">gVisor</a> 等等。</p>
+
+<p data-nodeid="1420">下图就是 Kubelet 跟容器运行时进行的交互图：</p>
+<p data-nodeid="1421" class=""><img src="https://s0.lgstatic.com/i/image/M00/6F/EA/CgqCHl-3Y6CAIjzjAAEbwUIQ2pI143.png" alt="Drawing 0.png" data-nodeid="1425"></p>
+
+
+<p data-nodeid="2039" class="">图 1：<a href="https://www.threatstack.com/blog/diving-deeper-into-runtimes-kubernetes-cri-and-shims" data-nodeid="2043">Kubelet 跟容器运行的交互图</a></p>
+
+
+<p data-nodeid="3598">Kubelet 负责跟 kube-apiserver 进行数据同步，获取新的 Pod，并上报本机 Pod 的各个状态数据。Kubelet 通过调用容器运行时的接口完成容器的创建、容器状态的查询等工作。下图就是使用 Docker 作为容器的运行时。</p>
+<p data-nodeid="3599" class=""><img src="https://s0.lgstatic.com/i/image/M00/6F/DE/Ciqc1F-3Y8OAGglUAAESe6PzHHQ855.png" alt="Drawing 1.png" data-nodeid="3603"><br>
+图 2：<a href="https://www.threatstack.com/blog/diving-deeper-into-runtimes-kubernetes-cri-and-shims" data-nodeid="3608">使用 Docker 作为容器的运行</a></p>
+
+
+
+
+
+
+
+<p data-nodeid="14">Docker 作为 Kubelet 内置支持的主要容器运行时，也是目前使用最为官方的容器运行时之一。</p>
+<p data-nodeid="4235" class="">除了 Docker，在 Kubernetes v1.5 之前，Kubelet 还内置了对 <a href="https://coreos.com/rkt/docs/latest/" data-nodeid="4239">rkt</a> 的支持。在这个阶段，如果我们想要自己去定义容器运行时，或者更改容器运行时的部分逻辑行为，是非常痛苦的，需要通过修改 Kubelet 的代码来实现。这些改动如果更新到上游社区，也会给社区造成很大的困扰，毕竟 Kubelet 自身的稳定性关乎着整个集群的稳定性。因此，这些改动在上游社区的合并通常都很谨慎，往往就需要开发者自己维护这些代码，维护成本非常高，也不方便升级。</p>
+
+
+<p data-nodeid="16">介于这一点，很多开发者都希望 Kubernetes 可以支持更多的容器运行时。因此，从 v1.5 版本开始，社区引入了<a href="https://kubernetes.io/blog/2016/12/container-runtime-interface-cri-in-kubernetes/" data-nodeid="93"> CRI（Container Runtime Interface）</a>来解决这个问题。</p>
+<p data-nodeid="17">CRI 接口的引入带来了两个好处：一是它很好地将 Kubelet 与容器运行时进行了解耦，这样我们每次对容器运行时进行更新升级等操作时，都再不需要对 Kubelet 做任何的更改；二是解放了 Kubelet，减少了 Kubelet 的负担，能够保证 Kubernetes 的代码质量和整个系统的稳定性。</p>
+<p data-nodeid="18">下面我们就来了解一下CRI。</p>
+<h3 data-nodeid="19">CRI</h3>
+<p data-nodeid="20">CRI 接口可以分为两部分。</p>
+<p data-nodeid="21">一个是容器运行时服务 RuntimeService，它主要负责管理 Pod 和容器的生命周期，比如创建容器、删除容器、查询容器状态等等。下面就是用<a href="https://developers.google.com/protocol-buffers" data-nodeid="102">Protocol Buffers</a>定义的 RuntimeService 的接口：</p>
+<pre class="lang-java" data-nodeid="5484"><code data-language="java"><span class="hljs-comment">// Runtime service defines the public APIs for remote container runtimes</span>
+service RuntimeService {
+    <span class="hljs-comment">// Version returns the runtime name, runtime version, and runtime API version.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">Version</span><span class="hljs-params">(VersionRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(VersionResponse)</span> </span>{}
+    <span class="hljs-comment">// RunPodSandbox creates and starts a pod-level sandbox. Runtimes must ensure</span>
+    <span class="hljs-comment">// the sandbox is in the ready state on success.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">RunPodSandbox</span><span class="hljs-params">(RunPodSandboxRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(RunPodSandboxResponse)</span> </span>{}
+    <span class="hljs-comment">// Start a sandbox pod which was forced to stop by external factors.</span>
+    <span class="hljs-comment">// Network plugin returns same IPs when input same pod names and namespaces</span>
+    <span class="hljs-function">rpc <span class="hljs-title">StartPodSandbox</span><span class="hljs-params">(StartPodSandboxRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(StartPodSandboxResponse)</span> </span>{}
+    <span class="hljs-comment">// StopPodSandbox stops any running process that is part of the sandbox and</span>
+    <span class="hljs-comment">// reclaims network resources (e.g., IP addresses) allocated to the sandbox.</span>
+    <span class="hljs-comment">// If there are any running containers in the sandbox, they must be forcibly</span>
+    <span class="hljs-comment">// terminated.</span>
+    <span class="hljs-comment">// This call is idempotent, and must not return an error if all relevant</span>
+    <span class="hljs-comment">// resources have already been reclaimed. kubelet will call StopPodSandbox</span>
+    <span class="hljs-comment">// at least once before calling RemovePodSandbox. It will also attempt to</span>
+    <span class="hljs-comment">// reclaim resources eagerly, as soon as a sandbox is not needed. Hence,</span>
+    <span class="hljs-comment">// multiple StopPodSandbox calls are expected.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">StopPodSandbox</span><span class="hljs-params">(StopPodSandboxRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(StopPodSandboxResponse)</span> </span>{}
+    <span class="hljs-comment">// RemovePodSandbox removes the sandbox. If there are any running containers</span>
+    <span class="hljs-comment">// in the sandbox, they must be forcibly terminated and removed.</span>
+    <span class="hljs-comment">// This call is idempotent, and must not return an error if the sandbox has</span>
+    <span class="hljs-comment">// already been removed.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">RemovePodSandbox</span><span class="hljs-params">(RemovePodSandboxRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(RemovePodSandboxResponse)</span> </span>{}
+    <span class="hljs-comment">// PodSandboxStatus returns the status of the PodSandbox. If the PodSandbox is not</span>
+    <span class="hljs-comment">// present, returns an error.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">PodSandboxStatus</span><span class="hljs-params">(PodSandboxStatusRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(PodSandboxStatusResponse)</span> </span>{}
+    <span class="hljs-comment">// ListPodSandbox returns a list of PodSandboxes.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">ListPodSandbox</span><span class="hljs-params">(ListPodSandboxRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(ListPodSandboxResponse)</span> </span>{}
+    <span class="hljs-comment">// CreateContainer creates a new container in specified PodSandbox</span>
+    <span class="hljs-function">rpc <span class="hljs-title">CreateContainer</span><span class="hljs-params">(CreateContainerRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(CreateContainerResponse)</span> </span>{}
+    <span class="hljs-comment">// StartContainer starts the container.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">StartContainer</span><span class="hljs-params">(StartContainerRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(StartContainerResponse)</span> </span>{}
+    <span class="hljs-comment">// StopContainer stops a running container with a grace period (i.e., timeout).</span>
+    <span class="hljs-comment">// This call is idempotent, and must not return an error if the container has</span>
+    <span class="hljs-comment">// already been stopped.</span>
+    <span class="hljs-comment">// <span class="hljs-doctag">TODO:</span> what must the runtime do after the grace period is reached?</span>
+    <span class="hljs-function">rpc <span class="hljs-title">StopContainer</span><span class="hljs-params">(StopContainerRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(StopContainerResponse)</span> </span>{}
+    <span class="hljs-comment">// RemoveContainer removes the container. If the container is running, the</span>
+    <span class="hljs-comment">// container must be forcibly removed.</span>
+    <span class="hljs-comment">// This call is idempotent, and must not return an error if the container has</span>
+    <span class="hljs-comment">// already been removed.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">RemoveContainer</span><span class="hljs-params">(RemoveContainerRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(RemoveContainerResponse)</span> </span>{}
+    <span class="hljs-comment">// PauseContainer pauses the container.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">PauseContainer</span><span class="hljs-params">(PauseContainerRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(PauseContainerResponse)</span> </span>{}
+    <span class="hljs-comment">// UnpauseContainer unpauses the container.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">UnpauseContainer</span><span class="hljs-params">(UnpauseContainerRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(UnpauseContainerResponse)</span> </span>{}
+    <span class="hljs-comment">// ListContainers lists all containers by filters.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">ListContainers</span><span class="hljs-params">(ListContainersRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(ListContainersResponse)</span> </span>{}
+    <span class="hljs-comment">// ContainerStatus returns status of the container. If the container is not</span>
+    <span class="hljs-comment">// present, returns an error.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">ContainerStatus</span><span class="hljs-params">(ContainerStatusRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(ContainerStatusResponse)</span> </span>{}
+    <span class="hljs-comment">// UpdateContainerResources updates ContainerConfig of the container.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">UpdateContainerResources</span><span class="hljs-params">(UpdateContainerResourcesRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(UpdateContainerResourcesResponse)</span> </span>{}
+    <span class="hljs-comment">// ReopenContainerLog asks runtime to reopen the stdout/stderr log file</span>
+    <span class="hljs-comment">// for the container. This is often called after the log file has been</span>
+    <span class="hljs-comment">// rotated. If the container is not running, container runtime can choose</span>
+    <span class="hljs-comment">// to either create a new log file and return nil, or return an error.</span>
+    <span class="hljs-comment">// Once it returns error, new container log file MUST NOT be created.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">ReopenContainerLog</span><span class="hljs-params">(ReopenContainerLogRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(ReopenContainerLogResponse)</span> </span>{}
+    <span class="hljs-comment">// ExecSync runs a command in a container synchronously.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">ExecSync</span><span class="hljs-params">(ExecSyncRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(ExecSyncResponse)</span> </span>{}
+    <span class="hljs-comment">// Exec prepares a streaming endpoint to execute a command in the container.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">Exec</span><span class="hljs-params">(ExecRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(ExecResponse)</span> </span>{}
+    <span class="hljs-comment">// Attach prepares a streaming endpoint to attach to a running container.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">Attach</span><span class="hljs-params">(AttachRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(AttachResponse)</span> </span>{}
+    <span class="hljs-comment">// PortForward prepares a streaming endpoint to forward ports from a PodSandbox.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">PortForward</span><span class="hljs-params">(PortForwardRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(PortForwardResponse)</span> </span>{}
+    <span class="hljs-comment">// ContainerStats returns stats of the container. If the container does not</span>
+    <span class="hljs-comment">// exist, the call returns an error.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">ContainerStats</span><span class="hljs-params">(ContainerStatsRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(ContainerStatsResponse)</span> </span>{}
+    <span class="hljs-comment">// ListContainerStats returns stats of all running containers.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">ListContainerStats</span><span class="hljs-params">(ListContainerStatsRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(ListContainerStatsResponse)</span> </span>{}
+    <span class="hljs-comment">// UpdateRuntimeConfig updates the runtime configuration based on the given request.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">UpdateRuntimeConfig</span><span class="hljs-params">(UpdateRuntimeConfigRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(UpdateRuntimeConfigResponse)</span> </span>{}
+    <span class="hljs-comment">// Status returns the status of the runtime.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">Status</span><span class="hljs-params">(StatusRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(StatusResponse)</span> </span>{}
+}
+</code></pre>
+
+
+
+
+<p data-nodeid="23">另一个部分是镜像服务 ImageService，主要负责容器镜像的生命周期管理，比如拉取镜像、删除镜像、查询镜像等等，如下所示：</p>
+<pre class="lang-java" data-nodeid="6728"><code data-language="java"><span class="hljs-comment">// ImageService defines the public APIs for managing images.</span>
+service ImageService {
+    <span class="hljs-comment">// ListImages lists existing images.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">ListImages</span><span class="hljs-params">(ListImagesRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(ListImagesResponse)</span> </span>{}
+    <span class="hljs-comment">// ImageStatus returns the status of the image. If the image is not</span>
+    <span class="hljs-comment">// present, returns a response with ImageStatusResponse.Image set to</span>
+    <span class="hljs-comment">// nil.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">ImageStatus</span><span class="hljs-params">(ImageStatusRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(ImageStatusResponse)</span> </span>{}
+    <span class="hljs-comment">// PullImage pulls an image with authentication config.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">PullImage</span><span class="hljs-params">(PullImageRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(PullImageResponse)</span> </span>{}
+    <span class="hljs-comment">// RemoveImage removes the image.</span>
+    <span class="hljs-comment">// This call is idempotent, and must not return an error if the image has</span>
+    <span class="hljs-comment">// already been removed.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">RemoveImage</span><span class="hljs-params">(RemoveImageRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(RemoveImageResponse)</span> </span>{}
+    <span class="hljs-comment">// ImageFSInfo returns information of the filesystem that is used to store images.</span>
+    <span class="hljs-function">rpc <span class="hljs-title">ImageFsInfo</span><span class="hljs-params">(ImageFsInfoRequest)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(ImageFsInfoResponse)</span> </span>{}
+}
+</code></pre>
+
+
+
+
+<p data-nodeid="25">每一个容器运行时都需要自己实现一个 CRI shim，即完成对 CRI 这个抽象接口的具体实现。这样容器运行时就可以接收来自 Kubelet 的请求。</p>
+<p data-nodeid="7935">我们现在就来看看有了 CRI 接口以后，Kubelet 是如何和容器运行时进行交互的，见下图：</p>
+<p data-nodeid="7936" class=""><img src="https://s0.lgstatic.com/i/image/M00/6F/DF/Ciqc1F-3ZBCAfnwJAACHtbND3KI539.png" alt="Drawing 2.png" data-nodeid="7940"></p>
+
+
+
+
+
+<p data-nodeid="29">图 3：<a href="https://kubernetes.io/blog/2016/12/container-runtime-interface-cri-in-kubernetes/" data-nodeid="116">Kubelet 与容器运行时的交互</a>)</p>
+<p data-nodeid="30">从上图可以看出，新增的 CRI shim 是 Kubelet 和容器运行时之间的交互纽带，Kubelet 只需要跟 CRI  shim 进行交互。Kubelet 调用 CRI shim 的接口，CRI shim 响应请求后会调用底层的运行容器时，完成对容器的相关操作。</p>
+<p data-nodeid="31">这里我们需要将 Kubelet、CRI shim 以及容器运行时都部署在同一个节点上。一般来说，大多数的容器运行时都默认实现了 CRI 的接口，比如<a href="https://containerd.io/docs/" data-nodeid="122">containerd</a>。</p>
+<p data-nodeid="8542">目前 Kubelet 内部内置了对 Docker 的 CRI shim 的实现，见下图：</p>
+<p data-nodeid="8543" class=""><img src="https://s0.lgstatic.com/i/image/M00/6F/DF/Ciqc1F-3ZBmAdEVFAAAnf6SSCkk798.png" alt="Drawing 4.png" data-nodeid="8547"><br>
+图 4：<a href="https://dzone.com/articles/evolution-of-k8s-worker-nodes-cri-o" data-nodeid="8552">Kubelet 内置对 CRI shim 的实现</a></p>
+
+
+
+
+<p data-nodeid="35">而对于其他的容器运行时，比如<a href="https://kubernetes.io/zh/docs/setup/production-environment/container-runtimes/#containerd" data-nodeid="135">containerd</a>，我们就需要配置 kubelet 的 --container-runtime 参数为 remote，并设置 --container-runtime-endpoint 为对应的容器运行时的监听地址。</p>
+<p data-nodeid="9151">Kubernetes 自 v1.10 版本已经完成了和 containerd 1.1版本 的 GA 集成，你可以直接按照<a href="https://kubernetes.io/zh/docs/setup/production-environment/container-runtimes/#containerd" data-nodeid="9156">这份文档</a>来部署 containerd 作为你的容器运行时。</p>
+<p data-nodeid="9465"><img src="https://s0.lgstatic.com/i/image/M00/6F/EA/CgqCHl-3ZCKAA7C9AABJ2r60MV4161.png" alt="Drawing 5.png" data-nodeid="9469"></p>
+<div data-nodeid="9466" class=""><p style="text-align:center">图 5：部署 containerd</p></div>
+
+
+
+
+
+<p data-nodeid="39">containerd 1.1 版本已经内置了对 CRI 的实现，比直接使用 Docker 的性能要高很多。</p>
+<h3 data-nodeid="40">写在最后</h3>
+<p data-nodeid="41">Kubernetes 作为容器编排调度领域的事实标准，其优秀的架构设计还体现在其可扩展接口上。比如 CRI 提供了简单易用的扩展接口，方便各个容器运行时跟 Kubelet 进行交互接入，极大地方便了用户进行定制化。</p>
+<p data-nodeid="42">通过 CRI 对容器运行时进行抽象，我们无须修改 Kubelet 就可以天然地支持多种容器运行时，这极大地方便了开发者的对接，也减少了升级和维护成本。CRI 的出现也促进了容器运行时的繁荣，也为强隔离、多租户等复杂的场景带来了更多的选择。</p>
+<p data-nodeid="10080" class="te-preview-highlight">除了 CRI 以外，在 Kubernetes 中还可以为不同的 Pod 设置不同的容器运行时（Container Runtime），以提供性能与安全性之间的平衡。从 1.12 版本开始，Kuberentes 就提供了 <a href="https://kubernetes.io/zh/docs/concepts/containers/runtime-class/" data-nodeid="10084">RuntimeClass</a> 来实现这个功能。你可以阅读<a href="https://kubernetes.io/zh/docs/concepts/containers/runtime-class/" data-nodeid="10088">这份官方文档</a>，来学习如何使用 RuntimeClass。</p>
+
+
+<p data-nodeid="44">如果你对本节课有什么想法或者疑问，欢迎你在留言区留言，我们一起讨论。</p></div>
+
+</body></html>

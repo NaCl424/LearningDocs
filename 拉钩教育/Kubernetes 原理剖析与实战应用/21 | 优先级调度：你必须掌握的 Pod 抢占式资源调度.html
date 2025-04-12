@@ -1,0 +1,930 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>21 | 优先级调度：你必须掌握的 Pod 抢占式资源调度</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>21 | 优先级调度：你必须掌握的 Pod 抢占式资源调度</h1><p data-nodeid="169999">你好，我是正范。</p>
+
+
+<p data-nodeid="169725">随着我们在 Kubernetes 集群中部署越来越多的业务，势必要考虑集群的资源利用率问题。尤其是当集群资源比较紧张的时候，如果此时还要部署一些比较重要的关键业务，那么该如何去提前“抢占”集群资源，从而使得关键业务在集群中跑起来呢？</p>
+<p data-nodeid="169726">这里一个最常见的做法就是采用优先级方案。通过给 Pod 设置高优先级，让其比其他 Pod 显得更为重要，通过这种“插队”的方式优先获得调度器的调度。现在我们就来看看 Kubernetes 是如何定义这种优先级的。</p>
+<h3 data-nodeid="170181" class="">PriorityClass</h3>
+
+<p data-nodeid="169728">Kubernetes 通过对象 PriorityClass 来定义上述优先级，具体怎么定义呢？我们可以通过之前说过的<code data-backticks="1" data-nodeid="169771">kubectl create</code>命令来创建这个对象：</p>
+<pre class="lang-yaml" data-nodeid="169729"><code data-language="yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">scheduling.k8s.io/v1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">PriorityClass</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">high-priority</span>
+<span class="hljs-attr">value:</span> <span class="hljs-number">1000000</span>
+<span class="hljs-attr">globalDefault:</span> <span class="hljs-literal">false</span>
+<span class="hljs-attr">description:</span> <span class="hljs-string">"This priority class should be used for XYZ service pods only."</span>
+</code></pre>
+<p data-nodeid="170363">这里我们创建了就是一个名为 high-priority 的 PriorityClass 定义，使用的 API 版本是 scheduling.k8s.io/v1。这个对象是个集群级别的定义，并不属于任何 namespace，可以被全局使用，即各个 namespace 中创建的 Pod 都能使用 PriorityClass。我们在定义这样一个 PriorityClass 对象的时候，名字不可以包含 system- 这个前缀。</p>
+<p data-nodeid="170364">关于这个数值的设置，有几点要说明。系统自定义了两个优先级值：</p>
+
+<pre class="lang-go" data-nodeid="169731"><code data-language="go"><span class="hljs-comment">// HighestUserDefinablePriority is the highest priority for user defined priority classes. Priority values larger than 1 billion are reserved for Kubernetes system use.</span>
+HighestUserDefinablePriority = <span class="hljs-keyword">int32</span>(<span class="hljs-number">1000000000</span>)
+<span class="hljs-comment">// SystemCriticalPriority is the beginning of the range of priority values for critical system components.</span>
+SystemCriticalPriority = <span class="hljs-number">2</span> * HighestUserDefinablePriority
+</code></pre>
+<p data-nodeid="170547">那么当你自己创建 PriorityClass 的时候，定义的优先级值是不能高于这里的 HighestUserDefinablePriority 的， 即 1000000000 （10 亿）。</p>
+<p data-nodeid="170548">Kubernetes 在初始化的时候就自带了两个 PriorityClasses，即 system-cluster-critical 和 system-node-critical，优先级值为 2000000000。 你可以通过下面的命令查看到这两个最高优先级的 PriorityClasse：</p>
+
+<pre class="lang-go" data-nodeid="169733"><code data-language="go">$ kubectl get priorityclass
+NAME                      VALUE        GLOBAL-DEFAULT   AGE
+system-cluster-critical   <span class="hljs-number">2000000000</span>   <span class="hljs-literal">false</span>            <span class="hljs-number">59</span>d
+system-node-critical      <span class="hljs-number">2000001000</span>   <span class="hljs-literal">false</span>            <span class="hljs-number">59</span>d
+</code></pre>
+<p data-nodeid="169734">这是两个公共的优先级类，主要用来确保 Kubernetes 系统的关键组件或者关键插件总是能够优先被调度，比如 coredns 等。因为一旦这些关键组件、关键插件被驱逐，或者由于镜像需要升级，新建的 Pod 无法被调度，始终处于 Pending 的状态，这些都会导致整个集群异常，甚至停止工作。所以对于这些关键的组件，我们务必保证其优先级是最高的，这样才会被最先调度。我们可以来参考下 coredns 的做法，以下是截取的一部分配置：</p>
+<pre class="lang-yaml" data-nodeid="169735"><code data-language="yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">apps/v1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">Deployment</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-string">...</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">coredns</span>
+  <span class="hljs-attr">namespace:</span> <span class="hljs-string">kube-system</span>
+  <span class="hljs-string">...</span>
+<span class="hljs-attr">spec:</span>
+  <span class="hljs-string">...</span>
+  <span class="hljs-attr">template:</span>
+    <span class="hljs-string">...</span>
+    <span class="hljs-attr">spec:</span>
+      <span class="hljs-string">...</span>
+      <span class="hljs-attr">priorityClassName:</span> <span class="hljs-string">system-cluster-critical</span>
+      <span class="hljs-string">...</span>
+<span class="hljs-attr">status:</span>
+  <span class="hljs-string">...</span>
+</code></pre>
+<p data-nodeid="169736">下面我们来看看如何在 Pod 中使用 PriorityClass：通过 spec.priorityClassName 即可指定要使用的 PriorityClass：</p>
+<pre class="lang-yaml" data-nodeid="169737"><code data-language="yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">v1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">Pod</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">nginx</span>
+<span class="hljs-attr">spec:</span>
+  <span class="hljs-attr">containers:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">nginx</span>
+    <span class="hljs-attr">image:</span> <span class="hljs-string">nginx</span>
+  <span class="hljs-attr">priorityClassName:</span> <span class="hljs-string">high-priority</span>
+</code></pre>
+<p data-nodeid="169738">通过<code data-backticks="1" data-nodeid="169782">kubectl create</code>创建好该 Pod 后，我们查看详情可以看到 PriorityClass 的名字和优先级数值都被写入了 Pod 中：</p>
+<pre class="lang-yaml" data-nodeid="169739"><code data-language="yaml"><span class="hljs-string">$</span> <span class="hljs-string">kubectl</span> <span class="hljs-string">describe</span> <span class="hljs-string">pod</span> <span class="hljs-string">nginx</span>
+<span class="hljs-attr">Name:</span>                 <span class="hljs-string">nginx</span>
+<span class="hljs-attr">Namespace:</span>            <span class="hljs-string">default</span>
+<span class="hljs-attr">Priority:</span>             <span class="hljs-number">1000000</span>
+<span class="hljs-attr">Priority Class Name:</span>  <span class="hljs-string">high-priority</span>
+<span class="hljs-string">...</span>
+</code></pre>
+<p data-nodeid="169740">注意，在使用的时候不允许自己去设置 spec.priority 的数值，我们只能通过 spec.priorityClassName 来设置优先级。现在，我们回过头再来观察下上面定义的这个 high-priority 的 PriorityClass 对象，里面有两个可选字段：globalDefault 和 description。</p>
+<p data-nodeid="169741">globalDefault 用来表明是否将该 PriorityClass 的数值作为默认值，并将其应用在所有未设置 priorityClassName 的 Pod 上。 既然是默认值，那么就意味着整个 Kubernetes 集群中只能存在一个 globalDefault 设为 true 的 PriorityClass 对象。</p>
+<p data-nodeid="169742">如果没有任何一个 PriorityClass 对象的 globalDefault 被设置为 true 的话，就意味着所有未设置 spec.priorityClassName 的 Pod 的优先级为 0。即便你新建了某个 PriorityClass 对象，并将其 globalDefault 设置为 true，那么也不不影响集群中的存量 Pod，只会对新建的 Pod 生效。</p>
+<p data-nodeid="169743">你可以在 description 字段中对该 PriorityClass 进行一些使用上的解释说明。</p>
+<p data-nodeid="169744">现在我们就来做个优先级抢占的测试，使用一个单节点的集群做演示，该节点的 CPU 为 2 核。先创建一个优先级值更小的名为 low-priority 的 PriorityClass，其 YAML 文件如下：</p>
+<pre class="lang-yaml" data-nodeid="169745"><code data-language="yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">scheduling.k8s.io/v1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">PriorityClass</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">low-priority</span>
+<span class="hljs-attr">value:</span> <span class="hljs-number">1000</span>
+<span class="hljs-attr">globalDefault:</span> <span class="hljs-literal">false</span>
+</code></pre>
+<p data-nodeid="169746">创建好了以后，通过<code data-backticks="1" data-nodeid="169790">kubectl get</code>可以查看到创建的这两个 PriorityClass：</p>
+<pre class="lang-shell" data-nodeid="169747"><code data-language="shell"><span class="hljs-meta">$</span><span class="bash"> kubectl get priorityclass | grep -v system</span>
+NAME                      VALUE        GLOBAL-DEFAULT   AGE
+high-priority             1000000      false            30m
+low-priority              1000         false            8m35s
+</code></pre>
+<p data-nodeid="169748">现在我们分别使用这两个 PriorityClass 创建两个 Pod。先来创建一个使用 low-priority 作为优先级的 Pod，下面是其对应的 YAML 文件：</p>
+<pre class="lang-yaml" data-nodeid="169749"><code data-language="yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">v1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">Pod</span>
+<span class="hljs-attr">metadata:</span>
+ <span class="hljs-attr">name:</span> <span class="hljs-string">nginx-low-pc</span>
+<span class="hljs-attr">spec:</span>
+ <span class="hljs-attr">containers:</span>
+ <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">nginx</span>
+   <span class="hljs-attr">image:</span> <span class="hljs-string">nginx</span>
+   <span class="hljs-attr">imagePullPolicy:</span> <span class="hljs-string">IfNotPresent</span>
+   <span class="hljs-attr">resources:</span>
+    <span class="hljs-attr">requests:</span>
+     <span class="hljs-attr">memory:</span> <span class="hljs-string">"64Mi"</span>
+     <span class="hljs-attr">cpu:</span> <span class="hljs-string">"1200m"</span>       <span class="hljs-comment">#CPU需求设置较大</span>
+    <span class="hljs-attr">limits:</span>
+     <span class="hljs-attr">memory:</span> <span class="hljs-string">"128Mi"</span>
+     <span class="hljs-attr">cpu:</span> <span class="hljs-string">"1300m"</span>
+ <span class="hljs-attr">priorityClassName:</span> <span class="hljs-string">low-priority</span>     <span class="hljs-comment">#使用低优先级</span>
+</code></pre>
+<p data-nodeid="170731">这里我们指定了一个较大比重的 CPU 资源。我们假定集群中的节点为 2 核，把 Pod 需要的最低 CPU 需求设置为1200m，超过了 2核 CPU 总算力的一半。</p>
+<p data-nodeid="170732">同样我们使用 high-priority 作为其优先级创建一个 Pod，其对应的 YAML 文件如下：</p>
+
+<pre class="lang-yaml" data-nodeid="169751"><code data-language="yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">v1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">Pod</span>
+<span class="hljs-attr">metadata:</span>
+ <span class="hljs-attr">name:</span> <span class="hljs-string">nginx-high-pc</span>
+<span class="hljs-attr">spec:</span>
+ <span class="hljs-attr">containers:</span>
+ <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">nginx</span>
+   <span class="hljs-attr">image:</span> <span class="hljs-string">nginx</span>
+   <span class="hljs-attr">imagePullPolicy:</span> <span class="hljs-string">IfNotPresent</span>
+   <span class="hljs-attr">resources:</span>
+    <span class="hljs-attr">requests:</span>
+     <span class="hljs-attr">memory:</span> <span class="hljs-string">"64Mi"</span>
+     <span class="hljs-attr">cpu:</span> <span class="hljs-string">"1200m"</span>
+    <span class="hljs-attr">limits:</span>
+     <span class="hljs-attr">memory:</span> <span class="hljs-string">"128Mi"</span>
+     <span class="hljs-attr">cpu:</span> <span class="hljs-string">"1300m"</span>
+ <span class="hljs-attr">priorityClassName:</span> <span class="hljs-string">high-priority</span>        <span class="hljs-comment">#使用高优先级</span>
+</code></pre>
+<p data-nodeid="170915">如此一来，这两个 Pod 无法被调度到同一个只有 2 核 CPU 的节点上的，因为 2 个 Pod 加起来的 CPU 请求总量超过了 2 核。</p>
+<p data-nodeid="170916">我们可以先创建低优先级 Pod 命名为 nginx-low-pc ，可以看到该 Pod 已经成功运行，并消耗了超过一半的 CPU：</p>
+
+<pre class="lang-shell" data-nodeid="169753"><code data-language="shell"><span class="hljs-meta">$</span><span class="bash"> kubectl get pods</span>
+NAME           READY   STATUS    RESTARTS   AGE
+nginx-low-pc   1/1     Running   0          22s
+<span class="hljs-meta">$</span><span class="bash"> kubectl describe pod nginx-low-pc</span>
+...
+Allocated resources:
+  (Total limits may be over 100 percent, i.e., overcommitted.)
+  Resource           Requests     Limits
+--------           --------     ------
+  cpu                1220m (61%)  1300m (65%)       #Node的CPU使用率已经过半
+  memory             64Mi (1%)    128Mi (3%)
+  ephemeral-storage  0 (0%)       0 (0%)
+</code></pre>
+<p data-nodeid="169754">现在我们再创建高优先级 Pod 命名为 nginx-high-pc，可以看到低优先级 Pod nginx-low-pc 由于高优先级的资源抢占被驱逐，运行状态也从 Runing 状态变为了 Terminating：</p>
+<pre data-nodeid="169755"><code>$ kubectl get pods
+NAME            READY   STATUS        RESTARTS   AGE
+nginx-high-pc   0/1     Pending       0          7s
+nginx-low-pc    0/1     Terminating   0          87s
+$ kubectl get pods
+NAME            READY   STATUS    RESTARTS   AGE
+nginx-high-pc   1/1     Running   0          12s
+</code></pre>
+<p data-nodeid="171099">最终，高优先级 Pod 成功完成了抢占，整个节点上只有它在运行。当新 Pod 被创建后，它们就进入了调度器的队列，等待被调度。调度器会根据 PriorityClass 的优先级来挑选出优先级最高的 Pod，并且尝试把它调度到一个节点上。</p>
+<p data-nodeid="171100">如果这个时候没有任何一个节点能够满足这个 Pod的所有要求，包括资源、调度偏好等要求，就会触发抢占逻辑。调度器会尝试寻找一个节点，通过移除一个或者多个比该 Pod 的优先级低的 Pod， 尝试使目标 Pod 可以被调度。</p>
+
+<p data-nodeid="169757">如果找到了这样一个节点，那么运行在该节点上的一个或者多个低优先级的 Pod 就会被驱逐，这样这个高优先级的 Pod 就可以调度到目标节点上了。哈哈，是不是有点“鸠占鹊巢”的感觉！</p>
+<p data-nodeid="169758">当然对于某些场景，如果你并不希望 Pod 被驱逐掉，只是希望可以优先调度，那么你可以使用<a href="https://kubernetes.io/zh/docs/concepts/configuration/pod-priority-preemption/#non-preempting-priority-class" data-nodeid="169807">非抢占式的 PriorityClass</a>。比如这是一个非抢占式的 PriorityClass 的配置：</p>
+<pre class="lang-yaml" data-nodeid="169759"><code data-language="yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">scheduling.k8s.io/v1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">PriorityClass</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">high-priority-nonpreempting</span>
+<span class="hljs-attr">value:</span> <span class="hljs-number">1000000</span>
+<span class="hljs-attr">preemptionPolicy:</span> <span class="hljs-string">Never</span>
+<span class="hljs-attr">globalDefault:</span> <span class="hljs-literal">false</span>
+<span class="hljs-attr">description:</span> <span class="hljs-string">"This priority class will not cause other pods to be preempted."</span>
+</code></pre>
+<p data-nodeid="171283">这个配置跟我们上面的定义基本一致，只不过多了一个字段 preemptionPolicy。这样就可以避免属于该 PriorityClass 的 Pod 抢占其他 Pod。当然你也可以通过给 kube-scheduler 设置参数禁用抢占能力。但是关键组件的 Pod 还是依赖调度器这种抢占机制，以便在集群资源压力较大时可以优先得到调度。因此，不建议你禁用抢占能力。</p>
+<p data-nodeid="171284">kube-scheduler 的抢占能力是通过 disablePreemption 这个参数来控制的，该标志默认为 false。如果你还是坚持禁用抢占，可以将 disablePreemption 设置为true，目前这一参数的配置，只能通过 KubeSchedulerConfiguration 来设置，即：</p>
+
+<pre class="lang-yaml" data-nodeid="169761"><code data-language="yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">kubescheduler.config.k8s.io/v1alpha1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">KubeSchedulerConfiguration</span>
+<span class="hljs-attr">algorithmSource:</span>
+  <span class="hljs-attr">provider:</span> <span class="hljs-string">DefaultProvider</span>
+<span class="hljs-string">...</span>
+<span class="hljs-attr">disablePreemption:</span> <span class="hljs-literal">true</span>
+</code></pre>
+<h3 data-nodeid="171467" class="">写在最后</h3>
+
+<p data-nodeid="169763">提高集群的资源利用率最常见的做法就是采用优先级的方案。在实际使用的时候，要避免恶意用户创建高优先级的 Pod，这样会导致其他 Pod 被驱逐或者无法调度，严重影响集群的稳定性和安全性。集群管理员可以为特定用户创建特定优先级级别，来防止他们恶意使用高优先级的 PriorityClass。</p>
+<p data-nodeid="169764">到这里这节课就结束了，如果你对本节课有什么想法或者疑问，欢迎你在留言区留言，我们一起讨论。</p></div>
+
+</body></html>

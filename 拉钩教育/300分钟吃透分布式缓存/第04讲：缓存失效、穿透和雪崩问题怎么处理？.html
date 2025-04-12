@@ -1,0 +1,846 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第04讲：缓存失效、穿透和雪崩问题怎么处理？</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>第04讲：缓存失效、穿透和雪崩问题怎么处理？</h1><p style="line-height: 1.75em; text-align: justify;"><span style="text-align: justify; text-indent: 29.3333px; color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;;">你好，我是你的缓存老师陈波，欢迎进入第 4 课时“缓存访问相关的经典问题”。</span></p> 
+<p style="line-height: 1.75em; text-align: justify;"><span style="font-size: 12pt; color: rgb(73, 73, 73); text-indent: 29.3333px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;;"></span></p> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">前面讲解了缓存的原理、引入，以及设计架构，总结了缓存在使用及设计架构过程中的很多套路和关键考量点。实际上，在缓存系统的设计架构中，还有很多坑，很多的明枪暗箭，如果设计不当会导致很多严重的后果。设计不当，轻则请求变慢、性能降低，重则会数据不一致、系统可用性降低，甚至会导致缓存雪崩，整个系统无法对外提供服务。</span></p> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">&nbsp;</span></p> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">接下来将对缓存设计中的&nbsp;7&nbsp;大经典问题，如下图，进行问题描述、原因分析，并给出日常研发中，可能会出现该问题的业务场景，最后给出这些经典问题的解决方案。</span><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; text-indent: 0em; font-size: 16px;">本课时首先学习缓存失效、缓存穿透与缓存雪崩。</span></p> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">&nbsp; &nbsp;</span></p> 
+<p style="text-indent: 0em; white-space: normal; text-align: justify; line-height: 1.75em;"><img src="http://s0.lgstatic.com/i/image2/M01/99/94/CgotOV2kTKKAVD94AAIOd1w5wy8841.png"><span style="text-align: left; text-indent: 29.3333px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);">&nbsp; &nbsp; &nbsp;&nbsp;</span></p> 
+<h1 style="white-space: normal;"></h1> 
+<h6 style="text-indent: 0em; white-space: normal; text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 18px;">缓存失效</span></h6> 
+<h2 style="white-space: normal;"></h2> 
+<h6 style="text-indent: 0em; white-space: normal; text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">问题描述</span></h6> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">缓存第一个经典问题是缓存失效。上一课时讲到，服务系统查数据，首先会查缓存，如果缓存数据不存在，就进一步查&nbsp;DB，最后查到数据后回种到缓存并返回。缓存的性能比&nbsp;DB&nbsp;高&nbsp;50~100&nbsp;倍以上，所以我们希望数据查询尽可能命中缓存，这样系统负荷最小，性能最佳。缓存里的数据存储基本上都是以&nbsp;key&nbsp;为索引进行存储和获取的。业务访问时，如果大量的&nbsp;key&nbsp;同时过期，很多缓存数据访问都会&nbsp;miss，进而穿透到&nbsp;DB，DB&nbsp;的压力就会明显上升，由于&nbsp;DB&nbsp;的性能较差，只在缓存的&nbsp;1%~2%&nbsp;以下，这样请求的慢查率会明显上升。这就是缓存失效的问题。</span></p> 
+<h2 style="white-space: normal;"></h2> 
+<h6 style="text-indent: 0em; white-space: normal; text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">原因分析</span></h6> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">导致缓存失效，特别是很多&nbsp;key&nbsp;一起失效的原因，跟我们日常写缓存的过期时间息息相关。</span></p> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">&nbsp;</span></p> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">在写缓存时，我们一般会根据业务的访问特点，给每种业务数据预置一个过期时间，在写缓存时把这个过期时间带上，让缓存数据在这个固定的过期时间后被淘汰。一般情况下，因为缓存数据是逐步写入的，所以也是逐步过期被淘汰的。但在某些场景，一大批数据会被系统主动或被动从&nbsp;DB&nbsp;批量加载，然后写入缓存。这些数据写入缓存时，由于使用相同的过期时间，在经历这个过期时间之后，这批数据就会一起到期，从而被缓存淘汰。此时，对这批数据的所有请求，都会出现缓存失效，从而都穿透到&nbsp;DB，DB&nbsp;由于查询量太大，就很容易压力大增，请求变慢。</span></p> 
+<h2 style="white-space: normal;"></h2> 
+<h6 style="text-indent: 0em; white-space: normal; text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">业务场景</span></h6> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">很多业务场景，稍不注意，就出现大量的缓存失效，进而导致系统&nbsp;DB&nbsp;压力大、请求变慢的情况。比如同一批火车票、飞机票，当可以售卖时，系统会一次性加载到缓存，如果缓存写入时，过期时间按照预先设置的过期值，那过期时间到期后，系统就会因缓存失效出现变慢的问题。类似的业务场景还有很多，比如微博业务，会有后台离线系统，持续计算热门微博，每当计算结束，会将这批热门微博批量写入对应的缓存。还比如，很多业务，在部署新&nbsp;IDC&nbsp;或新业务上线时，会进行缓存预热，也会一次性加载大批热数据。</span></p> 
+<h2 style="white-space: normal;"></h2> 
+<h6 style="text-indent: 0em; white-space: normal; text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">解决方案</span></h6> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">对于批量&nbsp;key&nbsp;缓存失效的问题，原因既然是预置的固定过期时间，那解决方案也从这里入手。设计缓存的过期时间时，使用公式：过期时间=baes&nbsp;时间+随机时间。即相同业务数据写缓存时，在基础过期时间之上，再加一个随机的过期时间，让数据在未来一段时间内慢慢过期，避免瞬时全部过期，对&nbsp;DB&nbsp;造成过大压力，如下图所示。</span></p> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">&nbsp; &nbsp; &nbsp; &nbsp;</span></p> 
+<p style="text-indent: 0em; white-space: normal; text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);"><img src="http://s0.lgstatic.com/i/image2/M01/99/74/CgoB5l2kTKKAVkTnAAFhcJtdQl0573.png">&nbsp; &nbsp;&nbsp;</span></p> 
+<h1 style="white-space: normal;"></h1> 
+<h6 style="text-indent: 0em; white-space: normal; text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 18px;">缓存穿透</span></h6> 
+<h2 style="white-space: normal;"></h2> 
+<h6 style="text-indent: 0em; white-space: normal; text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">问题描述</span></h6> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">第二个经典问题是缓存穿透。缓存穿透是一个很有意思的问题。因为缓存穿透发生的概率很低，所以一般很难被发现。但是，一旦你发现了，而且量还不小，你可能立即就会经历一个忙碌的夜晚。因为对于正常访问，访问的数据即便不在缓存，也可以通过&nbsp;DB&nbsp;加载回种到缓存。而缓存穿透，则意味着有特殊访客在查询一个不存在的&nbsp;key，导致每次查询都会穿透到&nbsp;DB，如果这个特殊访客再控制一批肉鸡机器，持续访问你系统里不存在的&nbsp;key，就会对&nbsp;DB&nbsp;产生很大的压力，从而影响正常服务。</span></p> 
+<h2 style="white-space: normal;"></h2> 
+<h6 style="text-indent: 0em; white-space: normal; text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">原因分析</span></h6> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">缓存穿透存在的原因，就是因为我们在系统设计时，更多考虑的是正常访问路径，对特殊访问路径、异常访问路径考虑相对欠缺。</span></p> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">&nbsp;</span></p> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">缓存访问设计的正常路径，是先访问&nbsp;cache，cache miss&nbsp;后查&nbsp;DB，DB&nbsp;查询到结果后，回种缓存返回。这对于正常的&nbsp;key&nbsp;访问是没有问题的，但是如果用户访问的是一个不存在的&nbsp;key，查&nbsp;DB&nbsp;返回空（即一个&nbsp;NULL），那就不会把这个空写回cache。那以后不管查询多少次这个不存在的&nbsp;key，都会&nbsp;cache miss，都会查询&nbsp;DB。整个系统就会退化成一个“前端+DB“的系统，由于&nbsp;DB&nbsp;的吞吐只在&nbsp;cache&nbsp;的&nbsp;1%~2%&nbsp;以下，如果有特殊访客，大量访问这些不存在的&nbsp;key，就会导致系统的性能严重退化，影响正常用户的访问。</span></p> 
+<h2 style="white-space: normal;"></h2> 
+<h6 style="text-indent: 0em; white-space: normal; text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">业务场景</span></h6> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">缓存穿透的业务场景很多，比如通过不存在的&nbsp;UID&nbsp;访问用户，通过不存在的车次&nbsp;ID&nbsp;查看购票信息。用户输入错误，偶尔几个这种请求问题不大，但如果是大量这种请求，就会对系统影响非常大。</span></p> 
+<h2 style="white-space: normal;"></h2> 
+<h6 style="text-indent: 0em; white-space: normal; text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">解决方案</span></h6> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">那么如何解决这种问题呢？如下图所示。</span></p> 
+<ul style=" white-space: normal; font-size: 14px;"> 
+ <li><p style="text-align: justify; text-indent: 0em; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">第一种方案就是，查询这些不存在的数据时，第一次查&nbsp;DB，虽然没查到结果返回&nbsp;NULL，仍然记录这个&nbsp;key&nbsp;到缓存，只是这个&nbsp;key&nbsp;对应的&nbsp;value&nbsp;是一个特殊设置的值。</span></p></li> 
+ <li><p style="text-align: justify; text-indent: 0em; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">第二种方案是，构建一个&nbsp;BloomFilter&nbsp;缓存过滤器，记录全量数据，这样访问数据时，可以直接通过&nbsp;BloomFilter&nbsp;判断这个&nbsp;key&nbsp;是否存在，如果不存在直接返回即可，根本无需查缓存和&nbsp;DB。</span></p></li> 
+</ul> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">&nbsp; &nbsp; &nbsp; &nbsp;</span></p> 
+<p style="text-indent: 0em; white-space: normal; text-align: justify; line-height: 1.75em;"><img src="http://s0.lgstatic.com/i/image2/M01/99/94/CgotOV2kTKOAZcRHAAIFuQZE-no463.png"></p> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">&nbsp;</span></p> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">不过这两种方案在设计时仍然有一些要注意的坑。</span></p> 
+<ul style=" white-space: normal; font-size: 14px;"> 
+ <li><p style="text-align: justify; text-indent: 0em; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">对于方案一，如果特殊访客持续访问大量的不存在的&nbsp;key，这些&nbsp;key&nbsp;即便只存一个简单的默认值，也会占用大量的缓存空间，导致正常&nbsp;key&nbsp;的命中率下降。所以进一步的改进措施是，对这些不存在的&nbsp;key&nbsp;只存较短的时间，让它们尽快过期；或者将这些不存在的&nbsp;key&nbsp;存在一个独立的公共缓存，从缓存查找时，先查正常的缓存组件，如果&nbsp;miss，则查一下公共的非法&nbsp;key&nbsp;的缓存，如果后者命中，直接返回，否则穿透&nbsp;DB，如果查出来是空，则回种到非法&nbsp;key&nbsp;缓存，否则回种到正常缓存。</span></p></li> 
+ <li><p style="text-align: justify; text-indent: 0em; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">对于方案二，BloomFilter&nbsp;要缓存全量的&nbsp;key，这就要求全量的&nbsp;key&nbsp;数量不大，10亿&nbsp;条数据以内最佳，因为&nbsp;10亿&nbsp;条数据大概要占用&nbsp;1.2GB&nbsp;的内存。也可以用&nbsp;BloomFilter&nbsp;缓存非法&nbsp;key，每次发现一个&nbsp;key&nbsp;是不存在的非法&nbsp;key，就记录到&nbsp;BloomFilter&nbsp;中，这种记录方案，会导致&nbsp;BloomFilter&nbsp;存储的&nbsp;key&nbsp;持续高速增长，为了避免记录&nbsp;key&nbsp;太多而导致误判率增大，需要定期清零处理。</span></p></li> 
+</ul> 
+<h2 style="white-space: normal;"></h2> 
+<h6 style="text-indent: 0em; white-space: normal; text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">BloomFilter</span></h6> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">BloomFilter&nbsp;是一个非常有意思的数据结构，不仅仅可以挡住非法&nbsp;key&nbsp;攻击，还可以低成本、高性能地对海量数据进行判断，比如一个系统有数亿用户和百亿级新闻&nbsp;feed，就可以用&nbsp;BloomFilter&nbsp;来判断某个用户是否阅读某条新闻&nbsp;feed。下面来对&nbsp;BloomFilter&nbsp;数据结构做一个分析，如下图所示。</span></p> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">&nbsp; &nbsp; &nbsp; &nbsp;</span></p> 
+<p style="text-indent: 0em; white-space: normal; text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; color: rgb(63, 63, 63);"><img src="http://s0.lgstatic.com/i/image2/M01/99/74/CgoB5l2kTKOABkQdAAFikFQHrgc863.png">&nbsp; &nbsp;&nbsp;</span></p> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">BloomFilter&nbsp;的目的是检测一个元素是否存在于一个集合内。它的原理，是用&nbsp;bit&nbsp;数据组来表示一个集合，对一个&nbsp;key&nbsp;进行多次不同的&nbsp;Hash&nbsp;检测，如果所有&nbsp;Hash&nbsp;对应的&nbsp;bit&nbsp;位都是&nbsp;1，则表明&nbsp;key&nbsp;非常大概率存在，平均单记录占用&nbsp;1.2&nbsp;字节即可达到&nbsp;99%，只要有一次&nbsp;Hash&nbsp;对应的&nbsp;bit&nbsp;位是&nbsp;0，就说明这个&nbsp;key&nbsp;肯定不存在于这个集合内。</span></p> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">&nbsp;</span></p> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">BloomFilter&nbsp;的算法是，首先分配一块内存空间做&nbsp;bit&nbsp;数组，数组的&nbsp;bit&nbsp;位初始值全部设为&nbsp;0，加入元素时，采用&nbsp;k&nbsp;个相互独立的&nbsp;Hash&nbsp;函数计算，然后将元素&nbsp;Hash&nbsp;映射的&nbsp;K&nbsp;个位置全部设置为&nbsp;1。检测&nbsp;key&nbsp;时，仍然用这&nbsp;k&nbsp;个&nbsp;Hash&nbsp;函数计算出&nbsp;k&nbsp;个位置，如果位置全部为&nbsp;1，则表明&nbsp;key&nbsp;存在，否则不存在。</span></p> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);"><br></span></p> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">BloomFilter&nbsp;的优势是，全内存操作，性能很高。另外空间效率非常高，要达到&nbsp;1%&nbsp;的误判率，平均单条记录占用&nbsp;1.2&nbsp;字节即可。而且，平均单条记录每增加&nbsp;0.6&nbsp;字节，还可让误判率继续变为之前的&nbsp;1/10，即平均单条记录占用&nbsp;1.8&nbsp;字节，误判率可以达到&nbsp;1/1000；平均单条记录占用&nbsp;2.4&nbsp;字节，误判率可以到&nbsp;1/10000，以此类推。这里的误判率是指，BloomFilter&nbsp;判断某个&nbsp;key&nbsp;存在，但它实际不存在的概率，因为它存的是&nbsp;key&nbsp;的&nbsp;Hash&nbsp;值，而非&nbsp;key&nbsp;的值，所以有概率存在这样的&nbsp;key，它们内容不同，但多次&nbsp;Hash&nbsp;后的&nbsp;Hash&nbsp;值都相同。对于&nbsp;BloomFilter&nbsp;判断不存在的&nbsp;key ，则是&nbsp;100%&nbsp;不存在的，反证法，如果这个&nbsp;key&nbsp;存在，那它每次&nbsp;Hash&nbsp;后对应的&nbsp;Hash&nbsp;值位置肯定是&nbsp;1，而不会是&nbsp;0。</span></p> 
+<h1 style="white-space: normal;"></h1> 
+<h6 style="text-indent: 0em; white-space: normal; text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 18px;">缓存雪崩</span></h6> 
+<h2 style="white-space: normal;"></h2> 
+<h6 style="text-indent: 0em; white-space: normal; text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">问题描述</span></h6> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">第三个经典问题是缓存雪崩。系统运行过程中，缓存雪崩是一个非常严重的问题。缓存雪崩是指部分缓存节点不可用，导致整个缓存体系甚至甚至服务系统不可用的情况。缓存雪崩按照缓存是否&nbsp;rehash（即是否漂移）分两种情况：</span></p> 
+<ul style=" white-space: normal; font-size: 14px;"> 
+ <li><p style="text-align: justify; text-indent: 0em; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">缓存不支持&nbsp;rehash&nbsp;导致的系统雪崩不可用</span></p></li> 
+ <li><p style="text-align: justify; text-indent: 0em; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">缓存支持&nbsp;rehash&nbsp;导致的缓存雪崩不可用</span></p></li> 
+</ul> 
+<h2 style="white-space: normal;"></h2> 
+<h6 style="text-indent: 0em; white-space: normal; text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">原因分析</span></h6> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">在上述两种情况中，缓存不进行&nbsp;rehash&nbsp;时产生的雪崩，一般是由于较多缓存节点不可用，请求穿透导致&nbsp;DB&nbsp;也过载不可用，最终整个系统雪崩不可用的。而缓存支持&nbsp;rehash&nbsp;时产生的雪崩，则大多跟流量洪峰有关，流量洪峰到达，引发部分缓存节点过载&nbsp;Crash，然后因&nbsp;rehash&nbsp;扩散到其他缓存节点，最终整个缓存体系异常。</span></p> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">&nbsp;</span></p> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">第一种情况比较容易理解，缓存节点不支持&nbsp;rehash，较多缓存节点不可用时，大量&nbsp;Cache&nbsp;访问会失败，根据缓存读写模型，这些请求会进一步访问&nbsp;DB，而且&nbsp;DB&nbsp;可承载的访问量要远比缓存小的多，请求量过大，就很容易造成&nbsp;DB&nbsp;过载，大量慢查询，最终阻塞甚至&nbsp;Crash，从而导致服务异常。</span></p> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">&nbsp;</span></p> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">第二种情况是怎么回事呢？这是因为缓存分布设计时，很多同学会选择一致性&nbsp;Hash&nbsp;分布方式，同时在部分节点异常时，采用&nbsp;rehash&nbsp;策略，即把异常节点请求平均分散到其他缓存节点。在一般情况下，一致性&nbsp;Hash&nbsp;分布+rehash&nbsp;策略可以很好得运行，但在较大的流量洪峰到临之时，如果大流量&nbsp;key&nbsp;比较集中，正好在某&nbsp;1～2&nbsp;个缓存节点，很容易将这些缓存节点的内存、网卡过载，缓存节点异常&nbsp;Crash，然后这些异常节点下线，这些大流量&nbsp;key&nbsp;请求又被&nbsp;rehash&nbsp;到其他缓存节点，进而导致其他缓存节点也被过载&nbsp;Crash，缓存异常持续扩散，最终导致整个缓存体系异常，无法对外提供服务。</span></p> 
+<h2 style="white-space: normal;"></h2> 
+<h6 style="text-indent: 0em; white-space: normal; text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">业务场景</span></h6> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">缓存雪崩的业务场景并不少见，微博、Twitter&nbsp;等系统在运行的最初若干年都遇到过很多次。比如，微博最初很多业务缓存采用一致性&nbsp;Hash+rehash&nbsp;策略，在突发洪水流量来临时，部分缓存节点过载&nbsp;Crash&nbsp;甚至宕机，然后这些异常节点的请求转到其他缓存节点，又导致其他缓存节点过载异常，最终整个缓存池过载。另外，机架断电，导致业务缓存多个节点宕机，大量请求直接打到&nbsp;DB，也导致&nbsp;DB&nbsp;过载而阻塞，整个系统异常。最后缓存机器复电后，DB&nbsp;重启，数据逐步加热后，系统才逐步恢复正常。</span></p> 
+<h2 style="white-space: normal;"></h2> 
+<h6 style="text-indent: 0em; white-space: normal; text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">解决方案</span></h6> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">预防缓存雪崩，这里给出&nbsp;3&nbsp;个解决方案。</span></p> 
+<ul style=" white-space: normal; font-size: 14px;"> 
+ <li><p style="text-align: justify; text-indent: 0em; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">方案一，对业务&nbsp;DB&nbsp;的访问增加读写开关，当发现&nbsp;DB&nbsp;请求变慢、阻塞，慢请求超过阀值时，就会关闭读开关，部分或所有读&nbsp;DB&nbsp;的请求进行&nbsp;failfast&nbsp;立即返回，待&nbsp;DB&nbsp;恢复后再打开读开关，如下图。</span></p></li> 
+</ul> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">&nbsp; &nbsp; &nbsp; &nbsp;<img src="http://s0.lgstatic.com/i/image2/M01/99/94/CgotOV2kTKOAX4H_AACZ92HqRoY447.png"></span></p> 
+<ul style=" white-space: normal; font-size: 14px;"> 
+ <li><p style="text-align: justify; text-indent: 0em; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">方案二，对缓存增加多个副本，缓存异常或请求&nbsp;miss&nbsp;后，再读取其他缓存副本，而且多个缓存副本尽量部署在不同机架，从而确保在任何情况下，缓存系统都会正常对外提供服务。</span></p></li> 
+ <li><p style="text-align: justify; text-indent: 0em; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">方案三，对缓存体系进行实时监控，当请求访问的慢速比超过阀值时，及时报警，通过机器替换、服务替换进行及时恢复；也可以通过各种自动故障转移策略，自动关闭异常接口、停止边缘服务、停止部分非核心功能措施，确保在极端场景下，核心功能的正常运行。</span></p></li> 
+</ul> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">&nbsp;</span></p> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);">实际上，微博平台系统，这三种方案都采用了，通过三管齐下，规避缓存雪崩的发生。</span></p> 
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; color: rgb(63, 63, 63);"><br></span></p> 
+<p style="line-height: 1.75em; text-align: justify;"><span style="font-size: 12pt; color: rgb(73, 73, 73); text-indent: 29.3333px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;;">OK，这节课就讲到这里，下一课时我会分享“缓存数据相关的经典问题”，记得按时来听课哈。好，下节课见，拜拜！</span></p></div>
+
+</body></html>

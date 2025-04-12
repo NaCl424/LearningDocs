@@ -1,0 +1,1324 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第18讲：如何进行生产环境作业监控</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>第18讲：如何进行生产环境作业监控</h1><p data-nodeid="27866" class="">本课时主要讲解如何进行生产环境作业监控。</p>
+<p data-nodeid="27867">在第 15 课时“如何排查生产环境中的反压问题”中提到过我们应该如何发现任务是否出现反压，Flink 的后台页面是我们发现反压问题的第一选择，其后台页面可以直观、清晰地看到当前作业的运行状态。</p>
+<p data-nodeid="27868">在实际生产中，Flink 的后台页面可以方便我们对 Flink JobManager、TaskManager、执行计划、Slot 分配、是否反压等参数进行定位，对单个任务来讲可以方便地进行问题排查。</p>
+<p data-nodeid="27869">但是，对于很多大中型企业来讲，我们对进群的作业进行管理时，更多的是关心作业精细化实时运行状态。例如，实时吞吐量的同比环比、整个集群的任务运行概览、集群水位，或者监控利用 Flink 实现的 ETL 框架的运行情况等，这时候就需要设计专门的监控系统来监控集群的任务作业情况。</p>
+<h3 data-nodeid="27870">Flink Metrics</h3>
+<p data-nodeid="27871">针对上面的情况，我们就用了 Flink 提供的另一个强大的功能：Flink Metrics。</p>
+<p data-nodeid="27872">Flink Metrics 是 Flink 实现的一套运行信息收集库，我们不但可以收集 Flink 本身提供的系统指标，比如 CPU、内存、线程使用情况、JVM 垃圾收集情况、网络和 IO 等，还可以通过继承和实现指定的类或者接口打点收集用户自定义的指标。</p>
+<p data-nodeid="27873">通过使用 Flink Metrics 我们可以轻松地做到：</p>
+<ul data-nodeid="27874">
+<li data-nodeid="27875">
+<p data-nodeid="27876">实时采集 Flink 中的 Metrics 信息或者自定义用户需要的指标信息并进行展示；</p>
+</li>
+<li data-nodeid="27877">
+<p data-nodeid="27878">通过 Flink 提供的 Rest API 收集这些信息，并且接入第三方系统进行展示。</p>
+</li>
+</ul>
+<h3 data-nodeid="27879">Flink Metrics 分类</h3>
+<p data-nodeid="27880">Flink 提供了四种类型的监控指标，分别是：Counter、Gauge、Histogram、Meter。</p>
+<h4 data-nodeid="27881">Counter</h4>
+<p data-nodeid="27882">Counter 称为计数器，一般用来统计其中一个指标的总量，比如统计数据的输入、输出总量。</p>
+<pre class="lang-java hljs" data-nodeid="27883"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">MyMapper</span> <span class="hljs-keyword">extends</span> <span class="hljs-title">RichMapFunction</span>&lt;<span class="hljs-title">String</span>, <span class="hljs-title">String</span>&gt; </span>{
+  <span class="hljs-keyword">private</span> <span class="hljs-keyword">transient</span> Counter counter;
+  <span class="hljs-meta">@Override</span>
+  <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">open</span><span class="hljs-params">(Configuration config)</span> </span>{
+    <span class="hljs-keyword">this</span>.counter = getRuntimeContext()
+      .getMetricGroup()
+      .counter(<span class="hljs-string">"MyCounter"</span>);
+  }
+  <span class="hljs-meta">@Override</span>
+  <span class="hljs-function"><span class="hljs-keyword">public</span> String <span class="hljs-title">map</span><span class="hljs-params">(String value)</span> <span class="hljs-keyword">throws</span> Exception </span>{
+    <span class="hljs-keyword">this</span>.counter.inc();
+    <span class="hljs-keyword">return</span> value;
+  }
+}
+</code></pre>
+<h4 data-nodeid="27884">Gauge</h4>
+<p data-nodeid="27885">Gauge 被用来统计某一个指标的瞬时值。举个例子，我们在监控 Flink 中某一个节点的内存使用情况或者某个 map 算子的输出值数量。</p>
+<pre class="lang-java hljs" data-nodeid="27886"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">MyMapper</span> <span class="hljs-keyword">extends</span> <span class="hljs-title">RichMapFunction</span>&lt;<span class="hljs-title">String</span>, <span class="hljs-title">String</span>&gt; </span>{
+  <span class="hljs-keyword">private</span> <span class="hljs-keyword">transient</span> <span class="hljs-keyword">int</span> valueNumber = <span class="hljs-number">0L</span>;
+  <span class="hljs-meta">@Override</span>
+  <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">open</span><span class="hljs-params">(Configuration config)</span> </span>{
+    getRuntimeContext()
+      .getMetricGroup()
+      .gauge(<span class="hljs-string">"MyGauge"</span>, <span class="hljs-keyword">new</span> Gauge&lt;Long&gt;() {
+        <span class="hljs-meta">@Override</span>
+        <span class="hljs-function"><span class="hljs-keyword">public</span> Long <span class="hljs-title">getValue</span><span class="hljs-params">()</span> </span>{
+          <span class="hljs-keyword">return</span> valueNumber;
+        }
+      });
+  }
+  <span class="hljs-meta">@Override</span>
+  <span class="hljs-function"><span class="hljs-keyword">public</span> String <span class="hljs-title">map</span><span class="hljs-params">(String value)</span> <span class="hljs-keyword">throws</span> Exception </span>{
+    valueNumber++;
+    <span class="hljs-keyword">return</span> value;
+  }
+}
+</code></pre>
+<h4 data-nodeid="27887">Meter</h4>
+<p data-nodeid="27888">Meter 被用来计算一个指标的平均值。</p>
+<pre class="lang-java hljs" data-nodeid="27889"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">MyMapper</span> <span class="hljs-keyword">extends</span> <span class="hljs-title">RichMapFunction</span>&lt;<span class="hljs-title">Long</span>, <span class="hljs-title">Integer</span>&gt; </span>{
+  <span class="hljs-keyword">private</span> Meter meter;
+  <span class="hljs-meta">@Override</span>
+  <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">open</span><span class="hljs-params">(Configuration config)</span> </span>{
+    <span class="hljs-keyword">this</span>.meter = getRuntimeContext()
+      .getMetricGroup()
+      .meter(<span class="hljs-string">"myMeter"</span>, <span class="hljs-keyword">new</span> MyMeter());
+  }
+  <span class="hljs-meta">@public</span> <span class="hljs-function">Integer <span class="hljs-title">map</span><span class="hljs-params">(Long value)</span> <span class="hljs-keyword">throws</span> Exception </span>{
+    <span class="hljs-keyword">this</span>.meter.markEvent();
+  }
+}
+</code></pre>
+<h4 data-nodeid="27890">Histogram</h4>
+<p data-nodeid="27891">Histogram 是直方图，Flink 中属于直方图的指标非常少，它通常被用来计算指标的最大值、最小值、中位数等。</p>
+<pre class="lang-java hljs" data-nodeid="27892"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">MyMapper</span> <span class="hljs-keyword">extends</span> <span class="hljs-title">RichMapFunction</span>&lt;<span class="hljs-title">Long</span>, <span class="hljs-title">Integer</span>&gt; </span>{
+  <span class="hljs-keyword">private</span> Histogram histogram;
+  <span class="hljs-meta">@Override</span>
+  <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">open</span><span class="hljs-params">(Configuration config)</span> </span>{
+    <span class="hljs-keyword">this</span>.histogram = getRuntimeContext()
+      .getMetricGroup()
+      .histogram(<span class="hljs-string">"myHistogram"</span>, <span class="hljs-keyword">new</span> MyHistogram());
+  }
+  <span class="hljs-meta">@public</span> <span class="hljs-function">Integer <span class="hljs-title">map</span><span class="hljs-params">(Long value)</span> <span class="hljs-keyword">throws</span> Exception </span>{
+    <span class="hljs-keyword">this</span>.histogram.update(value);
+  }
+}
+</code></pre>
+<p data-nodeid="27893">这里需要特别指出的是，Flink 中的 Metrics 是一个多层的结构，以 Group 的方式存在，我们用来定位唯一的一个 Metrics 是通过 Metric Group + Metric Name 的方式。</p>
+<h3 data-nodeid="27894">源码分析</h3>
+<p data-nodeid="27895">Flink Metrics 相关的实现都是通过 org.apache.flink.metrics.Metric 这个类实现的，整体的类图如下所示：</p>
+<p data-nodeid="27896"><img src="https://s0.lgstatic.com/i/image/M00/1F/D9/CgqCHl7nSj6AFavAAABn_QdfysY732.png" alt="image" data-nodeid="27960"></p>
+<p data-nodeid="27897">为了方便对 Metrics 进行管理和分类，Flink 提供了对 Metrics 进行分组的功能，这个功能是通过下图中 MetricGroup 实现的，在图中可以看到 MetricGroup 相关的子类的继承关系。</p>
+<p data-nodeid="27898"><img src="https://s0.lgstatic.com/i/image/M00/1F/D9/CgqCHl7nSkWAFKHzAADTD5K4tn8991.png" alt="image" data-nodeid="27964"></p>
+<p data-nodeid="27899">此外，Flink 还提供了向外披露 Metric 的监测结果的接口，该接口是 org.apache.flink.metrics.reporter.MetricReporter。这个接口的实现类通过 Metrics 的类型进行注册和移除。</p>
+<pre class="lang-java hljs" data-nodeid="27900"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">abstract</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">AbstractReporter</span> <span class="hljs-keyword">implements</span> <span class="hljs-title">MetricReporter</span>, <span class="hljs-title">CharacterFilter</span> </span>{
+    <span class="hljs-keyword">protected</span> <span class="hljs-keyword">final</span> Logger log = LoggerFactory.getLogger(<span class="hljs-keyword">this</span>.getClass());
+    <span class="hljs-keyword">protected</span> <span class="hljs-keyword">final</span> Map&lt;Gauge&lt;?&gt;, String&gt; gauges = <span class="hljs-keyword">new</span> HashMap();
+    <span class="hljs-keyword">protected</span> <span class="hljs-keyword">final</span> Map&lt;Counter, String&gt; counters = <span class="hljs-keyword">new</span> HashMap();
+    <span class="hljs-keyword">protected</span> <span class="hljs-keyword">final</span> Map&lt;Histogram, String&gt; histograms = <span class="hljs-keyword">new</span> HashMap();
+    <span class="hljs-keyword">protected</span> <span class="hljs-keyword">final</span> Map&lt;Meter, String&gt; meters = <span class="hljs-keyword">new</span> HashMap();
+    <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-title">AbstractReporter</span><span class="hljs-params">()</span> </span>{
+    }
+    <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">notifyOfAddedMetric</span><span class="hljs-params">(Metric metric, String metricName, MetricGroup group)</span> </span>{
+        String name = group.getMetricIdentifier(metricName, <span class="hljs-keyword">this</span>);
+        <span class="hljs-keyword">synchronized</span>(<span class="hljs-keyword">this</span>) {
+            <span class="hljs-keyword">if</span>(metric <span class="hljs-keyword">instanceof</span> Counter) {
+                <span class="hljs-keyword">this</span>.counters.put((Counter)metric, name);
+            } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(metric <span class="hljs-keyword">instanceof</span> Gauge) {
+                <span class="hljs-keyword">this</span>.gauges.put((Gauge)metric, name);
+            } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(metric <span class="hljs-keyword">instanceof</span> Histogram) {
+                <span class="hljs-keyword">this</span>.histograms.put((Histogram)metric, name);
+            } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(metric <span class="hljs-keyword">instanceof</span> Meter) {
+                <span class="hljs-keyword">this</span>.meters.put((Meter)metric, name);
+            } <span class="hljs-keyword">else</span> {
+                <span class="hljs-keyword">this</span>.log.warn(<span class="hljs-string">"Cannot add unknown metric type {}. This indicates that the reporter does not support this metric type."</span>, metric.getClass().getName());
+            }
+        }
+    }
+    <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">notifyOfRemovedMetric</span><span class="hljs-params">(Metric metric, String metricName, MetricGroup group)</span> </span>{
+        <span class="hljs-keyword">synchronized</span>(<span class="hljs-keyword">this</span>) {
+            <span class="hljs-keyword">if</span>(metric <span class="hljs-keyword">instanceof</span> Counter) {
+                <span class="hljs-keyword">this</span>.counters.remove(metric);
+            } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(metric <span class="hljs-keyword">instanceof</span> Gauge) {
+                <span class="hljs-keyword">this</span>.gauges.remove(metric);
+            } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(metric <span class="hljs-keyword">instanceof</span> Histogram) {
+                <span class="hljs-keyword">this</span>.histograms.remove(metric);
+            } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(metric <span class="hljs-keyword">instanceof</span> Meter) {
+                <span class="hljs-keyword">this</span>.meters.remove(metric);
+            } <span class="hljs-keyword">else</span> {
+                <span class="hljs-keyword">this</span>.log.warn(<span class="hljs-string">"Cannot remove unknown metric type {}. This indicates that the reporter does not support this metric type."</span>, metric.getClass().getName());
+            }
+        }
+    }
+}
+</code></pre>
+<h3 data-nodeid="27901">获取 Metrics</h3>
+<p data-nodeid="27902">获取 Metrics 的方法有多种，首先我们可以通过 Flink 的后台管理页面看到部分指标；其次可以通过 Flink 提供的 Http 接口查询 Flink 任务的状态信息，因为 Flink Http 接口返回的都是 Json 信息，我们可以很方便地将 Json 进行解析；最后一种方法是，我们可以通过 Metric Reporter 获取。下面分别对这两者进行详细讲解。</p>
+<h4 data-nodeid="27903">Flink HTTP 接口</h4>
+<p data-nodeid="27904">Flink 提供了丰富的接口来协助我们查询 Flink 中任务运行的状态，所有的请求都可以通过访问</p>
+<p data-nodeid="27905"><a href="http://hostname:8081/" data-nodeid="27972">http://hostname:8081/</a> 加指定的 URI 方式查询，Flink 支持的所有 HTTP 接口你都可以点击<a href="https://ci.apache.org/projects/flink/flink-docs-release-1.10/monitoring/rest_api.html" data-nodeid="27976">这里</a>查询到。</p>
+<p data-nodeid="27906">Flink 支持的接口包括：</p>
+<pre class="lang-js hljs" data-nodeid="27907"><code data-language="js">/config
+/overview
+/jobs
+/joboverview/running
+/joboverview/completed
+/jobs/&lt;jobid&gt;
+/jobs/&lt;jobid&gt;/vertices
+/jobs/&lt;jobid&gt;/config
+/jobs/&lt;jobid&gt;/exceptions
+/jobs/&lt;jobid&gt;/accumulators
+/jobs/&lt;jobid&gt;/vertices/&lt;vertexid&gt;
+/jobs/&lt;jobid&gt;/vertices/&lt;vertexid&gt;/subtasktimes
+/jobs/&lt;jobid&gt;/vertices/&lt;vertexid&gt;/taskmanagers
+/jobs/&lt;jobid&gt;/vertices/&lt;vertexid&gt;/accumulators
+/jobs/&lt;jobid&gt;/vertices/&lt;vertexid&gt;/subtasks/accumulators
+/jobs/&lt;jobid&gt;/vertices/&lt;vertexid&gt;/subtasks/&lt;subtasknum&gt;
+/jobs/&lt;jobid&gt;/vertices/&lt;vertexid&gt;/subtasks/&lt;subtasknum&gt;/attempts/&lt;attempt&gt;
+/jobs/&lt;jobid&gt;/vertices/&lt;vertexid&gt;/subtasks/&lt;subtasknum&gt;/attempts/&lt;attempt&gt;/accumulators
+/jobs/&lt;jobid&gt;/plan
+/jars/upload
+/jars
+/jars/:jarid
+/jars/:jarid/plan
+/jars/:jarid/run
+</code></pre>
+<p data-nodeid="27908">举个例子，我们可以通过查询 /joboverview 访问集群中所有任务的概览，结果类似如下形式：</p>
+<pre class="lang-java hljs" data-nodeid="27909"><code data-language="java">{
+  <span class="hljs-string">"running"</span>:[],
+  <span class="hljs-string">"finished"</span>:[
+    {
+      <span class="hljs-string">"jid"</span>: <span class="hljs-string">"7684be6004e4e955c2a558a9bc463f65"</span>,
+      <span class="hljs-string">"name"</span>: <span class="hljs-string">"Flink Java Job at Wed Sep 16 18:08:21 CEST 2015"</span>,
+      <span class="hljs-string">"state"</span>: <span class="hljs-string">"FINISHED"</span>,
+      <span class="hljs-string">"start-time"</span>: <span class="hljs-number">1442419702857</span>,
+      <span class="hljs-string">"end-time"</span>: <span class="hljs-number">1442419975312</span>,
+      <span class="hljs-string">"duration"</span>:<span class="hljs-number">272455</span>,
+      <span class="hljs-string">"last-modification"</span>: <span class="hljs-number">1442419975312</span>,
+      <span class="hljs-string">"tasks"</span>: {
+         <span class="hljs-string">"total"</span>: <span class="hljs-number">6</span>,
+         <span class="hljs-string">"pending"</span>: <span class="hljs-number">0</span>,
+         <span class="hljs-string">"running"</span>: <span class="hljs-number">0</span>,
+         <span class="hljs-string">"finished"</span>: <span class="hljs-number">6</span>,
+         <span class="hljs-string">"canceling"</span>: <span class="hljs-number">0</span>,
+         <span class="hljs-string">"canceled"</span>: <span class="hljs-number">0</span>,
+         <span class="hljs-string">"failed"</span>: <span class="hljs-number">0</span>
+      }
+    },
+    {
+      <span class="hljs-string">"jid"</span>: <span class="hljs-string">"49306f94d0920216b636e8dd503a6409"</span>,
+      <span class="hljs-string">"name"</span>: <span class="hljs-string">"Flink Java Job at Wed Sep 16 18:16:39 CEST 2015"</span>,
+      ...
+    }]
+}
+</code></pre>
+<h4 data-nodeid="27910">Flink Reporter</h4>
+<p data-nodeid="27911">Flink 还提供了很多内置的 Reporter，这些 Reporter 在 Flink 的<a href="https://ci.apache.org/projects/flink/flink-docs-release-1.10/monitoring/metrics.html#reporter" data-nodeid="27984">官网</a>中可以查询到。</p>
+<p data-nodeid="27912">例如，Flink 提供了 Graphite、InfluxDB、Prometheus 等内置的 Reporter，我们可以方便地对这些外部系统进行集成。关于它们的详细配置也可以在 Flink 官网的详情页面中看到。</p>
+<p data-nodeid="27913">这里我们举一个 Flink 和 InfluxDB、Grafana 集成进行 Flink 集群任务监控的案例。在这个监控系统中，InfluxDB 扮演了 Flink 中监控数据存储者的角色，Grafana 则扮演了数据展示者的角色。</p>
+<ul data-nodeid="27914">
+<li data-nodeid="27915">
+<p data-nodeid="27916">InfluxDB 的安装</p>
+</li>
+</ul>
+<blockquote data-nodeid="27917">
+<p data-nodeid="27918">InfluxDB 是一个由 InfluxData 开发的开源时序型数据，由 Go 写成，着力于高性能地查询与存储时序型数据。InfluxDB 被广泛应用于存储系统的监控数据，IoT 行业的实时数据等场景。</p>
+</blockquote>
+<p data-nodeid="27919">InfluxDB 的安装过程很简单，我们不在这里赘述了，需要注意的事项是修改 InfluxDB 的配置 /etc/influxdb/influxdb.conf：</p>
+<pre class="lang-java hljs" data-nodeid="27920"><code data-language="java">[admin]
+&nbsp; &nbsp;enabled = <span class="hljs-keyword">true</span>
+&nbsp; &nbsp;bind-address = <span class="hljs-string">":8083"</span>
+</code></pre>
+<p data-nodeid="27921">我们就可以通过 8083 端口打开 InfluxDB 的控制台了。</p>
+<ul data-nodeid="27922">
+<li data-nodeid="27923">
+<p data-nodeid="27924">Grafana 的安装</p>
+</li>
+</ul>
+<p data-nodeid="27925"><a href="https://grafana.com/docs/grafana/latest/installation/rpm/" data-nodeid="27995">安装可以直接点击这里参考官网说明</a>，Grafana 的默认账号和密码分别是 admin、admin，可以通过 3000 端口进行访问。</p>
+<ul data-nodeid="27926">
+<li data-nodeid="27927">
+<p data-nodeid="27928">修改 flink-conf.yaml</p>
+</li>
+</ul>
+<p data-nodeid="27929">我们需要在 flink 的配置文件中新增以下配置：</p>
+<pre class="lang-java hljs" data-nodeid="27930"><code data-language="java">metrics.reporter.influxdb.class: org.apache.flink.metrics.influxdb.InfluxdbReporter
+metrics.reporter.influxdb.host: xxx.xxx.xxx.xxx
+metrics.reporter.influxdb.port: <span class="hljs-number">8086</span>
+metrics.reporter.influxdb.db: flink
+</code></pre>
+<p data-nodeid="27931">同时，将 flink-metrics-influxdb-1.10.0.jar 这个包复制到 flink 的 /lib 目录下，然后启动 Flink。<br>
+我们就可以在 Grafana 中看到 Metrics 信息了。</p>
+<p data-nodeid="27932">事实上，常用的 Flink 实时监控大盘包括但不限于：Prometheus+Grafana、Flink 日志接入 ELK等可以供用户选择。结合易用性、稳定性和接入成本，综合考虑，我们推荐实际监控中可以采用 Prometheus/InfluxDB+Grafana 相配合的方式。</p>
+<h3 data-nodeid="27933">总结</h3>
+<p data-nodeid="28704">这一课时我们讲解了 Flink Metrics 指标的分类，并且从源码层面介绍了 Flink Metrics 的实现原理，最后还讲解了 Flink 监控这个 Metrics 的方式。我们在实际生产中应该灵活选取合适的监控方法，搭建自己的 Flink 任务监控大盘。</p>
+<p data-nodeid="28705" class="te-preview-highlight"><a href="https://github.com/wangzhiwubigdata/quickstart" data-nodeid="28709">点击这里下载本课程源码</a></p></div>
+
+</body></html>

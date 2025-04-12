@@ -1,0 +1,895 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>14 | 如何从 CPU 飙升定位到热点方法？</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>14 | 如何从 CPU 飙升定位到热点方法？</h1><p data-nodeid="14397" class="">上一模块我带你学习了如何进行系统监控，相信你已经掌握了监控部署的常见手段，通过监控这双“眼睛”，会帮助你及时发现系统资源异常，那当你发现资源异常时候，是不是觉得已经找到问题了呢？事实上并非如此，绝大多数资源异常只是你看到的表象问题，就好比你发现一个地方着火了，你可以先灭火，但是着火的原因是必须找到的，并制定相关的措施，这样才能有效避免下一次的火情。</p>
+<p data-nodeid="14398">对于系统也是这样的，当你发现了资源异常，你需要继续寻找发生问题的根因，所以作为一名专业的性能测试工程师，你也应当具备顺着表象去找问题根因的能力。这一讲我就以最流行的 Java 语言为例，带你学习如何透过现象看本质。</p>
+<p data-nodeid="14399">对于排查问题，不要只满足于掌握一些排查工具或者命令，你应当对<strong data-nodeid="14488">被测语言以及运行原理</strong>有所了解，这样得出来的结论才可能更全面。</p>
+<p data-nodeid="14400">这一讲我先带你理解 Java 运行过程中的核心概念。首先要明白 Java 代码在哪里运行，一些初学者说是在 idea 或者 eclipse 里面，因为它们是写代码的软件，不过细心的同学会发现，所有的 idea 或者 eclipse 要运行 Java 代码都需要配置 Java 环境，其实 idea 是我们开发的编辑器，而真正运行代码的是 JVM。</p>
+<p data-nodeid="14401">什么是 JVM 呢？JVM 是 Java Virtual Machine 的缩写，它是一个独立出来的运行环境，通过这样的环境去进行 Java 代码中各种逻辑运行。</p>
+<p data-nodeid="14402">读到这里可能同学有疑问了：“我现在接触了很多环境，比如 JVM 运行环境、Docker 运行环境，还有云服务器之类，它们到底是什么关系？”这对于不少人来说，确实是有一定疑惑的，我先用一张图来示意下：</p>
+<p data-nodeid="14403"><img src="https://s0.lgstatic.com/i/image6/M00/08/11/CioPOWA0ZKaAbIh2AAB-PIUIVKM063.png" alt="图片3.png" data-nodeid="14494"></p>
+<p data-nodeid="14404">从图中你可以看到，一般在底层物理机上会部署多个云服务器，而云服务器上又可以部署多个基于 Docker 的 JVM 节点，这样的部署结构也是比较常用的，既能做到<strong data-nodeid="14504">环境的隔离</strong>也能<strong data-nodeid="14505">节约机器成本</strong>。</p>
+<p data-nodeid="14405">JVM 本身是一个较为庞大的知识体系，对于测试来说，不一定要理解 JVM 特别晦涩的概念，但至少需要了解 JVM 的结构以及运行的机制，你可以认为 JVM 是运行在 Win 或者 Linux 系统上专门运行 Java 的虚拟机，Java 虚拟机直接和操作系统交互。</p>
+<h3 data-nodeid="14406">Java 文件是如何被运行的</h3>
+<p data-nodeid="14407">比如我们现在写了一个 HelloTester.java，这个 HelloTester.java 就类似一个文本文件，不过这个文件里面包含了符合 Java 语法规范的文本。比如我在 idea 里写一个简单的方法，如下代码所示：</p>
+<pre class="lang-java" data-nodeid="14408"><code data-language="java"> <span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">HelloTester</span> </span>{
+    <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">sayName</span><span class="hljs-params">(String name)</span></span>{
+        System.out.println(<span class="hljs-string">"my name is "</span>+name);
+    }
+    <span class="hljs-function"><span class="hljs-keyword">public</span>  <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">main</span><span class="hljs-params">(String[] args)</span></span>{
+        HelloTester helloTester=<span class="hljs-keyword">new</span> HelloTester();
+        helloTester.sayName(<span class="hljs-string">"cctester"</span>);
+}
+</code></pre>
+<p data-nodeid="14409">那我们的<strong data-nodeid="14518">JVM&nbsp;是不认识文本文件的</strong>，<strong data-nodeid="14519">所以它需要编译</strong>，让其成为一个会读二进制文件的&nbsp;HelloTester.class，一般这个文件会产生在工程文件夹下的 Target 当中。</p>
+<p data-nodeid="21878" class="te-preview-highlight">如果 <strong data-nodeid="21888">JVM</strong> 想要执行这个 .class 文件，我们需要将其装进一个<strong data-nodeid="21889">类加载器</strong>中，它就像一个搬运工一样，会把所有的 .class 文件全部搬进 JVM 里面来。如下图所示：</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<p data-nodeid="14411"><img src="https://s0.lgstatic.com/i/image6/M00/08/14/Cgp9HWA0ZLeAEBTuAAB3MRGS9mk331.png" alt="图片2.png" data-nodeid="14544"></p>
+<p data-nodeid="14412">对于如上的过程我们再总结概括一下：</p>
+<ol data-nodeid="14413">
+<li data-nodeid="14414">
+<p data-nodeid="14415">Java 文件经过编译后变成 .class 字节码文件；</p>
+</li>
+<li data-nodeid="14416">
+<p data-nodeid="14417">字节码文件通过类加载器被搬运到 JVM 中，生成的对象一般会在 JVM 中堆空间运行。</p>
+</li>
+</ol>
+<h3 data-nodeid="14418">Java 对象又是如何在堆空间运行的？</h3>
+<p data-nodeid="14419">同样还是根据以上代码示意，我带你看下 Java 对象如何进入堆空间以及在堆空间中运行的。</p>
+<p data-nodeid="14420">通过上文可知，编译 HelloTester.java 便会得到 HelloTester.class，执行 class 文件后系统会启动一个 JVM 进程，找到 HelloTester.class 后将类信息加载到 JVM 中。</p>
+<p data-nodeid="14421">JVM 找到 mian 方法后就可以执行 main 中的 HelloTester helloTester=new HelloTester()，也就是在 JVM 里创建一个 helloTester 对象，不过此时方法区里面还没有 HelloTester 类的信息，所以 JVM 就会去加载该类：</p>
+<ul data-nodeid="14422">
+<li data-nodeid="14423">
+<p data-nodeid="14424">加载 HelloTester 类后，JVM 在堆内就会为新的 HelloTester 实例进行内存的分配使用；</p>
+</li>
+<li data-nodeid="14425">
+<p data-nodeid="14426">然后执行 helloTester.sayName()，JVM 根据 HelloTester 对象引用定位到方法区中 HelloTester 类的类型信息的方法表，获得 sayName() 的字节码地址；</p>
+</li>
+<li data-nodeid="14427">
+<p data-nodeid="14428">最后执行 sayName("cctester")。</p>
+</li>
+</ul>
+<p data-nodeid="14429">以上便是 Java 对象在 JVM 中运行的大体过程，了解了这些基本信息之后，再来了解下堆空间中 Java 运行的线程状态，当程序开始创建线程时，便开始有了生命周期，其实就和人一样，会有“生老病死”几个状态，而对于线程来说会经历六个状态，如下表所示：</p>
+<p data-nodeid="14430"><img src="https://s0.lgstatic.com/i/image6/M00/08/11/CioPOWA0ZMuAGHBZAAD2QjCFz1A629.png" alt="图片1.png" data-nodeid="14562"></p>
+<p data-nodeid="14431">我们用一张图来直观地概括下这几个状态的演变：</p>
+<p data-nodeid="14432"><img src="https://s0.lgstatic.com/i/image6/M01/08/14/Cgp9HWA0ZSCAUrpaAAEB4nKOw-Q013.png" alt="image (8).png" data-nodeid="14566"></p>
+<p data-nodeid="14433">从字面上来看，NEW、RUNNABLE、TERMINATED 这几个状态比较好理解，但对于 BLOCKED、WAITING、TIMED_WAITING 很多人却分不清楚，我想通过一些实际生活中的例子来帮助你理解。</p>
+<h4 data-nodeid="14434">BLOCKED</h4>
+<p data-nodeid="14435">先来说下 BLOCKED，比如你去参加面试，可是接待室里面已经有张三正在面试，此时你是线程 T1，张三是线程 T2，而会议室是锁。这时 T1 就被 blocked，而 T2 获取了会议室的锁。</p>
+<h4 data-nodeid="14436">WAITING</h4>
+<p data-nodeid="14437">接着我们来说 WAITING，你已经进入面试环节，面试官对你的第一轮面试比较满意，让你在会议室等第二轮面试，此时就进入了 WAITING 状态，直到第二轮面试开始你才能结束 WAITING 状态。</p>
+<h4 data-nodeid="14438">TIMED_WAITING</h4>
+<p data-nodeid="14439">当你结束了所有面试环节，HR 对你说我们一般会在三天内给回复，如果三天内没有回复就不要再等了，此时你就进入 TIMED_WAITING 状态，如果三天内没答复，你可能会看其他机会或者直接入职备选公司了。</p>
+<p data-nodeid="14440">这几个例子我想可以帮助你理解 TIMED_WAITING、WATING、BLOCKED 状态。</p>
+<h3 data-nodeid="14441">一般哪些线程状态占用 CPU 呢？</h3>
+<p data-nodeid="14442">处于 TIMED_WAITING、WATING、BLOCKED 状态的线程是不消耗 CPU 的，而处于RUNNABLE 状态的线程要结合当前线程代码的性质判断是否消耗 CPU：</p>
+<ul data-nodeid="14443">
+<li data-nodeid="14444">
+<p data-nodeid="14445">纯 Java 运算代码，并且未被挂起，是消耗 CPU 的；</p>
+</li>
+<li data-nodeid="14446">
+<p data-nodeid="14447">网络 IO 操作，在等待数据时是不消耗 CPU 的。</p>
+</li>
+</ul>
+<p data-nodeid="14448">通过如上的学习，你了解了线程的状态，可以知道这个线程是在“休息”还是在“奔跑”。如果很多线程处于“奔跑”状态，必定会消耗相关的硬件资源，反过来理解，如果在性能测试过程中发现资源消耗是不是也能定位到相关的线程，从而发现代码问题呢？当你定位到具体的代码行，是不是可以和研发人员讨论下有没有优化的空间，而不是简单地将机器升级配置去解决问题，所以我将继续沿着如何定位代码问题这条思路为你讲解。</p>
+<p data-nodeid="14449">举一个实际例子，我以一个问题为切入点，首先看下面示意代码，可以看出 CPU 占用比较高的线程。</p>
+<pre class="lang-java" data-nodeid="14450"><code data-language="java">top - <span class="hljs-number">17</span>:<span class="hljs-number">41</span>:<span class="hljs-number">39</span> up <span class="hljs-number">168</span> days,  <span class="hljs-number">8</span>:<span class="hljs-number">55</span>,  <span class="hljs-number">2</span> users,  load average: <span class="hljs-number">0.71</span>, <span class="hljs-number">0.81</span>, <span class="hljs-number">0.57</span>
+Tasks: <span class="hljs-number">155</span> total,   <span class="hljs-number">1</span> running, <span class="hljs-number">153</span> sleeping,   <span class="hljs-number">0</span> stopped,   <span class="hljs-number">1</span> zombie
+%Cpu(s): <span class="hljs-number">68.4</span> us,  <span class="hljs-number">6.4</span> sy,  <span class="hljs-number">0.0</span> ni, <span class="hljs-number">23.5</span> id,  <span class="hljs-number">0.0</span> wa,  <span class="hljs-number">0.0</span> hi,  <span class="hljs-number">1.7</span> si,  <span class="hljs-number">0.0</span> st
+KiB Mem :  <span class="hljs-number">8010676</span> total,   <span class="hljs-number">326472</span> free,  <span class="hljs-number">6196656</span> used,  <span class="hljs-number">1487548</span> buff/cache
+KiB Swap:        <span class="hljs-number">0</span> total,        <span class="hljs-number">0</span> free,        <span class="hljs-number">0</span> used.  <span class="hljs-number">1120940</span> avail Mem 
+PID USER      PR  NI    VIRT    RES    SHR S  %CPU %MEM     TIME+ COMMAND
+ <span class="hljs-number">6937</span> root      <span class="hljs-number">20</span>   <span class="hljs-number">0</span> <span class="hljs-number">4778684</span> <span class="hljs-number">518804</span>   <span class="hljs-number">6</span>
+ <span class="hljs-number">140</span> S <span class="hljs-number">141.9</span>  <span class="hljs-number">6.5</span>  <span class="hljs-number">17</span>:<span class="hljs-number">46.36</span> java
+<span class="hljs-number">14643</span> root      <span class="hljs-number">20</span>   <span class="hljs-number">0</span> <span class="hljs-number">4639440</span> <span class="hljs-number">821244</span>   <span class="hljs-number">2472</span> S  <span class="hljs-number">11.6</span> <span class="hljs-number">10.3</span>   <span class="hljs-number">1789</span>:<span class="hljs-number">33</span> java
+</code></pre>
+<p data-nodeid="14451">通过如上示例的第 3 行你可以发现服务器上 CPU 占用蛮高的，空闲值为 23.5%，也就是说占用了 76.5%；再看第 8 行，你可以看到 PID 为 6937 的进程消耗 CPU 为 141.9%。可能你有疑问了，为什么使用率可以超过 100%。这和你的服务器核数有关系，因为这个数值是每个核上该进程消耗的 CPU 之和，会有叠加关系。那你已经知道了消耗 CPU 最高的进程，然后执行如下命令：</p>
+<pre class="lang-java" data-nodeid="14452"><code data-language="java">[root@JD jmeter_test]# top -Hp 6937
+top - 23:20:53 up 168 days, 14:35,  3 users,  load average: 1.33, 0.71, 0.88
+Threads: 788 total,   1 running, 787 sleeping,   0 stopped,   0 zombie
+%Cpu(s): 75.0 us,  6.2 sy,  0.0 ni, 18.8 id,  0.0 wa,  0.0 hi,  0.0 si,  0.0 st
+KiB Mem :  8010676 total,   576860 free,  5697612 used,  1736204 buff/cache
+KiB Swap:        0 total,        0 free,        0 used.  1616168 avail Mem 
+PID USER      PR  NI    VIRT    RES    SHR S %CPU %MEM     TIME+ COMMAND
+25695 root      20   0 5409224   1.0g   4892 S  6.2 13.2   0:00.09 java
+</code></pre>
+<p data-nodeid="14453">我们可以看到每个线程的使用状态，你可以选择 25695 这个线程号，将 25695 转化为 16 进制，如下所示：</p>
+<pre class="lang-java" data-nodeid="14454"><code data-language="java">printf <span class="hljs-string">"%x\n"</span> <span class="hljs-number">25695</span>
+<span class="hljs-number">645f</span>
+</code></pre>
+<p data-nodeid="14455">然后通过 jstack 命令定位可能存在问题的方法：</p>
+<pre class="lang-java" data-nodeid="14456"><code data-language="java">jstack <span class="hljs-number">6937</span>|grep <span class="hljs-number">645f</span> -A <span class="hljs-number">30</span>
+</code></pre>
+<p data-nodeid="14457">通过运行上面的命令可以查看到的内容如下图所示：</p>
+<p data-nodeid="14458"><img src="https://s0.lgstatic.com/i/image6/M01/08/11/CioPOWA0ZTWAVtq1AAGYPQOM3Jg518.png" alt="截图 (1).png" data-nodeid="14597"></p>
+<p data-nodeid="14459">标红部分就是定位的业务代码，能够比较清晰地知道哪个方法在消耗 CPU 资源。</p>
+<p data-nodeid="14460">总结下来，要确定哪些线程状态占用 CPU 至少需要如下步骤：</p>
+<ul data-nodeid="14461">
+<li data-nodeid="14462">
+<p data-nodeid="14463">使用 top 命令找出有问题 Java 进程的 ID；</p>
+</li>
+<li data-nodeid="14464">
+<p data-nodeid="14465">开启线程显示模式（top -Hp）；</p>
+</li>
+<li data-nodeid="14466">
+<p data-nodeid="14467">按照 CPU 使用率将线程排序（打开 top 后按 P 可以按 CPU 使用降序展示）；</p>
+</li>
+<li data-nodeid="14468">
+<p data-nodeid="14469">记下 Java 进程 ID 及其 CPU 高的线程 ID；</p>
+</li>
+<li data-nodeid="14470">
+<p data-nodeid="14471">用进程 ID 作为参数，手动转换线程 ID 成十六进制，通过 jstack 去剖析对应的线程栈，以分析问题。</p>
+</li>
+</ul>
+<p data-nodeid="14472">你可以看到，实际过程略显烦琐，而有能力的同学可以做成 shell 脚本，这样会比较方便，当然社区也已经有这样的开源脚本供大家使用，<a href="https://github.com/oldratlee/useful-scripts/blob/master/docs/install.md" data-nodeid="14608">点击访问地址</a>。</p>
+<p data-nodeid="14473">下载完成之后进入 useful-scripts，执行 ./show-busy-java-threads.sh，执行完成后的示意图如下所示：</p>
+<p data-nodeid="14474"><img src="https://s0.lgstatic.com/i/image6/M01/08/15/Cgp9HWA0ZeuAUcH3AAVfZsuCukQ819.png" alt="截图 (2) (1).png" data-nodeid="14613"></p>
+<p data-nodeid="14475">这样的方式是可以看到这台服务上所有导致 CPU 飙升的 Java 方法的，当然直接一键也可以查看指定进程里的 java 方法，非常简单方便，方法如下所示：</p>
+<pre class="lang-java" data-nodeid="14476"><code data-language="java"> show-busy-java-threads -p &lt;指定的Java进程Id&gt;
+</code></pre>
+<h3 data-nodeid="14477">总结</h3>
+<p data-nodeid="14478">根据本讲的学习，相信你已经能够掌握 Java 在 JVM 中的运行过程，以及 Java 线程在 JVM 中的运行状态，并且能够从 CPU 飙升定位到代码问题。</p>
+<p data-nodeid="14479">那对于你来说，当你发现 CPU 占用过高怎么去处理呢？我相信不同的公司、不同的开发语言有不同的方案，欢迎在评论区给出你的实践。</p>
+<p data-nodeid="14480" class="">下一讲我将带你学习基于 JVM 层的内存使用分析，到时见。</p></div>
+
+</body></html>

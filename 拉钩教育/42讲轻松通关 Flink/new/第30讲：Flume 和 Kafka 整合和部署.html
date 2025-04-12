@@ -1,0 +1,1330 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第30讲：Flume 和 Kafka 整合和部署</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>第30讲：Flume 和 Kafka 整合和部署</h1><h3 data-nodeid="361393">Flume 概述</h3>
+
+
+
+<p data-nodeid="360925">Flume 是 Hadoop 生态圈子中的一个重要组件，在上一课时中提过，它是一个分布式的、高可靠的、高可用的日志采集工具。</p>
+<p data-nodeid="360926">Flume 具有基于流式数据的简单灵活的架构，同时兼具高可靠性、高可用机制和故障转移机制。当我们使用 Flume 收集数据的速度超过下游的写入速度时，Flume 会自动做调整，使得数据的采集和推送能够平稳进行。</p>
+<p data-nodeid="360927">Flume 支持多路径采集、多管道数据接入和多管道数据输出。数据源可以是 HBase、HDFS 和文本文件，也可以是 Kafka 或者其他的 Flume 客户端。</p>
+<h4 data-nodeid="360928">Flume 的组件介绍</h4>
+<p data-nodeid="361999">Flume 中有很多组件和概念，下面我把 Flume 中的核心组件一一进行介绍：</p>
+<p data-nodeid="362000" class=""><img src="https://s0.lgstatic.com/i/image/M00/38/E2/Ciqc1F8ejV6Aa7StAAAyjk9Eo1Y114.png" alt="Drawing 0.png" data-nodeid="362004"></p>
+
+
+<ul data-nodeid="360931">
+<li data-nodeid="360932">
+<p data-nodeid="360933">Client：客户端，用来运行 Flume Agent。</p>
+</li>
+<li data-nodeid="360934">
+<p data-nodeid="360935">Event：Flume 中的数据单位，可以是一行日志、一条消息。</p>
+</li>
+<li data-nodeid="360936">
+<p data-nodeid="360937">Agent：代表一个独立的 Flume 进程，包含三个组件：Source、Channel 和 Sink。</p>
+</li>
+<li data-nodeid="360938">
+<p data-nodeid="360939">Source：数据的收集入口，用来获取 Event 并且传递给 Channel。</p>
+</li>
+<li data-nodeid="360940">
+<p data-nodeid="360941">Channel：Event 的一个临时存储，是数据的临时通道，可以认为是一个队列。</p>
+</li>
+<li data-nodeid="360942">
+<p data-nodeid="360943">Sink：从 Channel 中读取 Event，将 Event 中的数据传递给下游。</p>
+</li>
+<li data-nodeid="360944">
+<p data-nodeid="360945">Flow：一个抽象概念，可以认为是一个从 Source 到达 Sink 的数据流向图。</p>
+</li>
+</ul>
+<h3 data-nodeid="360946">Flume 本地环境搭建</h3>
+<p data-nodeid="360947">我们在 Flume 的 <a href="http://archive.apache.org/dist/flume/" data-nodeid="361020">官网</a>下载安装包，在这里下载一个 1.8.0 的稳定版本，然后进行解压：</p>
+<pre class="lang-java hljs" data-nodeid="363070"><code data-language="java">tar zxf apache-flume-<span class="hljs-number">1.8</span>.<span class="hljs-number">0</span>-bin.tar.gz 
+</code></pre>
+<p data-nodeid="363071" class=""><img src="https://s0.lgstatic.com/i/image/M00/38/E2/Ciqc1F8ejXGAQBp_AASfWl6sP68860.png" alt="Drawing 1.png" data-nodeid="363074"></p>
+
+
+
+
+<p data-nodeid="360950">可以看到有几个关键的目录，其中 conf/ 目录则是我们存放配置文件的目录。</p>
+<h4 data-nodeid="360951">Flume 测试</h4>
+<p data-nodeid="360952">我们在下载 Flume 后，需要进行测试，可以通过监听本地的端口输入，并且在控制台进行打印。</p>
+<p data-nodeid="360953">首先，需要修改 conf/ 目录下的&nbsp;flume-env.sh，在里面配置 JAVA_HOME 等配置：</p>
+<pre class="lang-powershell hljs" data-nodeid="360954"><code data-language="powershell"><span class="hljs-built_in">cd</span>&nbsp;/usr/local/apache<span class="hljs-literal">-flume</span><span class="hljs-literal">-1</span>.<span class="hljs-number">8.0</span><span class="hljs-literal">-bin</span>/conf 
+<span class="hljs-built_in">cp</span>　flume<span class="hljs-literal">-env</span>.sh.template　flume<span class="hljs-literal">-env</span>.sh 
+</code></pre>
+<p data-nodeid="360955">然后在 flume-env.sh 里面设置 JAVA_HOME 和 FLUME_CLASSPATH 变量：</p>
+<pre class="lang-powershell hljs" data-nodeid="360956"><code data-language="powershell">export&nbsp;JAVA_HOME=/usr/local/java/jdk1.<span class="hljs-number">8</span> 
+FLUME_CLASSPATH=<span class="hljs-string">"/usr/local/apache-flume-1.8.0-bin/"</span> 
+</code></pre>
+<p data-nodeid="360957">创建一个配置文件 nc_logger.conf :</p>
+<pre class="lang-java hljs" data-nodeid="368549"><code data-language="java">vim nc_logger.conf 
+</code></pre>
+
+
+
+
+
+
+<p data-nodeid="360959">更改配置如下：</p>
+<pre class="lang-powershell hljs" data-nodeid="360960"><code data-language="powershell"><span class="hljs-comment"># 定义这个 agent 中各组件的名字 </span>
+a1.sources = r1 
+a1.sinks = k1 
+a1.channels = c1 
+<span class="hljs-comment"># 描述和配置 source 组件：r1 </span>
+a1.sources.r1.type = netcat 
+a1.sources.r1.bind = localhost 
+a1.sources.r1.port = <span class="hljs-number">9000</span> 
+<span class="hljs-comment"># 描述和配置 sink 组件：k1 </span>
+a1.sinks.k1.type = logger 
+<span class="hljs-comment"># 描述和配置channel组件，此处使用是内存缓存的方式 </span>
+a1.channels.c1.type = memory 
+a1.channels.c1.capacity = <span class="hljs-number">1000</span> 
+a1.channels.c1.transactionCapacity = <span class="hljs-number">100</span> 
+<span class="hljs-comment"># 描述和配置 source channel sink 之间的连接关系 </span>
+a1.sources.r1.channels = c1 
+a1.sinks.k1.channel = c1 
+</code></pre>
+<p data-nodeid="360961">我们使用如下命令启动一个 Flume Agent:</p>
+<pre class="lang-powershell hljs" data-nodeid="360962"><code data-language="powershell">bin/flume<span class="hljs-literal">-ng</span> agent  
+<span class="hljs-literal">-c</span> conf  
+<span class="hljs-operator">-f</span> conf/nc_logger.conf  
+<span class="hljs-literal">-n</span> a1 <span class="hljs-literal">-Dflume</span>.root.logger=INFO,console 
+</code></pre>
+<p data-nodeid="360963">其中有几个关键的命令：</p>
+<ul data-nodeid="360964">
+<li data-nodeid="360965">
+<p data-nodeid="360966">–conf (-c) 用来指定配置文件夹路径；</p>
+</li>
+<li data-nodeid="360967">
+<p data-nodeid="360968">–conf-file(-f) 用来指定采集方案文件；</p>
+</li>
+<li data-nodeid="360969">
+<p data-nodeid="360970">–name(-n) 用来指定 agent 名字；</p>
+</li>
+<li data-nodeid="360971">
+<p data-nodeid="360972">-Dflume.root.logger=INFO,console 开启 flume 日志输出到终端。</p>
+</li>
+</ul>
+<p data-nodeid="360973">用 nc 命令打开本地 9000 端口：</p>
+<pre class="lang-plain hljs" data-nodeid="370794"><code data-language="plain">nc localhost 9000 
+</code></pre>
+<p data-nodeid="370795" class=""><img src="https://s0.lgstatic.com/i/image/M00/38/EE/CgqCHl8ejbqACoRbAAAux1bCItY816.png" alt="Drawing 2.png" data-nodeid="370798"></p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<p data-nodeid="371403">向端口输入几个单词，可以在另一端的控制台看到输出结果，如下图所示：</p>
+<p data-nodeid="371404" class=""><img src="https://s0.lgstatic.com/i/image/M00/38/E3/Ciqc1F8ejdiAXvsmAAMGjSgfLtE499.png" alt="Drawing 3.png" data-nodeid="371408"></p>
+
+
+<p data-nodeid="360978">我们可以看到 9000 端口中输入的数据已经被打印出来了。</p>
+<h3 data-nodeid="372013">Flume + Kafka 整合</h3>
+<p data-nodeid="372014" class=""><img src="https://s0.lgstatic.com/i/image/M00/38/EE/CgqCHl8ejeCAA124AACyS8QBaJI555.png" alt="Drawing 4.png" data-nodeid="372018"></p>
+
+
+<p data-nodeid="360981">整体整合思路为，我们的两个 Flume Agent 分别部署在两台 Web 服务器上，用来采集两台服务器的业务日志，并且 Sink 到另一台 Flume Agent 上，然后将数据 Sink 到 Kafka 集群。在这里需要配置三个 Flume Agent。</p>
+<p data-nodeid="360982">首先在 Flume Agent 1 和 Flume Agent 2 上创建配置文件，具体如下。</p>
+<p data-nodeid="360983">修改 source、channel 和 sink 的配置，vim log_kafka.conf 代码如下：</p>
+<pre class="lang-powershell hljs" data-nodeid="360984"><code data-language="powershell"><span class="hljs-comment"># 定义这个 agent 中各组件的名字 </span>
+a1.sources = r1 
+a1.sinks = k1 
+a1.channels = c1 
+<span class="hljs-comment"># source的配置，监听日志文件中的新增数据 </span>
+a1.sources.r1.type = exec 
+a1.sources.r1.command  = tail <span class="hljs-operator">-F</span> /home/logs/access.log 
+<span class="hljs-comment">#sink配置，使用avro日志做数据的消费 </span>
+a1.sinks.k1.type = avro 
+a1.sinks.k1.hostname = flumeagent03 
+a1.sinks.k1.port = <span class="hljs-number">9000</span> 
+<span class="hljs-comment">#channel配置，使用文件做数据的临时缓存 </span>
+a1.channels.c1.type = file 
+a1.channels.c1.checkpointDir = /home/temp/flume/checkpoint 
+a1.channels.c1.dataDirs = /home/temp/flume/<span class="hljs-keyword">data</span> 
+<span class="hljs-comment">#描述和配置 source channel sink 之间的连接关系 </span>
+a1.sources.r1.channels = c1 
+a1.sinks.k1.channel = c 
+</code></pre>
+<p data-nodeid="360985">上述配置会监听 /home/logs/access.log 文件中的数据变化，并且将数据 Sink 到 flumeagent03 的 9000 端口。</p>
+<p data-nodeid="360986">然后我们分别启动 Flume Agent 1 和 Flume Agent 2，命令如下：</p>
+<pre class="lang-powershell hljs" data-nodeid="360987"><code data-language="powershell"><span class="hljs-variable">$</span> flume<span class="hljs-literal">-ng</span> agent  
+<span class="hljs-literal">-c</span> conf  
+<span class="hljs-literal">-n</span> a1  
+<span class="hljs-operator">-f</span> conf/log_kafka.conf &gt;/dev/null <span class="hljs-number">2</span>&gt;&amp;<span class="hljs-number">1</span> &amp; 
+</code></pre>
+<p data-nodeid="360988">第三个 Flume Agent 用来接收上述两个 Agent 的数据，并且发送到 Kafka。我们需要启动本地 Kafka，并且创建一个名为 log_kafka 的 Topic。</p>
+<p data-nodeid="360989">然后，我们创建 Flume 配置文件，具体如下。</p>
+<p data-nodeid="360990">修改 source、channel 和 sink 的配置，vim flume_kafka.conf 代码如下：</p>
+<pre class="lang-powershell hljs" data-nodeid="360991"><code data-language="powershell"><span class="hljs-comment"># 定义这个 agent 中各组件的名字 </span>
+a1.sources = r1 
+a1.sinks = k1 
+a1.channels = c1 
+<span class="hljs-comment">#source配置 </span>
+a1.sources.r1.type = avro 
+a1.sources.r1.bind = <span class="hljs-number">0.0</span>.<span class="hljs-number">0.0</span> 
+a1.sources.r1.port = <span class="hljs-number">9000</span> 
+<span class="hljs-comment">#sink配置 </span>
+a1.sinks.k1.type = org.apache.flume.sink.kafka.KafkaSink 
+a1.sinks.k1.topic = log_kafka 
+a1.sinks.k1.brokerList = <span class="hljs-number">127.0</span>.<span class="hljs-number">0.1</span>:<span class="hljs-number">9092</span> 
+a1.sinks.k1.requiredAcks = <span class="hljs-number">1</span> 
+a1.sinks.k1.batchSize = <span class="hljs-number">20</span> 
+<span class="hljs-comment">#channel配置 </span>
+a1.channels.c1.type = memory 
+a1.channels.c1.capacity = <span class="hljs-number">1000</span> 
+a1.channels.c1.transactionCapacity = <span class="hljs-number">100</span> 
+<span class="hljs-comment">#描述和配置 source channel sink 之间的连接关系 </span>
+a1.sources.r1.channels = c1 
+a1.sinks.k1.channel = c1     
+</code></pre>
+<p data-nodeid="360992">配置完成后，我们启动该 Flume Agent：</p>
+<pre class="lang-powershell hljs" data-nodeid="360993"><code data-language="powershell"><span class="hljs-variable">$</span> flume<span class="hljs-literal">-ng</span> agent  
+<span class="hljs-literal">-c</span> conf  
+<span class="hljs-literal">-n</span> a1  
+<span class="hljs-operator">-f</span> conf/flume_kafka.conf &gt;/dev/null <span class="hljs-number">2</span>&gt;&amp;<span class="hljs-number">1</span> &amp; 
+</code></pre>
+<p data-nodeid="360994">我们在第 24 课时“Flink 消费 Kafka 数据开发” 中详细讲解了 Flink 消费 Kafka 数据的开发。当 Flume Agent 1 和 2 中监听到新的日志数据后，数据就会被 Sink 到 Kafka 指定的 Topic，我们就可以消费 Kafka 中的数据了。</p>
+<h3 data-nodeid="360995">总结</h3>
+<p data-nodeid="372325">这一课时首先介绍了 Flume 和 Kafka 的整合和部署，然后详细介绍了 Flume 的组件并且搭建了 Flume 的本地环境进行测试，最后介绍了 Flume 和 Kafka 整合的配置文件编写。通过本课时的学习，相信你对 Flume 有了深入了解，在实际应用中可以正确配置 Flume Agent。</p></div>
+
+</body></html>

@@ -1,0 +1,1232 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>26 | 持续集成：如何实现无需人手的快速交付？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>26 | 持续集成：如何实现无需人手的快速交付？</h1><p data-nodeid="2751" class="">在前面的课程中，我们已经讲过如何使用 fastlane 来自动化常用的操作，例如管理私钥、证书和 Provisioning Profile 文件，打包和签名 App，以及把 App 上传到 App Store 等。有了这些自动化操作，我们就可以很方便地通过一条命令把 App 发布到 App Store。但有没有更好的办法做到不需要人手就能自动完成打包和上传等所有的操作呢？当然有！我们可以通过 CI，也就是<strong data-nodeid="2757">持续集成</strong>（Continuous Integration）来完成这一任务。</p>
+
+
+
+
+
+
+<p data-nodeid="5516" class="te-preview-highlight">那什么是 CI 呢？<strong data-nodeid="5522">CI 是一种有效的工程实践，能帮助团队更频繁、更可靠地交付代码</strong>。我们可以利用 CI 来不断优化构建、测试和发布流程，从而保证产品的快速交付，推动工程化进程与最佳实践，并推进工程师文化的建设。</p>
+
+
+
+
+
+
+<h3 data-nodeid="822">CI 的系统架构</h3>
+<p data-nodeid="823">要搭建一套完整的 CI，我们需要理解 CI 的构建流程和系统架构。首先，我们以 Moments App 为例子来看看一套完整 CI 的构建流程吧。</p>
+<p data-nodeid="824"><img src="https://s0.lgstatic.com/i/image6/M01/40/6B/CioPOWCkxAqAU2EgAAZuYYLOM70201.png" alt="图片6.png" data-nodeid="913"></p>
+<p data-nodeid="825">通过上图，我们可以看到一套 CI 流程主要由两大部分组成：GitHub 流程和 CI 管道。其中，<strong data-nodeid="919">GitHub 流程是 CI 流程的触发者，而 CI 管道是 CI 流程的执行者</strong>。</p>
+<p data-nodeid="826">我们在<a href="https://kaiwu.lagou.com/course/courseInfo.htm?courseId=657&amp;sid=20-h5Url-0&amp;buyFrom=2&amp;pageId=1pz4#/detail/pc?id=6659&amp;fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="925">《06 | 代码管理：如何使用 Git 与 GitHub 统一代码管理流程？》</a>里讲述过管理多个分支的代码流程，在此基础上，我们可以让分支在合并的时候自动触发 CI 流程，例如，在功能分支合并到主分支时触发 CI 管道 1，当主分支合并到发布分支时触发 CI 管道 2。</p>
+<p data-nodeid="827">那 CI 管道到底是什么呢？<strong data-nodeid="932">CI 管道是自动化软件交付的流程定义，它把多个自动化操作串联起来，并按照一定的顺序执行，最终达到从源码到交付的全自动化</strong>。例如，CI 管道 1 执行编译、运行测试、打包和签名 AdHoc 版本的 App，以及上传到 Firebase 的 App 分发服务等操作。而 CI 管道 2 执行了打包和签名 AppStore 版本的 App ，以及上传到 AppStore 这两项操作。可以看到，在整个 CI 流程中没有任何手工操作的参与，都是由 GitHub 流程自动触发的。</p>
+<p data-nodeid="828">那没有任何人手参与，CI 管道到底在哪里执行呢？答案能在下面 CI 的系统架构图中找到。</p>
+<p data-nodeid="829"><img src="https://s0.lgstatic.com/i/image6/M01/3F/DD/CioPOWCiCryALxStAAJGPQUyTrA302.png" alt="Drawing 1.png" data-nodeid="936"></p>
+<p data-nodeid="830">CI 架构通常由 CI<strong data-nodeid="950">中心服务</strong>和 CI<strong data-nodeid="951">构建中介</strong>（Build Agent）所组成。当 GitHub 发生变更时会通知 CI 中心服务，中心服务会把构建任务（Build Job）调度和分发给可用的 CI 构建中介。当接收到任务时，构建中介会从 GitHub 上下载代码并按照 CI 管道的配置来执行构建任务。对，<strong data-nodeid="952">CI 构建中介就是具体的执行者</strong>。</p>
+<p data-nodeid="831">目前流行的 CI 构建中介主要分成三大类。</p>
+<ul data-nodeid="832">
+<li data-nodeid="833">
+<p data-nodeid="834"><strong data-nodeid="958">全手工维护 CI</strong>。该类 CI 从物理主机、操作系统、Ruby 环境以及 Xcode 版本都由开发团队维护。这类型的 CI 维护成本比较高，例如，需要管理物理主机和网络联通性，需要维护操作系统的安全更新等，但同时也给了我们很大管控性和灵活性。</p>
+</li>
+<li data-nodeid="835">
+<p data-nodeid="836"><strong data-nodeid="963">云端虚拟机 CI</strong>。该类 CI 是通过租用云 Mac 虚拟机来进行搭建，目前比较流行的 Mac 虚拟机服务提供商有亚马逊的 AWS 和 MacStadium。有了这些云服务提供商，我们就不用再进行安全补丁等常规维护了，只需选择特定的 Mac OS 版本来启动虚拟机，然后在虚拟机上执行脚本来搭建 Ruby 和 Xcode 环境即可，就如 Moments App 项目里执行 setup.sh 脚本就能完成项目搭建。</p>
+</li>
+<li data-nodeid="837">
+<p data-nodeid="838"><strong data-nodeid="968">全服务 CI</strong>。该类 CI 不仅为我们提供了虚拟机，而且还提供了 Ruby 和 Xcode 等环境，我们只需要提供一个 CI 管道配置文件就能完成这个 App 的自动构建。</p>
+</li>
+</ul>
+<p data-nodeid="839">没有一类 CI 是完美的，它们都有各自的优缺点。这三类 CI 从上往下看，维护成本越来越低，但从长远来看，运行成本却越来越高。从便利性来看，下面的类型会比上面的更加易用，但同时也牺牲了灵活性。</p>
+<p data-nodeid="840">我建议你根据团队的自身情况来选择。假如你所在的团队没有专门的人员来维护 CI，可以从全服务 CI 开始。随着项目和团队的发展，慢慢地升级为云端虚拟机 CI 和全手工维护 CI。作为一个只有一个开发者的开源项目，Moments App 也选择了全服务 CI。</p>
+<p data-nodeid="841">下面我们就以 Moments App 为例子，看看如何配置一个全服务 CI。</p>
+<h3 data-nodeid="842">配置 Travis CI</h3>
+<p data-nodeid="843">Moments App 选择了 Travis CI 作为全服务 CI，原因有如下四个。</p>
+<ul data-nodeid="844">
+<li data-nodeid="845">
+<p data-nodeid="846">Travis CI 使用了“代码即配置”的方式来配置 CI 管道，这是最重要的一个原因。我们可以把 CI 管道的配置信息都写在一个 YAML 文件里面，并保存在 GitHub 上。这样能方便我们把 CI 配置共享到多个项目，而且通过 Git 历史记录来不断对比和优化 CI 配置。除此之外，YAML 文件的配置方式已成为 CI 配置的标准，当需要升级为云端虚拟机 CI 和全手工维护 CI 时，我们可以重用 Travis CI 的 YAML 文件。相比之下，有些 CI 需要在网页上进行手工配置，而且无法看到修改历史，这使得我们无法通过代码把配置信息共享到其他项目中去。</p>
+</li>
+<li data-nodeid="847">
+<p data-nodeid="848">Travis CI 免费给开源项目使用。</p>
+</li>
+<li data-nodeid="849">
+<p data-nodeid="850">Travis CI 整合了 GitHub 和 GitLab 等代码管理平台，只需要一次授权就能整合 CI 服务。</p>
+</li>
+<li data-nodeid="851">
+<p data-nodeid="852">Travis CI 支持多个不同版本的 Mac OS 和 Xcode，我们可以根据项目的要求来灵活选择不同的版本。例如通过 Travis CI，我们可以方便地测试 Xcode Beta 版的构建情况。</p>
+</li>
+</ul>
+<h4 data-nodeid="853">连接 Travis CI 与 GitHub</h4>
+<p data-nodeid="854">要搭建 Travis CI，首先需要使用 GitHub 账户登录到 Travis CI，然后给 Travis CI 授权，如下图所示：</p>
+<p data-nodeid="855"><img src="https://s0.lgstatic.com/i/image6/M01/3F/D4/Cgp9HWCiCsqAWtJkAAHWmLlqjFY886.png" alt="Drawing 2.png" data-nodeid="982"></p>
+<p data-nodeid="856">然后在 Travis CI 的配置页面上点击 Activate 按钮来激活 Travis CI 与 GitHub 的连接。</p>
+<p data-nodeid="857"><img src="https://s0.lgstatic.com/i/image6/M00/3F/DD/CioPOWCiCtKABmSKAAJlbBo-xLw222.png" alt="Drawing 3.png" data-nodeid="986"></p>
+<p data-nodeid="858">就这样，Travis CI 与 GitHub 的连接完成了。</p>
+<p data-nodeid="859">假如你需要管理该连接，可以到 GitHub 的 Settings -&gt; Applications -&gt; Installed GitHub Apps 下点击 Configure 按钮来打开下面的管理页面。</p>
+<p data-nodeid="860"><img src="https://s0.lgstatic.com/i/image6/M00/3F/DD/CioPOWCiCtiAKcJKAAOx6n3LWLo595.png" alt="Drawing 4.png" data-nodeid="991"></p>
+<h4 data-nodeid="861">配置 .travis.yml</h4>
+<p data-nodeid="862">完成 Travis CI 与 GitHub 的连接以后，下一步是通过 .travis.yml 文件来配置 CI 管道。.yml 也叫作 YAML 文件，全称是 YAML Ain't Markup Language （YAML 并不是标记语言）。<strong data-nodeid="1000">相比其他标记语言，YAML 具有更好的可读性，非常适合来做配置文件</strong>。下面我们一起看看 Moments App 的 .travis.yml 文件吧。</p>
+<pre class="lang-yaml hljs" data-nodeid="863"><code data-language="yaml"><span class="hljs-attr">language:</span> <span class="hljs-string">swift</span>
+<span class="hljs-attr">osx_image:</span> <span class="hljs-string">xcode12.2</span>
+<span class="hljs-attr">env:</span>
+  <span class="hljs-attr">global:</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-string">CI_BUILD_NUMBER=\${TRAVIS_BUILD_NUMBER}</span>
+<span class="hljs-attr">before_install:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">bundle</span> <span class="hljs-string">install</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">bundle</span> <span class="hljs-string">exec</span> <span class="hljs-string">pod</span> <span class="hljs-string">install</span>
+</code></pre>
+<p data-nodeid="864">在 .travis.yml 文件的开头，我们定义了项目所使用的语言以及 Xcode 的版本号。接着定义全局的环境变量<code data-backticks="1" data-nodeid="1002">CI_BUILD_NUMBER</code>，该变量的值来自<code data-backticks="1" data-nodeid="1004">TRAVIS_BUILD_NUMBER</code>，<code data-backticks="1" data-nodeid="1006">TRAVIS_BUILD_NUMBER</code>的值由 Travis CI 系统所提供，它能帮助我们生成一个自增的 Build Number（构建数值）。</p>
+<p data-nodeid="865"><code data-backticks="1" data-nodeid="1008">CI_BUILD_NUMBER</code>会在 increment_build_number.sh 脚本中使用，如下代码所示：</p>
+<pre class="lang-java hljs" data-nodeid="866"><code data-language="java">VERSION_XCCONFIG="Moments/Moments/Configurations/BaseTarget.xcconfig"
+SED_CMD="s/\\(PRODUCT_VERSION_SUFFIX=\\).*/\\1\${CI_BUILD_NUMBER}/" # Make sure setting this environment variable before call script.
+sed -e \${SED_CMD} -i.bak \${VERSION_XCCONFIG} 
+rm -f \${VERSION_XCCONFIG}.bak
+</code></pre>
+<p data-nodeid="867">这个 Shell 会更新 BaseTarget.xcconfig 文件里面的<code data-backticks="1" data-nodeid="1015">PRODUCT_VERSION</code>的值。在下面 CI 管道的配置里，你将会看到如何使用该值。</p>
+<p data-nodeid="868">最后是定义<code data-backticks="1" data-nodeid="1018">before_install</code>步骤，该步骤会在每一个构建任务执行前先运行。在 Moments App 的 CI 里，我们在该步骤里安装了 Bundler 和 CocoaPods 的各个依赖项。</p>
+<p data-nodeid="869">准备工作做完以后，我们看看如何配置 CI 管道的构建任务。</p>
+<pre class="lang-yaml hljs" data-nodeid="870"><code data-language="yaml"><span class="hljs-attr">jobs:</span>
+  <span class="hljs-attr">include:</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-attr">stage:</span> <span class="hljs-string">"Build"</span>
+      <span class="hljs-attr">name:</span> <span class="hljs-string">"Build internal app"</span>
+      <span class="hljs-attr">script:</span>
+        <span class="hljs-bullet">-</span> <span class="hljs-string">set</span> <span class="hljs-string">-o</span> <span class="hljs-string">pipefail</span>
+        <span class="hljs-bullet">-</span> <span class="hljs-string">echo</span> <span class="hljs-string">"machine github.com login $GITHUB_API_TOKEN"</span> <span class="hljs-string">&gt;&gt;</span> <span class="hljs-string">~/.netrc</span>
+        <span class="hljs-bullet">-</span> <span class="hljs-string">bundle</span> <span class="hljs-string">exec</span> <span class="hljs-string">fastlane</span> <span class="hljs-string">download_profiles</span>
+        <span class="hljs-bullet">-</span> <span class="hljs-string">bundle</span> <span class="hljs-string">exec</span> <span class="hljs-string">fastlane</span> <span class="hljs-string">archive_internal</span>
+</code></pre>
+<p data-nodeid="871">所有的 CI 管道都配置在<code data-backticks="1" data-nodeid="1022">jobs</code>下面，首先看一下用于构建的<code data-backticks="1" data-nodeid="1024">Build</code>任务。为了让 CI 可以访问存放在 GitHub 私有 Repo 里面的私钥、证书和 Provisioning Profile 文件，我们要为 Travis CI 配置<code data-backticks="1" data-nodeid="1026">GITHUB_API_TOKEN</code>。在<a href="https://kaiwu.lagou.com/course/courseInfo.htm?courseId=657&amp;sid=20-h5Url-0&amp;buyFrom=2&amp;pageId=1pz4#/detail/pc?id=6679&amp;fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="1032">《24 | 解决打包痛点：如何统一管理 Certificates 和 Profiles？》</a> 里，我们讲过如何获取 GitHub Access Token，假如你记不清楚了，可以回去复习一下。当拿到 GitHub Access Token 以后，就可以在 Travis CI 上的项目 Settings 页面里面进行添加，如下图所示：</p>
+<p data-nodeid="872"><img src="https://s0.lgstatic.com/i/image6/M00/40/63/Cgp9HWCkxF2Ab0pqAANKAzqQfK8033.png" alt="图片7.png" data-nodeid="1036"></p>
+<p data-nodeid="873">同时，我们还需要把 local.keys 文件的其他环境变量一同加上。</p>
+<p data-nodeid="874">配置好<code data-backticks="1" data-nodeid="1039">GITHUB_API_TOKEN</code>环境变量后，我们就可以调用 fastlane 的<code data-backticks="1" data-nodeid="1041">download_profiles</code>和<code data-backticks="1" data-nodeid="1043">archive_internal</code>来完成 Build 的步骤了。</p>
+<p data-nodeid="875">下面看看执行测试的<code data-backticks="1" data-nodeid="1046">Test</code>任务。</p>
+<pre class="lang-yaml hljs" data-nodeid="876"><code data-language="yaml"><span class="hljs-bullet">-</span> <span class="hljs-attr">stage:</span> <span class="hljs-string">"Test"</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">"Test app"</span>
+  <span class="hljs-attr">script:</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-string">set</span> <span class="hljs-string">-o</span> <span class="hljs-string">pipefail</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-string">bundle</span> <span class="hljs-string">exec</span> <span class="hljs-string">fastlane</span> <span class="hljs-string">tests</span>
+</code></pre>
+<p data-nodeid="877">执行测试的操作非常简单，只需要执行 fastlane 的<code data-backticks="1" data-nodeid="1049">tests</code>即可。</p>
+<p data-nodeid="878">接着再看看打包和部署 Internal App 的任务，具体代码如下：</p>
+<pre class="lang-yaml hljs" data-nodeid="879"><code data-language="yaml"><span class="hljs-bullet">-</span> <span class="hljs-attr">stage:</span> <span class="hljs-string">"Archive, sign and deploy internal app"</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">"Archive Internal app"</span>
+  <span class="hljs-attr">if:</span> <span class="hljs-string">branch</span> <span class="hljs-string">=</span> <span class="hljs-string">main</span>
+  <span class="hljs-attr">script:</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-string">set</span> <span class="hljs-string">-o</span> <span class="hljs-string">pipefail</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-string">echo</span> <span class="hljs-string">"machine github.com login $GITHUB_API_TOKEN"</span> <span class="hljs-string">&gt;&gt;</span> <span class="hljs-string">~/.netrc</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-string">bundle</span> <span class="hljs-string">exec</span> <span class="hljs-string">fastlane</span> <span class="hljs-string">download_profiles</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-string">./scripts/increment_build_number.sh</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-string">bundle</span> <span class="hljs-string">exec</span> <span class="hljs-string">fastlane</span> <span class="hljs-string">archive_internal</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-string">bundle</span> <span class="hljs-string">exec</span> <span class="hljs-string">fastlane</span> <span class="hljs-string">deploy_internal</span>
+</code></pre>
+<p data-nodeid="880">为了访问 GitHub 私有 Repo，我们也需要把<code data-backticks="1" data-nodeid="1053">GITHUB_API_TOKEN</code>配置到 .netrc 文件里面，然后就可以下载私钥、证书和 Provisioning Profile 等文件了。接着是执行<code data-backticks="1" data-nodeid="1055">increment_build_number.sh</code>来更新<code data-backticks="1" data-nodeid="1057">PRODUCT_VERSION</code>的值。因为 Info.plist 文件引用了更新过的<code data-backticks="1" data-nodeid="1059">PRODUCT_VERSION</code>，每次打包时，App 都具备不同的 Build Number。最后是执行 fastlane 的<code data-backticks="1" data-nodeid="1061">archive_internal</code>和<code data-backticks="1" data-nodeid="1063">deploy_internal</code>来完成打包和上传任务。</p>
+<p data-nodeid="881">最后一个是打包和上传 Production 版本的 App 到 App Store，具体配置代码如下：</p>
+<pre class="lang-yaml hljs" data-nodeid="882"><code data-language="yaml"><span class="hljs-bullet">-</span> <span class="hljs-attr">stage:</span> <span class="hljs-string">"Archive, sign and deploy production app"</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">"Archive Production app"</span>
+  <span class="hljs-attr">if:</span> <span class="hljs-string">branch</span> <span class="hljs-string">=</span> <span class="hljs-string">release</span>
+  <span class="hljs-attr">script:</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-string">set</span> <span class="hljs-string">-o</span> <span class="hljs-string">pipefail</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-string">echo</span> <span class="hljs-string">"machine github.com login $GITHUB_API_TOKEN"</span> <span class="hljs-string">&gt;&gt;</span> <span class="hljs-string">~/.netrc</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-string">bundle</span> <span class="hljs-string">exec</span> <span class="hljs-string">fastlane</span> <span class="hljs-string">download_profiles</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-string">./scripts/increment_build_number.sh</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-string">bundle</span> <span class="hljs-string">exec</span> <span class="hljs-string">fastlane</span> <span class="hljs-string">archive_appstore</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-string">bundle</span> <span class="hljs-string">exec</span> <span class="hljs-string">fastlane</span> <span class="hljs-string">deploy_appstore</span>
+</code></pre>
+<p data-nodeid="883">这个在步骤上与打包和部署 Internal App 的任务基本一致，不同的地方是，我们通过条件判断语句<code data-backticks="1" data-nodeid="1067">if: branch = release</code>来构建发布分支而不是主分支，并且最后调用的是 fastlane 的<code data-backticks="1" data-nodeid="1069">archive_appstore</code>和<code data-backticks="1" data-nodeid="1071">deploy_appstore</code>来打包和发布到 App Store。</p>
+<p data-nodeid="884">到这里，Moments App 的 CI 就配置完毕了，其执行效果如下：</p>
+<p data-nodeid="885"><img src="https://s0.lgstatic.com/i/image6/M00/40/63/Cgp9HWCkxH2AP76qAAMmv7m5zGQ751.png" alt="图片8.png" data-nodeid="1076"></p>
+<h3 data-nodeid="886">总结</h3>
+<p data-nodeid="887">在这一讲，我们讲述了 CI 的系统架构和构建流程，并且还以 Moments App 为例子讲述了如何使用 Travis CI 来搭建一套完整的 CI。在此基础上，你可以根据项目的具体需求，不断地完善 CI 管道，并推动项目的自动化与工程化建设。CI 是每个工程化团队所必备的，我建议每个团队都建立起自己的 CI 并不断优化。CI 不仅能解放所有手工操作，还能减少错误的发生，更重要的是 CI 能推动一个团队工程师文化的发展。</p>
+<p data-nodeid="888"><strong data-nodeid="1082">思考题</strong></p>
+<blockquote data-nodeid="889">
+<p data-nodeid="890">你可能已经注意到，在 .travis.yml 文件里面，我们都是调用 fastlane 里面的 Lane 来完成具体的构建任务，这样做有什么好处呢？</p>
+</blockquote>
+<p data-nodeid="891">可以把你的答案写到留言区哦。从下一讲开始，我们就进入本模块的下半部分——App 上架后的优化，我会先介绍如何使用 Firebase 的统计分析服务，记得按时来听课。</p>
+<p data-nodeid="892"><strong data-nodeid="1088">源码地址</strong></p>
+<blockquote data-nodeid="893">
+<p data-nodeid="894" class="">.travis.yml 文件地址：<a href="https://github.com/lagoueduCol/iOS-linyongjian/blob/main/.travis.yml?fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="1092">https://github.com/lagoueduCol/iOS-linyongjian/blob/main/.travis.yml</a></p>
+</blockquote></div>
+
+</body></html>

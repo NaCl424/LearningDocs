@@ -1,0 +1,1306 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>25 | 从 Protocol 起手，看服务暴露和服务引用的全流程（下）</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>25 | 从 Protocol 起手，看服务暴露和服务引用的全流程（下）</h1><p data-nodeid="82401">在上一课时，我们以 DubboProtocol 实现为基础，详细介绍了 Dubbo 服务发布的核心流程。在本课时，我们继续介绍 DubboProtocol 中<strong data-nodeid="82407">服务引用</strong>相关的实现。</p>
+
+
+<h3 data-nodeid="81657">refer 流程</h3>
+<p data-nodeid="81658">下面我们开始介绍 DubboProtocol 中引用服务的相关实现，其核心实现在 protocolBindingRefer() 方法中：</p>
+<pre class="lang-java hljs" data-nodeid="81659"><code data-language="java"><span class="hljs-keyword">public</span> &lt;T&gt; <span class="hljs-function">Invoker&lt;T&gt; <span class="hljs-title">protocolBindingRefer</span><span class="hljs-params">(Class&lt;T&gt; serviceType, URL url)</span> <span class="hljs-keyword">throws</span> RpcException </span>{
+&nbsp; &nbsp; optimizeSerialization(url); <span class="hljs-comment">// 进行序列化优化，注册需要优化的类</span>
+&nbsp; &nbsp; <span class="hljs-comment">// 创建DubboInvoker对象</span>
+&nbsp; &nbsp; DubboInvoker&lt;T&gt; invoker = <span class="hljs-keyword">new</span> DubboInvoker&lt;T&gt;(serviceType, url, getClients(url), invokers);
+    <span class="hljs-comment">// 将上面创建DubboInvoker对象添加到invoker集合之中</span>
+&nbsp; &nbsp; invokers.add(invoker); 
+&nbsp; &nbsp; <span class="hljs-keyword">return</span> invoker;
+}
+</code></pre>
+<p data-nodeid="81660">关于 DubboInvoker 的具体实现，我们先暂时不做深入分析。这里我们需要先关注的是<strong data-nodeid="81736">getClients() 方法</strong>，它创建了底层发送请求和接收响应的 Client 集合，其核心分为了两个部分，一个是针对<strong data-nodeid="81737">共享连接</strong>的处理，另一个是针对<strong data-nodeid="81738">独享连接</strong>的处理，具体实现如下：</p>
+<pre class="lang-java hljs" data-nodeid="81661"><code data-language="java"><span class="hljs-keyword">private</span> ExchangeClient[] getClients(URL url) {
+&nbsp; &nbsp; <span class="hljs-comment">// 是否使用共享连接</span>
+&nbsp; &nbsp; <span class="hljs-keyword">boolean</span> useShareConnect = <span class="hljs-keyword">false</span>;
+&nbsp; &nbsp; <span class="hljs-comment">// CONNECTIONS_KEY参数值决定了后续建立连接的数量</span>
+&nbsp; &nbsp; <span class="hljs-keyword">int</span> connections = url.getParameter(CONNECTIONS_KEY, <span class="hljs-number">0</span>);
+&nbsp; &nbsp; List&lt;ReferenceCountExchangeClient&gt; shareClients = <span class="hljs-keyword">null</span>;
+&nbsp; &nbsp; <span class="hljs-keyword">if</span> (connections == <span class="hljs-number">0</span>) { <span class="hljs-comment">// 如果没有连接数的相关配置，默认使用共享连接的方式</span>
+&nbsp; &nbsp; &nbsp; &nbsp; useShareConnect = <span class="hljs-keyword">true</span>;
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-comment">// 确定建立共享连接的条数，默认只建立一条共享连接</span>
+&nbsp; &nbsp; &nbsp; &nbsp; String shareConnectionsStr = url.getParameter(SHARE_CONNECTIONS_KEY, (String) <span class="hljs-keyword">null</span>);
+&nbsp; &nbsp; &nbsp; &nbsp; connections = Integer.parseInt(StringUtils.isBlank(shareConnectionsStr) ? ConfigUtils.getProperty(SHARE_CONNECTIONS_KEY,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; DEFAULT_SHARE_CONNECTIONS) : shareConnectionsStr);
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-comment">// 创建公共ExchangeClient集合</span>
+&nbsp; &nbsp; &nbsp; &nbsp; shareClients = getSharedClient(url, connections);
+&nbsp; &nbsp; }
+&nbsp; &nbsp; <span class="hljs-comment">// 整理要返回的ExchangeClient集合</span>
+&nbsp; &nbsp; ExchangeClient[] clients = <span class="hljs-keyword">new</span> ExchangeClient[connections];
+&nbsp; &nbsp; <span class="hljs-keyword">for</span> (<span class="hljs-keyword">int</span> i = <span class="hljs-number">0</span>; i &lt; clients.length; i++) {
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">if</span> (useShareConnect) {
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; clients[i] = shareClients.get(i);
+&nbsp; &nbsp; &nbsp; &nbsp; } <span class="hljs-keyword">else</span> {
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-comment">// 不使用公共连接的情况下，会创建单独的ExchangeClient实例</span>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; clients[i] = initClient(url);
+&nbsp; &nbsp; &nbsp; &nbsp; }
+&nbsp; &nbsp; }
+&nbsp; &nbsp; <span class="hljs-keyword">return</span> clients;
+}
+</code></pre>
+<p data-nodeid="82962">当使用独享连接的时候，对每个 Service 建立固定数量的 Client，每个 Client 维护一个底层连接。如下图所示，就是针对每个 Service 都启动了两个独享连接：</p>
+<p data-nodeid="84095"><img src="https://s0.lgstatic.com/i/image/M00/61/11/CgqCHl-OqnqAD_WFAAGYtk5Nou4688.png" alt="Lark20201020-171207.png" data-nodeid="84099"></p>
+<div data-nodeid="84096" class=""><p style="text-align:center">Service 独享连接示意图</p></div>
+
+
+
+
+
+<p data-nodeid="83524">当使用共享连接的时候，会区分不同的网络地址（host:port），一个地址只建立固定数量的共享连接。如下图所示，Provider 1 暴露了多个服务，Consumer 引用了 Provider 1 中的多个服务，共享连接是说 Consumer 调用 Provider 1 中的多个服务时，是通过固定数量的共享 TCP 长连接进行数据传输，这样就可以达到减少服务端连接数的目的。</p>
+<p data-nodeid="83812"><img src="https://s0.lgstatic.com/i/image/M00/61/06/Ciqc1F-OqoOAHURKAAF2m0HX5qU972.png" alt="Lark20201020-171159.png" data-nodeid="83816"></p>
+<div data-nodeid="83813" class=""><p style="text-align:center">Service 共享连接示意图</p></div>
+
+
+
+
+
+<p data-nodeid="84376" class="">那怎么去创建共享连接呢？<strong data-nodeid="84386">创建共享连接的实现细节是在 getSharedClient() 方法中</strong>，它首先从 referenceClientMap 缓存（Map&lt;String, List<code data-backticks="1" data-nodeid="84384">&lt;ReferenceCountExchangeClient&gt;</code>&gt; 类型）中查询 Key（host 和 port 拼接成的字符串）对应的共享 Client 集合，如果查找到的 Client 集合全部可用，则直接使用这些缓存的 Client，否则要创建新的 Client 来补充替换缓存中不可用的 Client。示例代码如下：</p>
+
+<pre class="lang-java hljs" data-nodeid="81669"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">private</span> List&lt;ReferenceCountExchangeClient&gt; <span class="hljs-title">getSharedClient</span><span class="hljs-params">(URL url, <span class="hljs-keyword">int</span> connectNum)</span> </span>{
+&nbsp; &nbsp; String key = url.getAddress(); <span class="hljs-comment">// 获取对端的地址(host:port)</span>
+&nbsp; &nbsp; <span class="hljs-comment">// 从referenceClientMap集合中，获取与该地址连接的ReferenceCountExchangeClient集合</span>
+&nbsp; &nbsp; List&lt;ReferenceCountExchangeClient&gt; clients = referenceClientMap.get(key);
+    <span class="hljs-comment">// checkClientCanUse()方法中会检测clients集合中的客户端是否全部可用</span>
+&nbsp; &nbsp; <span class="hljs-keyword">if</span> (checkClientCanUse(clients)) { 
+&nbsp; &nbsp; &nbsp; &nbsp; batchClientRefIncr(clients); <span class="hljs-comment">// 客户端全部可用时</span>
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">return</span> clients;
+&nbsp; &nbsp; }
+&nbsp; &nbsp; locks.putIfAbsent(key, <span class="hljs-keyword">new</span> Object());
+&nbsp; &nbsp; <span class="hljs-keyword">synchronized</span> (locks.get(key)) { <span class="hljs-comment">// 针对指定地址的客户端进行加锁，分区加锁可以提高并发度</span>
+&nbsp; &nbsp; &nbsp; &nbsp; clients = referenceClientMap.get(key);
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">if</span> (checkClientCanUse(clients)) { <span class="hljs-comment">// double check，再次检测客户端是否全部可用</span>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; batchClientRefIncr(clients); <span class="hljs-comment">// 增加应用Client的次数</span>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">return</span> clients;
+&nbsp; &nbsp; &nbsp; &nbsp; }
+&nbsp; &nbsp; &nbsp; &nbsp; connectNum = Math.max(connectNum, <span class="hljs-number">1</span>); <span class="hljs-comment">// 至少一个共享连接</span>
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-comment">// 如果当前Clients集合为空，则直接通过initClient()方法初始化所有共享客户端</span>
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">if</span> (CollectionUtils.isEmpty(clients)) {
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; clients = buildReferenceCountExchangeClientList(url, connectNum);
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; referenceClientMap.put(key, clients);
+&nbsp; &nbsp; &nbsp; &nbsp; } <span class="hljs-keyword">else</span> { <span class="hljs-comment">// 如果只有部分共享客户端不可用，则只需要处理这些不可用的客户端</span>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">for</span> (<span class="hljs-keyword">int</span> i = <span class="hljs-number">0</span>; i &lt; clients.size(); i++) {
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; ReferenceCountExchangeClient referenceCountExchangeClient = clients.get(i);
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">if</span> (referenceCountExchangeClient == <span class="hljs-keyword">null</span> || referenceCountExchangeClient.isClosed()) {
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; clients.set(i, buildReferenceCountExchangeClient(url));
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">continue</span>;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; }
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-comment">// 增加引用</span>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; referenceCountExchangeClient.incrementAndGetCount();
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; }
+&nbsp; &nbsp; &nbsp; &nbsp; }
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-comment">// 清理locks集合中的锁对象，防止内存泄漏，如果key对应的服务宕机或是下线，</span>
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-comment">// 这里不进行清理的话，这个用于加锁的Object对象是无法被GC的，从而出现内存泄漏</span>
+&nbsp; &nbsp; &nbsp; &nbsp; locks.remove(key);&nbsp;
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">return</span> clients;
+&nbsp; &nbsp; }
+}
+</code></pre>
+<p data-nodeid="81670">这里使用的 ExchangeClient 实现是 ReferenceCountExchangeClient，它是 ExchangeClient 的一个装饰器，在原始 ExchangeClient 对象基础上添加了引用计数的功能。</p>
+<p data-nodeid="85205">ReferenceCountExchangeClient 中除了持有被修饰的 ExchangeClient 对象外，还有一个 referenceCount 字段（AtomicInteger 类型），用于记录该 Client 被应用的次数。从下图中我们可以看到，在 ReferenceCountExchangeClient 的构造方法以及 incrementAndGetCount() 方法中会增加引用次数，在 close() 方法中则会减少引用次数。</p>
+<p data-nodeid="85206" class=""><img src="https://s0.lgstatic.com/i/image/M00/61/06/Ciqc1F-OqqeAHAStAAF3BXy1LnA608.png" alt="Drawing 2.png" data-nodeid="85211"></p>
+<div data-nodeid="85207"><p style="text-align:center">referenceCount 修改调用栈</p></div>
+
+
+
+
+
+<p data-nodeid="81674">这样，对于同一个地址的共享连接，就可以满足两个基本需求：</p>
+<ol data-nodeid="81675">
+<li data-nodeid="81676">
+<p data-nodeid="81677">当引用次数减到 0 的时候，ExchangeClient 连接关闭；</p>
+</li>
+<li data-nodeid="81678">
+<p data-nodeid="81679">当引用次数未减到 0 的时候，底层的 ExchangeClient 不能关闭。</p>
+</li>
+</ol>
+<p data-nodeid="81680">还有一个需要注意的细节是 ReferenceCountExchangeClient.close() 方法，在关闭底层 ExchangeClient 对象之后，会立即创建一个 LazyConnectExchangeClient ，也有人称其为“幽灵连接”。具体逻辑如下所示，这里的 LazyConnectExchangeClient 主要用于异常情况的兜底：</p>
+<pre class="lang-java hljs" data-nodeid="81681"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">close</span><span class="hljs-params">(<span class="hljs-keyword">int</span> timeout)</span> </span>{
+    <span class="hljs-comment">// 引用次数减到0，关闭底层的ExchangeClient，具体操作有：停掉心跳任务、重连任务以及关闭底层Channel，这些在前文介绍HeaderExchangeClient的时候已经详细分析过了，这里不再赘述</span>
+&nbsp; &nbsp; <span class="hljs-keyword">if</span> (referenceCount.decrementAndGet() &lt;= <span class="hljs-number">0</span>) { 
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">if</span> (timeout == <span class="hljs-number">0</span>) {
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; client.close();
+&nbsp; &nbsp; &nbsp; &nbsp; } <span class="hljs-keyword">else</span> {
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; client.close(timeout);
+&nbsp; &nbsp; &nbsp; &nbsp; } 
+        <span class="hljs-comment">// 创建LazyConnectExchangeClient，并将client字段指向该对象</span>
+&nbsp; &nbsp; &nbsp; &nbsp; replaceWithLazyClient(); 
+&nbsp; &nbsp; }
+}
+<span class="hljs-function"><span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title">replaceWithLazyClient</span><span class="hljs-params">()</span> </span>{
+&nbsp; &nbsp; <span class="hljs-comment">// 在原有的URL之上，添加一些LazyConnectExchangeClient特有的参数</span>
+&nbsp; &nbsp; URL lazyUrl = URLBuilder.from(url)
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .addParameter(LAZY_CONNECT_INITIAL_STATE_KEY, Boolean.TRUE)
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .addParameter(RECONNECT_KEY, Boolean.FALSE)
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .addParameter(SEND_RECONNECT_KEY, Boolean.TRUE.toString())
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .addParameter(<span class="hljs-string">"warning"</span>, Boolean.TRUE.toString())
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .addParameter(LazyConnectExchangeClient.REQUEST_WITH_WARNING_KEY, <span class="hljs-keyword">true</span>)
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .addParameter(<span class="hljs-string">"_client_memo"</span>, <span class="hljs-string">"referencecounthandler.replacewithlazyclient"</span>)
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .build();
+&nbsp; &nbsp; <span class="hljs-comment">// 如果当前client字段已经指向了LazyConnectExchangeClient，则不需要再次创建LazyConnectExchangeClient兜底了</span>
+&nbsp; &nbsp; <span class="hljs-keyword">if</span> (!(client <span class="hljs-keyword">instanceof</span> LazyConnectExchangeClient) || client.isClosed()) {
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-comment">// ChannelHandler依旧使用原始ExchangeClient使用的Handler，即DubboProtocol中的requestHandler字段</span>
+&nbsp; &nbsp; &nbsp; &nbsp; client = <span class="hljs-keyword">new</span> LazyConnectExchangeClient(lazyUrl, client.getExchangeHandler());
+&nbsp; &nbsp; }
+}
+</code></pre>
+<p data-nodeid="86019">LazyConnectExchangeClient 也是 ExchangeClient 的装饰器，它会在原有 ExchangeClient 对象的基础上添加懒加载的功能。LazyConnectExchangeClient 在构造方法中不会创建底层持有连接的 Client，而是在需要发送请求的时候，才会调用 initClient() 方法进行 Client 的创建，如下图调用关系所示：</p>
+<p data-nodeid="86020" class=""><img src="https://s0.lgstatic.com/i/image/M00/61/11/CgqCHl-OqrqAHcvUAAC9KpqKEBQ887.png" alt="Drawing 3.png" data-nodeid="86025"></p>
+<div data-nodeid="86021"><p style="text-align:center">initClient() 方法的调用位置</p></div>
+
+
+
+
+
+<p data-nodeid="81685">initClient() 方法的具体实现如下：</p>
+<pre class="lang-java hljs" data-nodeid="81686"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title">initClient</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> RemotingException </span>{
+&nbsp; &nbsp; <span class="hljs-keyword">if</span> (client != <span class="hljs-keyword">null</span>) { <span class="hljs-comment">// 底层Client已经初始化过了，这里不再初始化</span>
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">return</span>;
+&nbsp; &nbsp; }
+&nbsp; &nbsp; connectLock.lock();
+&nbsp; &nbsp; <span class="hljs-keyword">try</span> {
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">if</span> (client != <span class="hljs-keyword">null</span>) { <span class="hljs-keyword">return</span>; } <span class="hljs-comment">// double check</span>
+        <span class="hljs-comment">// 通过Exchangers门面类，创建ExchangeClient对象</span>
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">this</span>.client = Exchangers.connect(url, requestHandler);
+&nbsp; &nbsp; } <span class="hljs-keyword">finally</span> {
+&nbsp; &nbsp; &nbsp; &nbsp; connectLock.unlock();
+&nbsp; &nbsp; }
+}
+</code></pre>
+<p data-nodeid="81687">在这些发送请求的方法中，除了通过 initClient() 方法初始化底层 ExchangeClient 外，还会调用warning() 方法，其会根据当前 URL 携带的参数决定是否打印 WARN 级别日志。为了防止瞬间打印大量日志的情况发生，这里有打印的频率限制，默认每发送 5000 次请求打印 1 条日志。你可以看到在前面展示的兜底场景中，我们就开启了打印日志的选项。</p>
+<p data-nodeid="81688"><strong data-nodeid="81779">分析完 getSharedClient() 方法创建共享 Client 的核心流程之后，我们回到 DubboProtocol 中，继续介绍创建独享 Client 的流程。</strong></p>
+<p data-nodeid="81689">创建独享 Client 的入口在<strong data-nodeid="81789">DubboProtocol.initClient() 方法</strong>，它首先会在 URL 中设置一些默认的参数，然后根据 LAZY_CONNECT_KEY 参数决定是否使用 LazyConnectExchangeClient 进行封装，实现懒加载功能，如下代码所示：</p>
+<pre class="lang-java hljs" data-nodeid="81690"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">private</span> ExchangeClient <span class="hljs-title">initClient</span><span class="hljs-params">(URL url)</span> </span>{
+&nbsp; &nbsp; <span class="hljs-comment">// 获取客户端扩展名并进行检查，省略检测的逻辑</span>
+&nbsp; &nbsp; String str = url.getParameter(CLIENT_KEY, url.getParameter(SERVER_KEY, DEFAULT_REMOTING_CLIENT));
+&nbsp; &nbsp; <span class="hljs-comment">// 设置Codec2的扩展名</span>
+&nbsp; &nbsp; url = url.addParameter(CODEC_KEY, DubboCodec.NAME);
+&nbsp; &nbsp; <span class="hljs-comment">// 设置默认的心跳间隔</span>
+&nbsp; &nbsp; url = url.addParameterIfAbsent(HEARTBEAT_KEY, String.valueOf(DEFAULT_HEARTBEAT));
+&nbsp; &nbsp; ExchangeClient client;&nbsp; &nbsp;&nbsp;
+&nbsp; &nbsp; <span class="hljs-comment">// 如果配置了延迟创建连接的特性，则创建LazyConnectExchangeClient</span>
+&nbsp; &nbsp; <span class="hljs-keyword">if</span> (url.getParameter(LAZY_CONNECT_KEY, <span class="hljs-keyword">false</span>)) {
+&nbsp; &nbsp; &nbsp; &nbsp; client = <span class="hljs-keyword">new</span> LazyConnectExchangeClient(url, requestHandler);
+&nbsp; &nbsp; } <span class="hljs-keyword">else</span> { <span class="hljs-comment">// 未使用延迟连接功能，则直接创建HeaderExchangeClient</span>
+&nbsp; &nbsp; &nbsp; &nbsp; client = Exchangers.connect(url, requestHandler);
+&nbsp; &nbsp; }
+&nbsp; &nbsp; <span class="hljs-keyword">return</span> client;
+}
+</code></pre>
+<p data-nodeid="81691">这里涉及的 LazyConnectExchangeClient 装饰器以及 Exchangers 门面类在前面已经深入分析过了，就不再赘述了。</p>
+<p data-nodeid="81692">DubboProtocol 中还剩下几个方法没有介绍，这里你只需要简单了解一下它们的实现即可。</p>
+<ul data-nodeid="81693">
+<li data-nodeid="81694">
+<p data-nodeid="81695">batchClientRefIncr() 方法：会遍历传入的集合，将其中的每个 ReferenceCountExchangeClient 对象的引用加一。</p>
+</li>
+<li data-nodeid="81696">
+<p data-nodeid="81697">buildReferenceCountExchangeClient() 方法：会调用上面介绍的 initClient() 创建 Client 对象，然后再包装一层 ReferenceCountExchangeClient 进行修饰，最后返回。该方法主要用于创建共享 Client。</p>
+</li>
+</ul>
+<h3 data-nodeid="81698">destroy方法</h3>
+<p data-nodeid="81699">在 DubboProtocol 销毁的时候，会调用 destroy() 方法释放底层资源，其中就涉及 export 流程中创建的 ProtocolServer 对象以及 refer 流程中创建的 Client。</p>
+<p data-nodeid="81700">DubboProtocol.destroy() 方法首先会逐个关闭 serverMap 集合中的 ProtocolServer 对象，相关代码片段如下：</p>
+<pre class="lang-java hljs" data-nodeid="81701"><code data-language="java"><span class="hljs-keyword">for</span> (String key : <span class="hljs-keyword">new</span> ArrayList&lt;&gt;(serverMap.keySet())) {
+&nbsp; &nbsp; ProtocolServer protocolServer = serverMap.remove(key);
+&nbsp; &nbsp; <span class="hljs-keyword">if</span> (protocolServer == <span class="hljs-keyword">null</span>) { <span class="hljs-keyword">continue</span>;}
+&nbsp; &nbsp; RemotingServer server = protocolServer.getRemotingServer();
+    <span class="hljs-comment">// 在close()方法中，发送ReadOnly请求、阻塞指定时间、关闭底层的定时任务、关闭相关线程池，最终，会断开所有连接，关闭Server。这些逻辑在前文介绍HeaderExchangeServer、NettyServer等实现的时候，已经详细分析过了，这里不再展开</span>
+&nbsp; &nbsp; server.close(ConfigurationUtils.getServerShutdownTimeout());
+}
+</code></pre>
+<p data-nodeid="81702">ConfigurationUtils.getServerShutdownTimeout() 方法返回的阻塞时长默认是 10 秒，我们可以通过 dubbo.service.shutdown.wait 或是 dubbo.service.shutdown.wait.seconds 进行配置。</p>
+<p data-nodeid="81703">之后，DubboProtocol.destroy() 方法会逐个关闭 referenceClientMap 集合中的 Client，逻辑与上述关闭ProtocolServer的逻辑相同，这里不再重复。只不过需要注意前面我们提到的 ReferenceCountExchangeClient 的存在，只有引用减到 0，底层的 Client 才会真正销毁。</p>
+<p data-nodeid="81704">最后，DubboProtocol.destroy() 方法会调用父类 AbstractProtocol 的 destroy() 方法，销毁全部 Invoker 对象，前面已经介绍过 AbstractProtocol.destroy() 方法的实现，这里也不再重复。</p>
+<h3 data-nodeid="81705">总结</h3>
+<p data-nodeid="81706">本课时我们继续上一课时的话题，以 DubboProtocol 为例，介绍了 Dubbo 在 Protocol 层实现服务引用的核心流程。我们首先介绍了 DubboProtocol 初始化 Client 的核心逻辑，分析了共享连接和独立连接的模型，后续还讲解了ReferenceCountExchangeClient、LazyConnectExchangeClient 等装饰器的功能和实现，最后说明了 destroy() 方法释放底层资源的相关实现。</p>
+<p data-nodeid="81707">关于 DubboProtocol，你若还有什么疑问或想法，欢迎你留言跟我分享。下一课时，我们将开始深入介绍 Dubbo 的“心脏”—— Invoker 接口的相关实现，这是我们的一篇加餐文章，记得按时来听课。</p></div>
+
+</body></html>

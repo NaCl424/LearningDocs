@@ -1,0 +1,1150 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>12 | 引擎拓展：解读当前流行的分布式存储引擎</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>12 | 引擎拓展：解读当前流行的分布式存储引擎</h1><p data-nodeid="116539">这一讲是存储引擎模块的最后一讲，通过这一个模块的学习，相信你已经对存储引擎的概念、使用方法与技术细节有了全方位的认识。本讲我们先总结一下模块二的主要内容，并回答大家提到的一些典型问题；而后我会介绍评估存储引擎的三个重要元素；最后为你介绍目前比较流行的面向分布式数据库的存储引擎。</p>
+<p data-nodeid="116540">让我们先进行本模块的内容回顾。</p>
+<h3 data-nodeid="116541">存储引擎回顾</h3>
+<p data-nodeid="116542">存储引擎是数据库的核心组件，起到了物理模型与逻辑模型之间的沟通作用，是数据库重要功能，是数据写入、查询执行、高可用和事务等操作的主要承担者。可谓<strong data-nodeid="116613">理解存储引擎也就掌握了数据库的主要功能</strong>。</p>
+<p data-nodeid="116543">在这个模块里，我首先向你介绍了存储引擎在整个数据库中的定位，点明了它其实是本地执行模块的组成部分；而后通过内存与磁盘、行式与列式等几组概念的对比，介绍了不同种类的存储引擎的实现差异；并最终说明了分布式数据库存储引擎的特点，即面向内存、列式和易于散列。</p>
+<p data-nodeid="116544">在第 8 讲中，我介绍了分布式数据库的索引。着重说明了存储引擎中大部分数据文件其实都是索引结构；而后带着你一起探讨了典型分布式数据库存储引擎的读取路径，并介绍了该路径上的一些典型技术，如索引数据表、内存跳表、布隆过滤和二级索引等。</p>
+<p data-nodeid="116545">接着我介绍了一个在分布式数据库领域内非常流行的存储引擎：LSM 树。介绍了其具体的结构、读写修改等操作流程；重点说明了合并操作，它是 LSM 树的核心操作，直接影响其性能；最后介绍了 RUM 假说，它是数据库优化的一个经典取舍定律。</p>
+<p data-nodeid="116546">最后，我们探讨了存储引擎最精华的概念，就是事务。我用了两讲的篇幅，详细为你阐述事务的方方面面。总结一下，事务其实是数据库给使用者的一个承诺，即 ACID。为了完成这个承诺，数据库动用了存储引擎中众多的功能模块。其中最重要的事务管理器，同时还需要页缓存、提交日志和锁管理器等组件来进行配合。故在实现层面上，事务的面貌是很模糊的，它同时具备故障恢复和并发控制等特性，这是由其概念是建立在最终使用侧而造成的。</p>
+<p data-nodeid="116547">事务部分我们主要抓住两点：故障恢复+隔离级别。前者保证了数据库存储数据不会丢失，后者保证并发读写数据时的完整性；同时我们要将事务与模块一中的分布式一致性做区别，详细内容请你回顾第 5 讲。</p>
+<p data-nodeid="116548">在事务部分，有同学提到了下面这个问题，现在我来为你解答。</p>
+<p data-nodeid="116549">当内存数据刷入磁盘后，同时需要对日志做“截取”操作，这个截取的值是什么？</p>
+<p data-nodeid="116550">这个“截取”是一个形象的说法，也就是可以理解为截取点之前的数据已经在输入磁盘中。当进行数据库恢复的时候，只要从截取点开始恢复数据库即可，这样大大加快了恢复速度，同时也释放了日志的空间。这个截取点，一般被称为检查点。相关细节，你可以自行学习。</p>
+<p data-nodeid="116551">以上我们简要回顾了本模块的基本知识。接下来，我将带你领略当代分布式数据库存储引擎的一些风采。但是开始介绍之前，我们需要使用一个模型来评估它们的特点。</p>
+<h3 data-nodeid="116552">评估存储引擎的黄金三角</h3>
+<p data-nodeid="116553">存储引擎的特点千差万别，各具特色。但总体上我们可以通过三个变量来描述它们的行为：缓存的使用方式，数据是可变的还是不可变的，存储的数据是有顺序的还是没有顺序的。</p>
+<h4 data-nodeid="116554">缓存形式</h4>
+<p data-nodeid="116555">缓存是说存储引擎在数据写入的时候，首先将它们写入到内存的一个片段，目的是进行数据汇聚，而后再写入磁盘中。这个小片段由一系列块组成，块是写入磁盘的最小单位。理想状态是写入磁盘的块是满块，这样的效率最高。</p>
+<p data-nodeid="116556">大部分存储引擎都会使用到缓存。但使用它的方式却很不相同，比如我将要介绍的 WiredTiger 缓存 B 树节点，用内存来抵消随机读写的性能问题。而我们介绍的 LSM 树是用缓存构建一个有顺序的不可变结构。故<strong data-nodeid="116632">使用缓存的模式是衡量存储引擎的一个重要指标</strong>。</p>
+<h4 data-nodeid="116557">可变/不可变数据</h4>
+<p data-nodeid="116558">存储的数据是可变的还是不可变的，这是判断存储引擎特点的另一个维度。不可变性一般都是以追加日志的形式存在的，其特点是写入高效；而可变数据，以经典 B 树为代表，强调的是读取性能。故一般认为可变性是区分 B 树与 LSM 树的重要指标。但 BW-Tree 这种 B 树的变种结构虽然结构上吸收了 B 树的特点，但数据文件是不可变的。</p>
+<p data-nodeid="116559">当然不可变数据并不是说数据一直是不变的，而是强调了是否在最影响性能的写入场景中是否可变。LSM 树的合并操作，就是在不阻塞读写的情况下，进行数据文件的合并与分割操作，在此过程中一些数据会被删除。</p>
+<h4 data-nodeid="116560">排序</h4>
+<p data-nodeid="116561">最后一个变量就是数据存储的时候是否进行排序。排序的好处是对范围扫描非常友好，可以实现 between 类的数据操作。同时范围扫描也是实现二级索引、数据分类等特性的有效武器。如本模块介绍的 LSM 树和 B+ 树都是支持数据排序的。</p>
+<p data-nodeid="116562">而不排序一般是一种对于写入的优化。可以想到，如果数据是按照写入的顺序直接存储在磁盘上，不需要进行重排序，那么其写入性能会很好，下面我们要介绍的 WiscKey 和 Bitcask 的写入都是直接追加到文件末尾，而不进行排序的。</p>
+<p data-nodeid="116563">以上就是评估存储引擎特点的三个变量，我这里将它们称为<strong data-nodeid="116644">黄金三角</strong>。因为它们是互相独立的，彼此并不重叠，故可以方便地评估存储引擎的特点。下面我们就试着使用这组黄金三角来评估目前流行的存储引擎的特点。</p>
+<h3 data-nodeid="116564">B 树类</h3>
+<p data-nodeid="116565">上文我们提到过评估存储引擎的一个重要指标就是数据是否可以被修改，而 B 树就是可以修改类存储引擎比较典型的一个代表。它是目前的分布式数据库，乃至于一般数据库最常采用的数据结构。它是为了解决搜索树（BST）等结构在 HDD 磁盘上性能差而产生的，结构特点是高度很低，宽度很宽。检索的时候从上到下查找次数较少，甚至如 B+ 树那样，可以完全把非叶子节点加载到内存中，从而使查找最多只进行一次磁盘操作。</p>
+<p data-nodeid="116566">下面让我介绍几种典型的 B 树结构的存储引擎。</p>
+<h4 data-nodeid="116567">InnoDB</h4>
+<p data-nodeid="116568">InnoDB 是目前 MySQL 的默认存储引擎，同时也是 MariaDB 10.2 之后的默认存储引擎。</p>
+<p data-nodeid="116569">根据上文的评估指标看，它的 B+ 树节点是可变的，且叶子节点保存的数据是经过排序的。同时由于数据的持续写入，在高度不变的情况下，这个 B+ 树一定会横向发展，从而使原有的一个节点分裂为多个节点。而 InnoDB 使用缓存的模式就是：为这种分裂预留一部分内存页面，用来容纳可能的节点分裂。</p>
+<p data-nodeid="116570">这种预留的空间其实就是一种浪费，是空间放大的一种表现。用 RUM 假设来解释，InnoDB 这种结构是牺牲了空间来获取对于读写的优化。</p>
+<p data-nodeid="116571">在事务层面，InnoDB 实现了完整的隔离级别，通过 MVCC 机制配合各种悲观锁机制来实现不同级别的隔离性。</p>
+<h4 data-nodeid="116572">WiredTiger</h4>
+<p data-nodeid="116573">WiredTiger 是 MongoDB 默认的存储引擎。它解决了原有 MongoDB 必须将大部分数据放在内存中，当内存出现压力后，数据库性能急剧下降的问题。</p>
+<p data-nodeid="116574">它采用的是 B 树结构，而不是 InnoDB 的 B+ 树结构。这个原因主要是 MongoDB 是文档型数据库，采用内聚的形式存储数据（你可以理解为在关系型数据库上增加了扩展列）。故这种数据库很少进行 join 操作，不需要范围扫描且一次访问就可以获得全部数据。而 B 树每个层级上都有数据，虽然查询性能不稳定，但总体平均性能是要好于 B+ 树的。</p>
+<p data-nodeid="116575">故 WiredTiger 首先是可变数据结构，同时由于不进行顺序扫描操作，数据也不是排序的。那么它是如何运用缓存的呢？这个部分与 InnoDB 就有区别了。</p>
+<p data-nodeid="116576">在缓存中每个树节点上，都配合一个更新缓冲，是用跳表实现的。当进行插入和更新操作时，这些数据写入缓冲内，而不直接修改节点。这样做的好处是，跳表这种结构不需要预留额外的空间，且并发性能较好。在刷盘时，跳表内的数据和节点页面一起被合并到磁盘上。</p>
+<p data-nodeid="116577">由此可见，<strong data-nodeid="116663">WiredTiger 牺牲了一定的查询性能来换取空间利用率和写入性能</strong>。因为查询的时候出来读取页面数据外，还要合并跳表内的数据后才能获取最新的数据。</p>
+<h4 data-nodeid="116578">BW-Tree</h4>
+<p data-nodeid="116579">BW-Tree 是微软的 Azure Cosmos DB 背后的主要技术栈。它其实通过软件与硬件结合来实现高性能的类 B 树结构，硬件部分的优化使用 Llama 存储系统，有兴趣的话你可以自行搜索学习。我们重点关注数据结构方面的优化。</p>
+<p data-nodeid="116580">BW-Tree 为每个节点配置了一个页面 ID，而后该节点的所有操作被转换为如 LSM 树那样的顺序写过程，也就是写入和删除操作都是通过日志操作来完成的。采用这种结构很好地解决了 B 树的写放大和空间放大问题。同时由于存在多个小的日志，并发性也得到了改善。</p>
+<p data-nodeid="116581">刷盘时，从日志刷入磁盘，将随机写变为了顺序写，同样提高了刷盘效率。我们会发现，BW-Tree 也如 LSM 树一样存在读放大问题，即查询时需要将基础数据与日志数据进行合并。而且如果日志太长，会导致读取缓慢。而此时 Cosmos 采用了一种硬件的解决方案，它会感知同一个日志文件中需要进行合并的部分，将它们安排在同一个处理节点，从而加快日志的收敛过程。</p>
+<p data-nodeid="116582">以上就是典型的三种 B 树类的存储引擎，它们各具特色，对于同一个问题的优化方式也带给我们很多启发。</p>
+<h3 data-nodeid="116583">LSM 类</h3>
+<p data-nodeid="116584">这个模块我专门用了一个完整篇章来阐述它的特点，它是典型的不可变数据结构，使用缓存也是通过将随机写转为顺序写来实现的。</p>
+<p data-nodeid="116585">我们在说 LSM 树时介绍了它存储的数据是有顺序的，其实目前有两种无顺序的结构也越来越受到重视。</p>
+<h4 data-nodeid="116586">经典存储</h4>
+<p data-nodeid="116587">经典的 LSM 实现有 LeveledDB，和在其基础之上发展出来的 RocksDB。它们的特点我们之前有介绍过，也就是使用缓存来将随机写转换为顺序写，而后生成排序且不可变的数据。<strong data-nodeid="116678">它对写入和空间友好，但是牺牲了读取性能</strong>。</p>
+<h4 data-nodeid="116588">Bitcask</h4>
+<p data-nodeid="116589">Bitcask 是分布式键值数据库 Riak 的一种存储引擎，它也是一种典型的无顺序存储结构。与前面介绍的典型 LSM 树有本质上的不同，它没有内存表结构，也就是它根本不进行缓存而是直接将数据写到数据文件之中。</p>
+<p data-nodeid="116590">可以看到，其写入是非常高效的，内存占用也很小。但是如何查询这种“堆”结构的数据呢？答案是在内存中有一个叫作 Keydir 的结构保存了指向数据最新版本的引用，旧数据依然在数据文件中，但是没有被 Keydir 引用，最终就会被垃圾收集器删除掉。Keydir 实际上是一个哈希表，在数据库启动时，从数据文件中构建出来。</p>
+<p data-nodeid="116591">这种查询很明显改善了 LSM 树的读放大问题，因为每条数据只有一个磁盘文件引用，且没有缓存数据，故只需要查询一个位置就可以将数据查询出来。但其缺陷同样明显：不支持范围查找，且启动时，如果数据量很大，启动时间会比较长。</p>
+<p data-nodeid="116592">此种结构优化了写入、空间以及对单条数据的查找，但牺牲了范围查找的功能。</p>
+<h4 data-nodeid="116593">WiscKey</h4>
+<p data-nodeid="116594">那么有没有一种结构，既能利用无顺序带来的高速写入和空间利用率上的优点，又可以支持非常有用的范围查询呢？WiscKey 结构正是尝试解决这个问题的一个手段。</p>
+<p data-nodeid="116595">它的特点是将 Key 和 Value 分别放在两个文件中。Key 还是按照 LSM 树的形式，这样就保证了 Key 是有顺序的，可以进行范围扫描。同时使用 LSM 树，即不需要将所有的 Key 放到内存里，这样也解决了 Bitcask 加载慢的问题。</p>
+<p data-nodeid="116596">而 Value 部分称为 vLogs（value Logs），其中的数据是没有顺序的。这种结构适合更新和删除比较少的场景，因为范围扫描会使用随机读，如果更新删除很多，那么其冲突合并的效率很低。同时在合并操作的时候，需要扫描 Key 而后确定合并方案，这个在普通的 LSM 树中也是不存在的。</p>
+<p data-nodeid="116597">WiscKey 非常适合在 SSD 进行运行，因为读取 Value 需要进行随机读取。目前 dgraph.io 的 Badger 是该模式比较成熟的实现。</p>
+<h3 data-nodeid="116598">总结</h3>
+<p data-nodeid="116599">到这里，这一讲内容就说完了。我带你回顾了第二模块的主要内容，这是一个基础知识普及模块，将为接下来的分布式模块打下基础。同时相对于传统关系型数据库，分布式数据库的存储引擎也有其自身特点，如 LSM 树结构，你需要认真掌握这种结构。</p>
+<p data-nodeid="117309">从下一讲开始，我们将进入分布式数据库的核心内容：分布式系统。掌握分布式系统后，我们才可以说对分布式数据库有了比较完整的认识。</p></div>
+
+</body></html>

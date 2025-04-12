@@ -1,0 +1,961 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>16 | 案例分析：百度效率云是如何做代码审查的</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>16 | 案例分析：百度效率云是如何做代码审查的</h1><p data-nodeid="205912" class="">上一课时介绍了通过在应用程序中主动注入故障，以便提前发现问题这一混沌工程实践，来构建强大的弹性系统的方法。混沌工程可以在软件开发全生命周期的多个阶段进行，不一定就是生产环境，只是有些执行的条件只有生产环境才具备。 经过前面的几个课时，软件已经发布到生产环境，交付给用户使用了。今天的内容是一个案例分析，介绍一下百度效率云这一 DevOps 平台是如何做代码审查的。</p>
+
+
+<h3 data-nodeid="204813">效率云简介</h3>
+<p data-nodeid="204814">效率云是百度自主研发的整套 DevOps 解决方案，涵盖了创新管理、产品管理、项目管理、代码托管、持续交付、微服务治理、线上反馈的软件开发全生命周期。核心功能有以下几点。</p>
+<ul data-nodeid="204815">
+<li data-nodeid="204816">
+<p data-nodeid="204817"><strong data-nodeid="204947">项目管理 iCafe</strong>：主要包含用户故事地图、迭代管理、需求定制化查询、文档协同、定制化报表等功能。基于这些功能团队可以进行产品的整体规划、需求的拆解和录入，可视化看板的定制等。</p>
+</li>
+<li data-nodeid="204818">
+<p data-nodeid="204819"><strong data-nodeid="204952">代码托管 iCode</strong>：除了包含代码托管功能之外、还提供了一系列可配置规则。iCode是基于开源代码评审工具 Gerrit 的代码托管平台，也是采用的 Change Request 机制，当开发人员提交代码后，就会触发 iCode 内置的代码检查和流水线检查，最大程度的保证代码入库的质量。</p>
+</li>
+<li data-nodeid="204820">
+<p data-nodeid="204821"><strong data-nodeid="204957">持续交付 iPipe</strong>：主要包含持续集成、持续交付等功能，内置了 maven、gradle、npm、pip 等多种语言的依赖管理和制品管理功能。支持基于主干、Branch 和 Change 的构建流水线，支持串行、并行两种任务执行策略以及手动、自动、定时多种触发策略。</p>
+</li>
+</ul>
+<p data-nodeid="204822">除了上面的核心组件，还有代码扫描 iScan、制品管理 iRepo、接口测试组件 ITP、压力测试组件 dumeter 等。效率云分为百度内部版本、百度云上 SaaS 版本，以及独立部署的版本。</p>
+<h3 data-nodeid="204823">代码托管 iCode</h3>
+<p data-nodeid="204824">代码审查这个实践主要跟效率云中的代码托管平台 iCode 相关，下面的内容主要介绍在 iCode 中是如何进行代码审查。与当前比较流行的 GitHub 和 GitLab 一样，iCode 也是基于分布式版本控制系统 Git 搭建的代码托管平台。二者区别在于 iCode 的权限管理、代码评审模型是基于 Google 的 Gerrit 实现的，而 GitHub 及 GitLab 则是原生设计的。</p>
+<h4 data-nodeid="204825">开发协作模型</h4>
+<p data-nodeid="204826">在之前的课时中也讲到，DevOps 中关于代码质量检查的原则是尽可能前置，代码问题发现的越早，修复的成本就越低。在代码托管平台中，不同的开发协作模型决定了代码检查的时机。这四种代码托管平台的开发协作模型如下：</p>
+<ul data-nodeid="204827">
+<li data-nodeid="204828">
+<p data-nodeid="204829">Pull Request 模型——GitHub；</p>
+</li>
+<li data-nodeid="204830">
+<p data-nodeid="204831">Merge Request 模型——GitLab；</p>
+</li>
+<li data-nodeid="204832">
+<p data-nodeid="204833">Change Request 模型——Gerrit，iCode。</p>
+</li>
+</ul>
+<p data-nodeid="204834"><strong data-nodeid="204969">第一，Pull Request 模型。</strong></p>
+<p data-nodeid="204835">Pull Request 模型是 GitHub 设计的开发协作模型，是为了满足全球各地的开发者共同参与开源项目开发的需求。GitHub Flow如下图所示。</p>
+<p data-nodeid="206644" class=""><img src="https://s0.lgstatic.com/i/image/M00/8D/6F/CgqCHl_-uHqAdp9ZAABDWTuBuOA185.png" alt="Drawing 0.png" data-nodeid="206647"></p>
+
+<p data-nodeid="204837">主要包含几个步骤：</p>
+<ul data-nodeid="204838">
+<li data-nodeid="204839">
+<p data-nodeid="204840">开发者如果想修复一个开源项目的 Bug，首先将开源项目的远程代码库fork到个人代码库中；</p>
+</li>
+<li data-nodeid="204841">
+<p data-nodeid="204842">在个人代码库中修复该开源项目的 Bug；</p>
+</li>
+<li data-nodeid="204843">
+<p data-nodeid="204844">将修改的代码提交到个人代码库中；</p>
+</li>
+<li data-nodeid="204845">
+<p data-nodeid="204846">在 GitHub 中远程仓库发起一个 PR；</p>
+</li>
+<li data-nodeid="204847">
+<p data-nodeid="204848">远程仓库的 Owner 同意后，代码即可合入远程仓库。</p>
+</li>
+</ul>
+<p data-nodeid="204849">Pull Request 模型的<strong data-nodeid="204989">代码评审阶</strong>段一般发生在<strong data-nodeid="204990">开发者向开源项目提交 PR</strong>的时候。</p>
+<p data-nodeid="204850"><strong data-nodeid="204994">第二，Merge Request 模型。</strong></p>
+<p data-nodeid="208114">Merge Request 模型是 GitLab设计的开发协作模型，主要是满足企业内部团队之间的协作开发，是一种分支开发、主干发布的设计思想。GitLab Flow 如下图所示。</p>
+<p data-nodeid="208115"><img src="https://s0.lgstatic.com/i/image/M00/8D/64/Ciqc1F_-uJOAShU8AABFiWxsObU213.png" alt="Drawing 1.png" data-nodeid="208119"></p>
+
+
+
+<p data-nodeid="204853">主要包含几个步骤：</p>
+<ul data-nodeid="204854">
+<li data-nodeid="204855">
+<p data-nodeid="204856">当团队成员开发一个新功能时，先从主干分支拉取新的特性分支；</p>
+</li>
+<li data-nodeid="204857">
+<p data-nodeid="204858">在本地开发新功能；</p>
+</li>
+<li data-nodeid="204859">
+<p data-nodeid="204860">将代码提交到该特性分支；</p>
+</li>
+<li data-nodeid="204861">
+<p data-nodeid="204862">在 GitLab 中发起 MR，请求将该特性分支的代码合并到主干分支；</p>
+</li>
+<li data-nodeid="204863">
+<p data-nodeid="204864">负责人对 MR 进行 Code Review，同意后点击 Merge，即可合入主干分支。</p>
+</li>
+</ul>
+<p data-nodeid="204865">Merge Request 模型的<strong data-nodeid="205014">代码评审阶段</strong>一般发生在<strong data-nodeid="205015">开发者将特性分支合并到主干分支</strong>的时刻。</p>
+<p data-nodeid="204866"><strong data-nodeid="205019">第三，Change Request 模型。</strong></p>
+<p data-nodeid="204867">上面的<strong data-nodeid="205029">PR</strong>和<strong data-nodeid="205030">MR</strong>模型提供了基本管理方式，但在使用的过程中也存在一定的问题，比如：</p>
+<ul data-nodeid="204868">
+<li data-nodeid="204869">
+<p data-nodeid="204870">特性分支需要在合并的时候才能进行 CodeReview，此时需要评审的代码量很多，无法保证 Code Review 的效果。</p>
+</li>
+<li data-nodeid="204871">
+<p data-nodeid="204872">因为只有在分支合并的时候才能进行 CodeReview，每次需要建立新的分支和分支的合并，对于小型团队来说，增加了流程的复杂性。</p>
+</li>
+</ul>
+<p data-nodeid="204873">Change Request 模型是 Gerrit 设计的开发协作模型，也是 iCode 目前采用的模型，能够将代码检查前置到代码提交阶段。Change Request 的开发协作流程如下图所示。</p>
+<p data-nodeid="208850" class=""><img src="https://s0.lgstatic.com/i/image/M00/8D/6F/CgqCHl_-uJ2AO1RNAAA3dBtZ49Q669.png" alt="Drawing 2.png" data-nodeid="208853"></p>
+
+<p data-nodeid="204875">主要包含几个步骤：</p>
+<ul data-nodeid="204876">
+<li data-nodeid="204877">
+<p data-nodeid="204878">执行 git pull， 将远程分支的代码更新到本地工作空间；</p>
+</li>
+<li data-nodeid="204879">
+<p data-nodeid="204880">在本地工作空间开发新功能；</p>
+</li>
+<li data-nodeid="204881">
+<p data-nodeid="204882">执行 git commit 将代码提交到本地仓库；</p>
+</li>
+<li data-nodeid="204883">
+<p data-nodeid="204884">执行 git push HEAD:refs/for/branch 发起一个 Change Request；</p>
+</li>
+<li data-nodeid="204885">
+<p data-nodeid="204886">经过流水线检查和 Code Review后，才能将代码合入代码库。</p>
+</li>
+</ul>
+<p data-nodeid="204887">Change Request 模型的代码评审阶段是在代码提交阶段，而不是分支合并的时候。与 Pull Request 模型和 Merge Request 模型相比，Change Request 模型代码评审的时机更靠前。</p>
+<h4 data-nodeid="204888">提交规则设置</h4>
+<p data-nodeid="204889">上面介绍了 iCode 中采用的是 Change Request 的开发协作模型。在新建代码库后，默认并未开启该协作模型，可以在“提交规则”里进行相关设置，这样可以满足不同的团队对代码评审的要求。如下图所示。提交规则包含四个方面：<strong data-nodeid="205062">提交</strong>、<strong data-nodeid="205063">机器评审</strong>、<strong data-nodeid="205064">人工评审</strong>和<strong data-nodeid="205065">合入策略</strong>。</p>
+<p data-nodeid="209584" class=""><img src="https://s0.lgstatic.com/i/image/M00/8D/6F/CgqCHl_-uLOAa4m-AACj6zH9dAU169.png" alt="Drawing 3.png" data-nodeid="209587"></p>
+
+<p data-nodeid="204891">下面介绍一下跟代码评审相关的几个规则：</p>
+<p data-nodeid="211050" class=""><strong data-nodeid="211055">1. 提交</strong>。</p>
+
+
+<p data-nodeid="204895"><strong data-nodeid="205083">提交代码必须经过评审（使用 git push origin HEAD:refs/for/[分支名]）</strong>，选中该配置项即可开启 Change Request 的代码评审。当团队对提交代码的质量有严格要求时，需通过开启代码评审，进行代码检查，来控制提交代码的质量。</p>
+<p data-nodeid="213972" class=""><strong data-nodeid="213977">2. 机器评审</strong>。</p>
+
+
+
+
+<p data-nodeid="204899"><strong data-nodeid="205093">开启 iPipe 流水线检查</strong>，该配置项是用于当提交代码评审后，会自动触发 Change 流水线，对代码执行编译、单元测试等流水线检查。流水线检查通过后代码评审会+1。</p>
+<p data-nodeid="216893" class=""><strong data-nodeid="216898">3. 人工评审</strong>。</p>
+
+
+
+
+<p data-nodeid="204903"><strong data-nodeid="205103">必须有评审人+2</strong>，该配置项是用于保证人工评审的效果。这是 Gerrit 的规则，在代码评审中，任何人都可以查看任何人提交的代码，并给予不具有约束力的+1。只有一小部分人才能批准提交的代码并将其合并到代码库中，也就是必须要有一个评审人给予+2。</p>
+<p data-nodeid="204904">通过上面三个配置项，可以根据团队的需求灵活的设置代码评审的开启和关闭，以及代码合入的准则。</p>
+<h4 data-nodeid="204905">评审人设置</h4>
+<p data-nodeid="204906">评审人设置功能是为了在每次发起评审时，系统会自动将这里设置的评审人加入该评审单的评审人，不需要开发者手工添加。除了这里的评审人，其他人员还是可以评审的。如下图所示：</p>
+<p data-nodeid="217617" class=""><img src="https://s0.lgstatic.com/i/image/M00/8D/64/Ciqc1F_-uNCABfccAABjbkLzGHw004.png" alt="Drawing 4.png" data-nodeid="217620"></p>
+
+<p data-nodeid="204908">该设置能够细化到按分支和目录设置评审人，如果一个代码库包含多个不同的功能模块，每个功能模块在不同的目录下时会非常有用。默认评审人的设置分为以下两种情况。</p>
+<ul data-nodeid="204909">
+<li data-nodeid="204910">
+<p data-nodeid="204911"><strong data-nodeid="205117">所有分支</strong>：如果“分支”列是所有分支，也就是选择*时，“文件”列需要留空，表示所有分支的所有文件。</p>
+</li>
+<li data-nodeid="204912">
+<p data-nodeid="204913"><strong data-nodeid="205124">特定分支</strong>：如果“分支”列选择某个特定分支，如 master，“文件”列可以输入特定路径，需要以^开头，以/.*结尾。</p>
+</li>
+</ul>
+<h3 data-nodeid="204914">代码评审示例</h3>
+<p data-nodeid="204915">下面，我通过一个示例演示代码评审的整个过程。该演示过程是在百度效率云的 SaaS 版本中进行的。分为<strong data-nodeid="205139">代码提交</strong>、<strong data-nodeid="205140">代码评审</strong>和<strong data-nodeid="205141">代码合入</strong>几个步骤。</p>
+<h4 data-nodeid="204916">代码提交</h4>
+<p data-nodeid="204917">假设本次提交的内容是“修改版本号”，在 build.gradle 文件中将 version = '0.0.1-SNAPSHOT'  修改为 version = '1.0.1-SNAPSHOT'。提交代码命令如下。</p>
+<pre class="lang-java" data-nodeid="220496"><code data-language="java">D:\code\devops&gt;git add .
+warning: LF will be replaced by CRLF in build.gradle.
+The file will have its original line endings in your working directory
+​
+D:\code\devops&gt;git commit -m <span class="hljs-string">"update version"</span>
+[master <span class="hljs-number">4</span>bef3f8] update version
+ <span class="hljs-number">1</span> file changed, <span class="hljs-number">1</span> insertion(+), <span class="hljs-number">1</span> deletion(-)
+​
+D:\code\devops&gt;git push origin HEAD:refs/<span class="hljs-keyword">for</span>/master
+Password <span class="hljs-keyword">for</span> <span class="hljs-string">'https://xinglong_devopser@xly.bce.baidu.com'</span>:
+Enumerating objects: <span class="hljs-number">5</span>, done.
+Counting objects: <span class="hljs-number">100</span>% (<span class="hljs-number">5</span>/<span class="hljs-number">5</span>), done.
+Delta compression using up to <span class="hljs-number">4</span> threads
+Compressing objects: <span class="hljs-number">100</span>% (<span class="hljs-number">3</span>/<span class="hljs-number">3</span>), done.
+Writing objects: <span class="hljs-number">100</span>% (<span class="hljs-number">3</span>/<span class="hljs-number">3</span>), <span class="hljs-number">325</span> bytes | <span class="hljs-number">325.00</span> KiB/s, done.
+Total <span class="hljs-number">3</span> (delta <span class="hljs-number">2</span>), reused <span class="hljs-number">0</span> (delta <span class="hljs-number">0</span>), pack-reused <span class="hljs-number">0</span>
+remote: Resolving deltas: <span class="hljs-number">100</span>% (<span class="hljs-number">2</span>/<span class="hljs-number">2</span>)
+remote:
+remote: Processing changes: <span class="hljs-keyword">new</span>: <span class="hljs-number">1</span>, refs: <span class="hljs-number">1</span>, done
+remote:
+remote: New Changes:
+remote: &nbsp; http:<span class="hljs-comment">//xly.bce.baidu.com/icode/myreview/changes/71999 update version</span>
+remote:
+To https:<span class="hljs-comment">//xly.bce.baidu.com/code/devopser/demo-project/devops</span>
+ * [<span class="hljs-keyword">new</span> branch] &nbsp; &nbsp;  HEAD -&gt; refs/<span class="hljs-keyword">for</span>/master
+​
+D:\code\github\devops&gt;
+​
+</code></pre>
+
+
+
+
+<p data-nodeid="204919">注意，在提交到远程仓库时使用的是 git push origin HEAD:refs/for/master 命令。从提交日志中可以看到两个重要信息：<br>
+生成了一个新的Change，路径<a href="http://xly.bce.baidu.com/icode/myreview/changes/71999" data-nodeid="205157">http://xly.bce.baidu.com/icode/myreview/changes/71999</a>，该URL为此次评审详情页面的地址；</p>
+<p data-nodeid="204920">此次提交是 push 到了 refs/for/master 这个临时分支，并不是直接 push 到 master 分支。</p>
+<h4 data-nodeid="204921">代码评审</h4>
+<p data-nodeid="204922">打开上面的地址，可以看到代码评审的详情页面，评审人就是在该评审页面中进行 Code Review。如下图所示：</p>
+<p data-nodeid="221215" class=""><img src="https://s0.lgstatic.com/i/image2/M01/05/4B/Cip5yF_-uOKAPlizAAD9LtI2USw910.png" alt="Drawing 5.png" data-nodeid="221218"></p>
+
+<p data-nodeid="204924">从这个评审页面中，可以看到几个关键的信息，用于辅助评审人进行 Code Review。</p>
+<ul data-nodeid="204925">
+<li data-nodeid="204926">
+<p data-nodeid="204927">基本信息：代码提交的时间、提交人，message，CommitId 以及要合入的分支。</p>
+</li>
+<li data-nodeid="204928">
+<p data-nodeid="204929">代码变更：本次变更的文件以及每个文件变更的内容，可以在变更对比视图中清晰地展示出来，本次变更只修改了版本号。评审人可以在变更内容的位置添加行间评论，发表对此次变更的意见。</p>
+</li>
+<li data-nodeid="204930">
+<p data-nodeid="204931">代码评审：本地提交需要人工评审 +2 后才能合入。目前已经有评审人 +2，并且状态显示为自动化任务检查通过，人工评审通过，可以合入。</p>
+</li>
+</ul>
+<h4 data-nodeid="204932">代码合入</h4>
+<p data-nodeid="204933">此次变更已经通过负责人的 Code Review，便可以点击“合入”按钮合入目标分支中。合入后，评审的状态显示为“已合入”。在 master 分支的提交历史中也会显示此次变更。</p>
+<p data-nodeid="221937" class=""><img src="https://s0.lgstatic.com/i/image2/M01/05/4C/CgpVE1_-uOiAc8qjAABTf3GzVDw511.png" alt="Drawing 6.png" data-nodeid="221940"></p>
+
+<p data-nodeid="204935">这是百度效率云基于 Change Request 模型的代码评审过程。该模型可以有效管控提交代码的质量，因为每次提交都会生成一个 Code Review，如果代码变更存在问题，那么此次变更就不会合入代码库中，根本不会影响到代码库中的代码。</p>
+<h3 data-nodeid="222659" class="te-preview-highlight">总结</h3>
+
+<p data-nodeid="204937">本课时介绍了百度效率云如何进行代码审查。百度效率云的 iCode 采用 Change Request 开发协作模型，能够在 git push 的时候进行代码评审，从而控制了提交入库的代码的质量。基于 Change Request 模型，iCode 平台提高了相应的提交规则设置，团队可以根据自己的需求开启和关闭代码评审。最后，通过一个实际操作演示了从代码提交、代码评审到代码合入的整个过程。百度效率云的 SaaS 服务已经部署在百度云上，感兴趣的同学可以试用一下。</p>
+<p data-nodeid="204938">到此，第二部分 DevOps 软件开发的最佳实践就讲完了。希望这部分能够给你带来收获，也希望学习会这些课时后，在谈论 DevOps 的时候，你能够从软件开发全生命周期的角度去思考，对 DevOps 的理解有一个全局的视角。</p></div>
+
+</body></html>

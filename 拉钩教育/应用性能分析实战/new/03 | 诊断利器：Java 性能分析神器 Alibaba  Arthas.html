@@ -1,0 +1,1168 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>03 | 诊断利器：Java 性能分析神器 Alibaba  Arthas</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>03 | 诊断利器：Java 性能分析神器 Alibaba  Arthas</h1><p data-nodeid="2237" class="">Arthas 是阿里开源的 Java 诊断工具，可以让开发者快速定位故障问题，那么为什么用“神器”来形容 Arthas 呢？</p>
+<p data-nodeid="2238">Arthas 由阿里早期的开源诊断工具 Greys 演进而来，你可以将 Arthas 看作是Greys的升级产品。由于 Arthas 提供了更加丰富的工具，在 2018 年底发布，就受到了很多开发者的青睐，并且也得到了来自 Java 官方的赞许。</p>
+<p data-nodeid="2239">Arthas 的核心应用场景如下。</p>
+<ul data-nodeid="2240">
+<li data-nodeid="2241">
+<p data-nodeid="2242">场景 1：这个类从哪个 jar 包加载的？为什么会报各种类相关的 Exception？</p>
+</li>
+<li data-nodeid="2243">
+<p data-nodeid="2244">场景 2：我改的代码为什么没有执行？难道是我没 commit？分支搞错了？</p>
+</li>
+<li data-nodeid="2245">
+<p data-nodeid="2246">场景 3：遇到问题无法在线上 debug，难道只能通过加日志再重新发布吗？</p>
+</li>
+<li data-nodeid="2247">
+<p data-nodeid="2248">场景 4：线上遇到某个用户的数据处理有问题，但线上同样无法 debug，线下无法重现！</p>
+</li>
+<li data-nodeid="2249">
+<p data-nodeid="2250">场景 5：是否有一个全局视角来查看系统的运行状况？</p>
+</li>
+<li data-nodeid="2251">
+<p data-nodeid="2252">场景 6：有什么办法可以监控到 JVM 的实时运行状态？</p>
+</li>
+<li data-nodeid="2253">
+<p data-nodeid="2254">场景 7：怎么快速定位应用的热点，生成火焰图？</p>
+</li>
+</ul>
+<p data-nodeid="2255"><strong data-nodeid="2409">总结起来就是，Arthas 不仅能解决开发者无法对线上服务进行 Remote Debug 的难题，还能以全局的视角进行在线监控诊断和热修复，轻松化解让人束手无策的难题。可以说，企业部署了 Arthas，就如同拥有了在线定位问题的神器。</strong></p>
+<p data-nodeid="2256">接下来，我会先介绍 Arthas 的学习路径，并结合具体场景，让你逐步认识 Arthas 的所有工具，并能在已知的场景中使用相应的工具，对线上问题打出组合拳。最后，我会分享我的落地经验，让 Arthas 提供的能力最大化。</p>
+<h3 data-nodeid="2257">学习路径：命令+场景+原理</h3>
+<p data-nodeid="2258">Arthas 目前已经集成了 41 个在线命令，那么如何快速掌握这么多的命令呢？我建议的学习路径是：命令+场景+原理，你可以按照这三个方向，来持续迭代自己掌握 Arthas 的能力。</p>
+<p data-nodeid="2259"><img src="https://s0.lgstatic.com/i/image6/M01/2D/B7/Cgp9HWBm5BaAPOoWAABxIX9uEqs906.png" alt="Drawing 0.png" data-nodeid="2415"></p>
+<h4 data-nodeid="2260">1.通过实操，熟悉命令</h4>
+<p data-nodeid="2261">这 41 个命令，都是开发者结合实际的场景、分析背后的原理，总结出的好用的命令。你可以先根据<a href="https://arthas.aliyun.com/doc/arthas-tutorials.html?fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="2420">官网的在线教程</a>，按照四个分类：基础命令、系统命令、类命令和增强命令，将这些<strong data-nodeid="2426">命令</strong>通通实操一遍，对 Arthas 命令有个全局的感性认知。</p>
+<blockquote data-nodeid="2262">
+<p data-nodeid="2263">如果你是新手，可以不用着急学习下面的内容，可以根据 Arthas 的在线教程，先动手实践一下。</p>
+</blockquote>
+<h4 data-nodeid="2264">2.深入场景，进行诊断</h4>
+<p data-nodeid="2265">掌握好“命令”后，你可以根据实际场景，持续梳理每个命令在场景中发挥的作用，对 Arthas 命令有更理性、全面的认识。</p>
+<p data-nodeid="2266">当我们遇到线上问题时，我们会通过命令对线上的问题剥茧抽丝，不断深入场景的每一个细节。在这个过程中，你会发现，虽然每个命令设计得非常简单，但随着我们不断地加深对它的理解，并能将它们灵活组合时，便能达到强大效果。</p>
+<p data-nodeid="2267">下面便是我对 Arthas 官网上七大场景的总结，这七个场景也最能体现 Arthas 产品的价值。</p>
+<p data-nodeid="4489" class=""><img src="https://s0.lgstatic.com/i/image6/M00/2D/D6/CioPOWBm-0GAZC_MAATTkxNsFlc217.png" alt="图片1.png" data-nodeid="4492"></p>
+
+
+<p data-nodeid="2320" class="">比如在“场景 3：遇到问题无法在线上 debug，难道只能通过加日志再重新发布吗？”中，通过 4 个命令的组合，便实现了热发布功能。Arthas 设计的理念和<a href="https://en.wikipedia.org/wiki/Unix_philosophy?fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="2660">Unix 哲学</a>很像，每个命令只专注做好一个任务，然后充分发挥开发者的能力，通过不断地使用这些命令排查问题，在实践场景中积累实战经验。之后，再遇到相似场景时，便能快速通过一系列组合的命令，诊断出问题所在了。</p>
+<p data-nodeid="2321" class="">但是，我们也要注意，积累的经验越多，越容易让我们犯“经验主义”的错误。就是遇到问题以经验先入为主，在排查问题时无法放空自己，让排查问题的能力提升出现瓶颈。</p>
+<p data-nodeid="2322">所以，这时就需要深入掌握原理。只有掌握了原理，你才能以更高更全面的视角，深入场景，进行问题的诊断。避免之前知识碎片化，无法形成知识面的情况。</p>
+<h4 data-nodeid="2323">3.掌握原理，提升效率</h4>
+<p data-nodeid="2324">首先我们需要掌握应用服务相关依赖的原理，比如框架原理、JVM 原理。理解这些依赖原理后，再来理解 Arthas 的原理，包括 Arthas 每个命令是如何工作的。</p>
+<p data-nodeid="2325">Arthas 的原理，我们可以通过在线文档和源码，并根据实际场景来针对性深入。</p>
+<p data-nodeid="2326">接下来，我以最新支持的“场景 7：怎么快速定位应用的热点，生成火焰图？”为例，通过以下两个建议，向你讲解如何快速掌握 profiler 命令的原理。</p>
+<p data-nodeid="2327"><strong data-nodeid="2671">建议 1 精读设计，略读源码</strong></p>
+<p data-nodeid="2328">因为 Arthas（甚至所有的 APM 产品）技术栈相对应用服务技术栈，较为小众、底层，学习源码近似于在读另一门语言。就像应用服务，其开发语言是汉字，书写源码时用的也是普通话，非常通俗易懂；而 APM 底层技术栈虽然使用的也是汉字，但由于受众很少，源码阅读起来就像是文言文那般深奥、复杂了。</p>
+<p data-nodeid="2329"><strong data-nodeid="2676">所以不正确地苛求源码只会浪费时间，与其如此，我们更加该去学习“文言文转换的白话文”，也就是精读设计。</strong></p>
+<p data-nodeid="2330">接下来，我以 Arthas 的 profiler 命令，制作 CPU 维度的火焰图为例，来讲述如何掌握 Arthas 每个命令的学习过程。</p>
+<p data-nodeid="2331">火焰图的制作使用<a href="https://github.com/jvm-profiling-tools/async-profiler?fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="2681">async-profiler</a>工具来完成。故此，就要学习操作系统的 perf 命令。操作系统的 perf 命令，需要定时不断采集 CPU 的正在执行的函数名和调用栈。由于 CPU 是机器运算的核心，所以采集到的数据是海量级别的。</p>
+<p data-nodeid="2332">所以，我们需要一种形式将这些海量数据呈现出来。从而我们就设计了一张图，X 轴表示调用函数被采集的情况（按照函数字母排序），Y 轴表示详细描述了调用栈。整个绘制出来的图案，加上暖色后看起来很像一副<a href="https://github.com/brendangregg/FlameGraph?fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="2686">火焰图</a>（火焰图的颜色没有特殊含义）。</p>
+<p data-nodeid="2333"><img src="https://s0.lgstatic.com/i/image6/M01/2D/B8/Cgp9HWBm5DKAU6qGAAXfqh87K-I401.png" alt="Drawing 1.png" data-nodeid="2690"></p>
+<p data-nodeid="2334">在这个过程中，你会发现我们并没有学习 Arthas profiler 实现火焰图源码，而是通过对火焰图的产品设计进行了深入学习，就达到了掌握火焰图和 Arthas profiler 命令的效果，可见精读设计，略读源码的效果。</p>
+<p data-nodeid="2335"><strong data-nodeid="2695">建议 2 原理之上，用好工具</strong></p>
+<p data-nodeid="2336">工具的目的是提升工作效率，所以每个开发者都逃避不了被问到：你是如何使用 Arthas 的火焰图快速分析出应用服务性能问题的呢？</p>
+<p data-nodeid="2337">我给出的答案是，非预期的火焰图的<strong data-nodeid="2702">屏顶</strong>，就是应用服务性能问题的所在。</p>
+<p data-nodeid="2338">以下面购买服务的 CPU 火焰图为例：</p>
+<p data-nodeid="2339"><img src="https://s0.lgstatic.com/i/image6/M00/2D/C0/CioPOWBm5D6AelwSAAC2dlxp9uc971.png" alt="Drawing 2.png" data-nodeid="2706"></p>
+<p data-nodeid="2340">非预期的屏顶出现在 failAccountError() 和 failNotEnoughMoney() 两个函数上，接下来我可以通过 tt 和 watch 命令详细观察性能问题的原因。</p>
+<blockquote data-nodeid="2341">
+<p data-nodeid="2342">这里我只是以“场景 7 的火焰图”为例，至于其他场景及其命令，也可以按照这两点建议进行原理探索。</p>
+</blockquote>
+<p data-nodeid="2343">Arthas 的学习路径讲完了，你会发现：<strong data-nodeid="2713">使用 Arthas 命令进行问题分析，再掌握场景背后的原理，就是一个从命令到场景，再到原理，三者认知不断螺旋上升的过程。</strong></p>
+<h3 data-nodeid="2344">两套部署方案</h3>
+<p data-nodeid="2345">既然 Arthas 对诊断线上问题这么有帮助，那应该如何部署 Arthas 呢？</p>
+<p data-nodeid="2346">我的理解是：工欲善其事必先利其器，相比较其他 APM 产品，Arthas 更专注于线上问题的及时诊断。线上问题的诊断越快越好，所以你需要提前将 Arthas 部署好，当线上问题出现时，确保 Arthas 能开箱即用。</p>
+<p data-nodeid="2347">我这里有两套部署方案，你可以根据自身团队的情况，针对各个方案的优势进行部署：</p>
+<p data-nodeid="5061" class="te-preview-highlight"><img src="https://s0.lgstatic.com/i/image6/M00/2D/D6/CioPOWBm-2iAFQfSAAHJSv_DCB0568.png" alt="图片2.png" data-nodeid="5064"></p>
+
+<h3 data-nodeid="2388" class="">小结与思考</h3>
+<p data-nodeid="2389" class="">今天的课程，我带你学习了 Java 在线诊断工具 Arthas。</p>
+<p data-nodeid="2390" class="">Arthas 目前有非常多的在线诊断命令，我们要对问题场景进行剥茧抽丝，不断深入细节定位问题，然后总结什么样的场景，应该是用什么样的命令，深入学习每个命令背后的原理设计。</p>
+<p data-nodeid="2391" class="">希望你在使用 Arthas 命令定位线上问题时，分析过程不要专注某一个点，抱有尝试着改下就能解决的侥幸心理；而是要以一种科学的方法来寻找和定位问题，用数据来指导问题定位的方向。</p>
+<p data-nodeid="2392">那么，你用 Arthas 定位过什么那些场景呢？请把你的场景特点，使用哪些命令、事中事后的总结与思考写在评论区，期待与你讨论。</p>
+<p data-nodeid="2796" class=""><img src="https://s0.lgstatic.com/i/image6/M00/2D/D6/CioPOWBm-x6AH9BYAAE8EwU18Vg656.png" alt="应用性能分析实战金句-03.png" data-nodeid="2799"></p></div>
+
+</body></html>

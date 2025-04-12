@@ -1,0 +1,1189 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>14 | 高级进阶：瞒天过海的骨架屏及 SSR 优化手段</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>14 | 高级进阶：瞒天过海的骨架屏及 SSR 优化手段</h1><p data-nodeid="593" class="">前面我已经提到过，骨架屏和 SSR 在首屏优化方面有较好的效果，骨架屏可以使用户预期到接下来要展示的内容和结构，让用户觉得页面加载快了，而 SSR 则可以白屏时间大幅缩短。</p>
+<p data-nodeid="594">那么具体该怎么实现骨架屏和 SSR 呢？在实际工作当中如何落地操作呢？这一讲我们就来详细介绍下。</p>
+<h3 data-nodeid="595">使用骨架屏方案优化页面性能</h3>
+<p data-nodeid="596">为了让骨架屏内容和页面结构更类似，提升用户体验，我们一般采用的是<strong data-nodeid="667">图片骨架屏</strong>。</p>
+<h4 data-nodeid="597">图片骨架屏的实现</h4>
+<p data-nodeid="598">想要了解如何实现，我们先来看一下图片骨架屏的加载流程。在 App 业务功能设计时，设计师会针对这个页面制作一张离线包的图片，在 WebView 启动时，客户端把这张图片覆盖在页面上，页面开始进入请求资源的流程。当页面 WebView 加载完成或者前端页面通知客户端加载完成时，客户端通过渐变动画隐藏这张图片，将准备好的页面展现给用户。</p>
+<p data-nodeid="599">所以，如果想要实现骨架屏，大致有这么几步。</p>
+<p data-nodeid="600">第一步：先让 UI 设计师设计一张当前页面对应离线包的图，作为骨架屏展示图片。</p>
+<p data-nodeid="601">第二步，在业务需求开发过程中，前端工程师拿到图后，把这张图片上传到 CDN 上面。</p>
+<p data-nodeid="602">第三步，在客户端代码，增加启动时读取图片骨架屏的配置文件。如下面代码所示。</p>
+<pre class="lang-java hljs" data-nodeid="603"><code data-language="java"><span class="hljs-comment">// 传入设备分辨率ratioWidth:400, ratioHeight:500</span>
+{
+<span class="hljs-string">"code"</span>:<span class="hljs-number">0</span>,
+<span class="hljs-comment">// code 是0 代表请求成功&nbsp; &nbsp;-1 代表图片骨架屏功能关闭</span>
+<span class="hljs-string">"data"</span>:{
+&nbsp; &nbsp; <span class="hljs-string">"m.58.com/enjoy-given/eg/index.html"</span>:{
+&nbsp; &nbsp; &nbsp; <span class="hljs-string">"rege"</span>:<span class="hljs-string">'#/content/index'</span>
+&nbsp; &nbsp; &nbsp; <span class="hljs-string">"routes"</span>:{
+&nbsp; &nbsp; &nbsp; &nbsp;   <span class="hljs-string">"#/content/index"</span>:{
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;   <span class="hljs-string">"downloadUrl"</span>:<span class="hljs-string">'https://m.58.com/pic.png?400*500'</span>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;   <span class="hljs-string">"imgName"</span>:<span class="hljs-string">'pic.png'</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;   <span class="hljs-string">"id"</span>:<span class="hljs-string">'10001'</span>,
+		  }
+	  }&nbsp;
+	},
+
+<span class="hljs-string">"msg"</span>:<span class="hljs-string">""</span>
+&nbsp; }
+}
+</code></pre>
+<p data-nodeid="604">首先是传入设备分辨率，比如 400 * 500，然后设置状态码 code。code 是 0 代表成功，-1 代表关闭图片骨架屏功能。 data 对象是具体的数据，m.58.com/enjoy-given/eg/index.html 是对应的页面 URL，骨架屏那个图片的地址是https://m.58.com/pic.png?400*500。</p>
+<p data-nodeid="605">当用户打开 WebView 时，客户端对 URL 进行解析，取得该 URL 对应的 host 和pathname，然后将这两个数据分别与 data 和 routes 中的数据做比较。</p>
+<p data-nodeid="606">如果都匹配上，说明要展示骨架屏，此时可根据 routes下面的 id 和 imgName 获取到对应的图片文件。当三个字符串拼起来，即zzSkeleton + id +imgName，就可获得最终的图片名字。其中 zzSkeleton 就是一个字符串， ID 我设置成 10001，imgName 表示具体的图片名称，比如代码中的 pic.png，最终图片名称为 “zzSkeleton10001pic.pn”。</p>
+<p data-nodeid="607">在实现过程中要注意以下三点。</p>
+<p data-nodeid="608">第一，注意区分首次使用和二次使用。首次使用的话，客户端遍历上述配置文件，下载数据中对应图片即可；二次使用时，需要拿当前的配置文件对比之前的配置文件，如果图片名称不同，需要下载新的图片。</p>
+<p data-nodeid="609">第二，需要客户端在内存中建立图片，以加快图片骨架屏的加载速度。</p>
+<p data-nodeid="610">第三，图片骨架屏展示过程中会出现拉伸问题。这是因为分辨率不同造成的，我们可以让 App</p>
+<p data-nodeid="611">在获取配置文件时，加上当前页面的分辨率，这样接口会根据分辨率返回最合适的图片。</p>
+<p data-nodeid="612">以上是具体的实现方案，在实际当中，我们该如何借助它来进行性能优化呢？</p>
+<h4 data-nodeid="613">使用及注意事项</h4>
+<p data-nodeid="614">首先<strong data-nodeid="693">骨架屏方案，非常适合资源加载时间长的页面</strong>，比如列表页的首屏内容有很多个数据接口、筛选项、精选数据、列表数据等，这时候一定要用骨架屏。而对于一些 SSR 页面，因为白屏阶段比较短，可用可不用。</p>
+<p data-nodeid="615">骨架屏使用起来比较简单，前端工程师只要在开发项目时，让 UI 对应出一个骨架图的图片，然后上传到 CDN，并给出页面路径和文件路径，生成配置文件给客户端，客户端根据配置加载骨架屏即可。</p>
+<p data-nodeid="616">不过在实操时需要注意两点：</p>
+<ul data-nodeid="617">
+<li data-nodeid="618">
+<p data-nodeid="619">骨架屏中的内容结构，应该只是首屏的内容结构，不是整个页面的内容结构，反之会造成骨架图体积过大，加载骨架屏图片时间过长的问题；</p>
+</li>
+<li data-nodeid="620">
+<p data-nodeid="621">骨架屏的问题，比如骨架屏代码异常加载时没有展示，或者展示时间过长，因为它不会影响白屏时间，我们很难发现。所以骨架屏什么时候展示和什么时候销毁，客户端要<strong data-nodeid="702">以日志形式记录</strong>下来，上传到性能监控平台，这样定期去看一下日志，则可以发现问题。</p>
+</li>
+</ul>
+<h3 data-nodeid="622">使用 SSR 方案优化页面性能</h3>
+<p data-nodeid="623">一般来说，一个 Web 页面的渲染主要由客户端或者浏览器端来完成，大致过程是：客户端先从服务端请求到 index.html，然后加载脚本文件，Web 应用通过 ajax 请求到页面数据，并把相应的数据填充到模板，最终形成完整的页面来呈现给用户。</p>
+<p data-nodeid="624">SSR（Server Side Rende，服务端渲染） 则把数据请求（也就是前面提到 ajax 请求）放在了服务端，服务端收到返回结果时，把数据填充到模板形成完整的页面，由服务器端把渲染完成的完整页面返回给客户端。这样减少了一些客户端到服务器端的数据接口请求，加快了首屏展现速度。</p>
+<h4 data-nodeid="625">SSR 的实现及使用</h4>
+<p data-nodeid="626">如何实现 SSR 呢？我们选用了 nuxt.js 方案。</p>
+<p data-nodeid="627">为什么选择它？因为手机业务迭代开发速度比较快，我们希望将 SSR 开发的一些配置都能够封装起来，让前端工程师介入成本降低。由于目前业界移动端使用 Vue 的比较多，所以寻找能和它配套的方案可以大大降低接入成本。而 Nuxt.js 正是这种方案，它是一款基于 Vue 的 SSR 开源框架，使用 Webpack 和 Node.js 进行封装，其中预设了开发服务端渲染应用所需要的各种配置。</p>
+<p data-nodeid="628">具体到开发方面，官网文档介绍得比较详细，通过脚手架 npx 即可创建一个项目，然后进入 service-life目录，运行npm run dev，即可看到页面效果。</p>
+<pre class="lang-java hljs" data-nodeid="629"><code data-language="java">npx create-nuxt-app service-life
+cd service-life
+npm run dev
+</code></pre>
+<p data-nodeid="630">接下来我们来看如何在项目中接入 SSR 方案。因为移动端我们经常使用 Vue CSR ，和 Vue CSR 一致的地方（如 client 的 webpack 配置，项目基础结构等），在这里我就不过多介绍了，重点放在不同点上。</p>
+<p data-nodeid="631">首先，一些基础要求要满足。一是如果没引入 Vuerouter、Vuex 和 axios，则需要引入，确保客户端拿到的数据和客户端一致。二是由于服务端也需要接收 URL，然后传递给 vue 程序进行处理，所以要做好跨平台的路由配置，具体可使用 Vuerouter。三是数据端也需要跨平台库，对应的技术是 axios + vuex。</p>
+<p data-nodeid="632">其次，我们需要为 webpack 提供两个打包入口文件， client 端和 server 端各一份。</p>
+<p data-nodeid="633">由于用户在客户端每次访问 vue 时，都是一个新的上下文，但在用户访问服务端时，用于服务端渲染的 Node.js 启动后就一直在运行。也就是说，每一个用户请求处理都在同一个应用上下文中进行。为了确保不串数据，需要为每次 SSR 请求，创建全新的 app、store 和 router。</p>
+<p data-nodeid="634">然后，我们重构组件的数据获取方式，在页面开发渲染之前，利用服务端进程，做好数据获取和解析工作，然后把状态和数据存存储于 store 中。</p>
+<p data-nodeid="635">这里面需要注意的是，SSR 应用在挂载（mount）到客户端应用程序之前，需要获取到与服务器端应用程序完全相同的数据。否则，客户端应用程序会因为使用与服务器端应用程序不同的状态，导致混合失败。</p>
+<h4 data-nodeid="636">白屏时间 100ms 的 SSR 优化</h4>
+<p data-nodeid="637">做好上述工作后，我们白屏时间基本可以达到 200ms（标准是 300ms）。之后，我们还可以做一些升级优化，确保白屏时间达到 100ms 以内。具体来说，可以实施以下两个方面的工作：</p>
+<ul data-nodeid="638">
+<li data-nodeid="639">
+<p data-nodeid="640"><strong data-nodeid="721">利用服务端的性能优势，尽量在服务端完成资源加载、首屏切分等工作</strong></p>
+</li>
+<li data-nodeid="641">
+<p data-nodeid="642"><strong data-nodeid="725">利用服务端统一缓存机制，对数据接口、页面和组件做缓存</strong></p>
+</li>
+</ul>
+<p data-nodeid="643">怎么理解呢？</p>
+<p data-nodeid="644">第一，服务端渲染的最大优势，就是后端服务性能要远高于手机，所以请求数据接口和渲染时，耗时会更短。以我们手机业务列表页为例，CSR 下面渲染需要 600ms，到了 SSR下，渲染只需要 300ms。为此，我们可以把很多原本客户端做到的事情挪到了服务端，比如模块文件加载，首屏切分等。</p>
+<p data-nodeid="645">第二，服务器端缓存与客户端最大不同是，服务端属于统一公用，也就是说，只要某一个用户访问过一次，后续所有用的访问都可以使用这份缓存。我们可以利用这一特点，采用 LRU（Least Recently Used，最近最少使用缓存机制）和 Redis 做好缓存功能，降低白屏时间。</p>
+<p data-nodeid="646">具体来说，LRU 属于页面级缓存，对于数据统一性页面（有别于千人千面数据的页面），利用 LRU-Cache 可以缓存当前请求的数据资源。为了降低缓存的颗粒度，提高缓存的服用行，我们还可以用它来对渲染后的 vue 组件进行缓存。</p>
+<p data-nodeid="647">而使用 Redis 可以对跨页面的数据接口进行缓存，将整体渲染时间再减少 100ms。为什么呢？因为 SSR 应用程序部署在多服务、多进程下，该进程下的缓存并不是共享的，这就造成缓存命中效率低下，而使用 Redis 可以解决这个问题，进而更好实现跨页面数据缓存（关联上跨云接口缓存这里，呼应主题）。</p>
+<p data-nodeid="648">在实施过程中，还要注意以下几点：</p>
+<p data-nodeid="649">第一，前端工程师因为对后端服务了解不多，在实际开发中可能会出现一些问题，例如我们之前遇到的，在服务端取后端数据接口时，取到的订单信息直接展示在页面源码中，导致乌云系统爆出了一个安全漏洞。所以建议你系统学习一些服务端安全知识，避免类似问题出现。</p>
+<p data-nodeid="650">第二，在 SSR 服务出现高并发问题后，服务扩容是一种解决方案，但前端工程师对这方面并不擅长（如估算服务 QPS），容易出现问题。怎么办呢？一方面可以让运维和后端工程师一起协助，另外一方面也要做好 CSR 的降级，一旦遇到问题，可以快速降级。</p>
+<h3 data-nodeid="893">小结</h3>
+<p data-nodeid="1205"><img src="https://s0.lgstatic.com/i/image6/M00/32/C2/Cgp9HWBuXziAAA4DAAI6QH-dulY404.png" alt="溪风的思维导图14.png" data-nodeid="1209"></p>
+<p data-nodeid="1206">好了，以上就是骨架屏和 SSR 性能优化方案。在实际当中，你可能会问了：SSR 说了这么多优点，为什么没全量普及，替代掉 CSR？</p>
+
+
+
+
+
+<p data-nodeid="653">这是因为， SSR 需要你对后端知识，尤其是 Node.js 知识有很好地把握，且具备一定的数据接口设计规划和设计能力，但许多前端工程师很容易忽视这方面的学习。还有，SSR 渲染进行的页面，一些事件还在绑定中，有可能会出现操作没反应的情形；一些环境变量（如 window、document ）获取不到，稍不注意也会遇到内存泄漏的问题。</p>
+<p data-nodeid="654">当然，这些对于白屏 100ms 的效果实现，都是非常值得的，而且前者可以通过提前安排Node.js 服务端开发相关培训来解决，后者可以通过整理一份 SSR 开发规范，将一步步蹚过的坑和宝贵经验沉淀下来。</p>
+<p data-nodeid="655">下面给你留一个思考题：</p>
+<blockquote data-nodeid="656">
+<p data-nodeid="657">SSR 方案和前面提到离线化方案有什么区别？</p>
+</blockquote>
+<p data-nodeid="658" class="">可以写到下面的留言区哦。接下来我们将进入下一讲 —— WebView 层及代码架构层面优化。</p></div>
+
+</body></html>

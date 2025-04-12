@@ -1,0 +1,1189 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>07 | 死锁：为什么流计算应用突然卡住，不处理数据了?</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>07 | 死锁：为什么流计算应用突然卡住，不处理数据了?</h1><p data-nodeid="28717" class="">今天，我们来讨论一个非常有趣的话题，也就是流计算系统中的死锁问题。</p>
+<p data-nodeid="28718">在第 06 课时，我们讲解了 CompletableFuture 这个异步编程类的工作原理，并用它实现了一个流计算应用。为了流计算应用不会出现 OOM 问题，我们还专门使用 BackPressureExecutor 执行器，实现了反向压力的功能。</p>
+<p data-nodeid="28719">另外，我们在 05 课时已经讲过，描述一个流计算过程使用的是 DAG，也就是“有向无环图”。对于“有向”，我们知道这是代表着流数据的流向。而“无环”又是指什么呢？为什么一定要是“无环”？</p>
+<p data-nodeid="28720">其实之所以要强调“无环”，是因为在流计算系统中，当“有环”和“反向压力”一起出现时，流计算系统将会出现“死锁”问题。而程序一旦出现“死锁”，那除非人为干预，否则程序将一直停止执行，也就是我们常说的“卡死”。这在生产环境是绝对不能容忍的。</p>
+<p data-nodeid="28721">所以，我们今天将重点分析流计算系统中的“死锁”问题。</p>
+<h3 data-nodeid="28722">为什么流计算过程不能有环</h3>
+<p data-nodeid="28723">我们从一个简单的流计算过程开始，这个流计算过程的 DAG 如下图 1 所示。</p>
+<p data-nodeid="28881" class=""><img src="https://s0.lgstatic.com/i/image6/M00/03/B1/Cgp9HWAfi2KATSaEAAE2mmZy--s849.png" alt="image (2).png" data-nodeid="28888"></p>
+
+
+<p data-nodeid="28726">DAG 描述了一个最简单的流计算过程，步骤 A 的输出给步骤 B 进行处理。</p>
+<p data-nodeid="28727">这个流计算过程用 CompletableFuture 实现非常简单。如下所示（<a href="https://github.com/alain898/realtime_stream_computing_course/blob/main/course07/src/main/java/com/alain898/course/realtimestreaming/course07/deadlock/DeadLockDemo.java" data-nodeid="28794">请参考完整代码</a>）：</p>
+<pre class="lang-java hljs" data-nodeid="28728"><code data-language="java">ExecutorService AExecutor = <span class="hljs-keyword">new</span> BackPressureExecutor(
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-string">"AExecutor"</span>, <span class="hljs-number">1</span>, <span class="hljs-number">1</span>, <span class="hljs-number">1</span>, <span class="hljs-number">10</span>, <span class="hljs-number">1</span>);
+ExecutorService BExecutor = <span class="hljs-keyword">new</span> BackPressureExecutor(
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-string">"BExecutor"</span>, <span class="hljs-number">1</span>, <span class="hljs-number">1</span>, <span class="hljs-number">1</span>, <span class="hljs-number">10</span>, <span class="hljs-number">1</span>);
+AtomicLong itemCounter = <span class="hljs-keyword">new</span> AtomicLong(<span class="hljs-number">0L</span>);
+<span class="hljs-function">String <span class="hljs-title">stepA</span><span class="hljs-params">()</span> </span>{
+&nbsp; &nbsp; String item = String.format(<span class="hljs-string">"item%d"</span>, itemCounter.getAndDecrement());
+&nbsp; &nbsp; logger.info(String.format(<span class="hljs-string">"stepA item[%s]"</span>, item));
+&nbsp; &nbsp; <span class="hljs-keyword">return</span> item;
+}
+<span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">stepB</span><span class="hljs-params">(String item)</span> </span>{
+&nbsp; &nbsp; logger.info(String.format(<span class="hljs-string">"stepB item[%s]"</span>, item));
+    sleep(<span class="hljs-number">10</span>); <span class="hljs-comment">// 睡眠一会，故意让 stepB 处理得比 stepA 慢</span>
+}
+<span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">demo1</span><span class="hljs-params">()</span> </span>{
+&nbsp; &nbsp; <span class="hljs-keyword">while</span> (!Thread.currentThread().isInterrupted()) {
+&nbsp; &nbsp; &nbsp; &nbsp; CompletableFuture
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .supplyAsync(<span class="hljs-keyword">this</span>::stepA, <span class="hljs-keyword">this</span>.AExecutor)
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .thenAcceptAsync(<span class="hljs-keyword">this</span>::stepB, <span class="hljs-keyword">this</span>.BExecutor);
+&nbsp; &nbsp; }
+}
+</code></pre>
+<p data-nodeid="28729">上面的代码中，步骤 A 和步骤 B 使用了两个不同的执行器，即 AExecutor 和 BExecutor 。并且为了避免 OOM 问题，我们使用的执行器都是带反向压力功能的 BackPressureExecutor。</p>
+<p data-nodeid="28730">上面的程序运行起来没有任何问题。即便我们明确通过 sleep 函数，让 stepB 的处理速度只有 stepA 的十分之一，上面的程序都能够长时间的稳定运行（stepA 和 stepB 会不断打印出各自的处理结果，并且绝不会出现 OOM 问题）。</p>
+<p data-nodeid="28731">到此为止，一切都非常符合我们的预期。</p>
+<p data-nodeid="28732">但是现在，我们需要对图 1 的 DAG 稍微做点变化，让 B 在处理完后，将其结果重新输入给自己再处理一次。这种处理逻辑，在实际开发中也会经常遇到，比如 B 在处理失败时，就将处理失败的任务，重新添加到自己的输入队列，从而实现失败重试的功能。</p>
+<p data-nodeid="28733">修改后的 DAG 如下图所示。</p>
+<p data-nodeid="29223" class=""><img src="https://s0.lgstatic.com/i/image6/M00/03/AF/CioPOWAfi2yAJoUSAAEjy8tdsAA410.png" alt="image (3).png" data-nodeid="29230"></p>
+
+
+<p data-nodeid="28736">很明显，上面的 DAG 在步骤 B 上形成了一个“环”，因为有一条从 B 开始的有向线段，重新指向了 B 自己。相应的，前面的代码也需要稍微做点调整，改成下面的方式：</p>
+<pre class="lang-java hljs" data-nodeid="28737"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">demo1</span><span class="hljs-params">()</span> </span>{
+&nbsp; &nbsp; <span class="hljs-keyword">while</span> (!Thread.currentThread().isInterrupted()) {
+&nbsp; &nbsp; &nbsp; &nbsp; CompletableFuture
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .supplyAsync(<span class="hljs-keyword">this</span>::stepA, <span class="hljs-keyword">this</span>.AExecutor)
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .thenApplyAsync(<span class="hljs-keyword">this</span>::stepB, <span class="hljs-keyword">this</span>.BExecutor)
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .thenApplyAsync(<span class="hljs-keyword">this</span>::stepB, <span class="hljs-keyword">this</span>.BExecutor);
+&nbsp; &nbsp; }
+}
+</code></pre>
+<p data-nodeid="28738">上面的代码中，我们增加了一次 thenApplyAsync 调用，用于将 stepB 的输出重新作为其输入。需要注意的是，由于第二次 stepB 调用后没有再设置后续步骤，所以，虽然 DAG 上“有环”，但 stepB 并不会形成死循环。</p>
+<p data-nodeid="28739">上面这段代码，初看起来并没什么问题，毕竟就是简单地新增了一个“重试”的效果嘛。但是，如果你实际运行上面这段代码就会发现，只需要运行不到 1 秒钟，上面这段程序就会“卡”住，之后控制台会一动不动，没有一条日志打印出来。</p>
+<p data-nodeid="28740">这是怎么回事呢？事实上这就是因为程序已经“死锁”了！</p>
+<h3 data-nodeid="28741">流计算过程死锁分析</h3>
+<p data-nodeid="28742">说到“死锁”，你一定会想到“锁”的使用。一般情况下之所以会出现“死锁”，主要是因为我们使用锁的方式不对，比如使用了不可重入锁，或者使用多个锁时出现了交叉申请锁的情况。这种情况下出现的“死锁”问题，我们确确实实看到了“锁”的存在。</p>
+<p data-nodeid="28743">但当我们在使用流计算编程时，你会发现，“流”的编程方式已经非常自然地避免了“锁”的使用，也就是说我们并不会在“流”处理的过程中用到“锁”。这是因为，当使用“流”时，被处理的对象依次从上游流到下游。当对象在流到某个步骤时，它是被这个步骤的线程唯一持有，因此不存在对象竞争的问题。</p>
+<p data-nodeid="28744">但这是不是就说流计算过程中不会出现“死锁”问题呢？不是的。最直接的例子就是前面的代码，我们根本就没有用到“锁”，但它还是出现了“死锁”的问题。</p>
+<p data-nodeid="28745">所以，为什么会出现“死锁”呢？这里就需要我们仔细分析下了。下面的图 3 描绘了图 2 中的流计算过程之所以会发生死锁的原因。</p>
+<p data-nodeid="29571" class=""><img src="https://s0.lgstatic.com/i/image6/M00/03/AF/CioPOWAfi3WAaLyaAAH5vr_30vk488.png" alt="image (4).png" data-nodeid="29578"></p>
+
+
+<p data-nodeid="28748">在图 3 中，整个流计算过程有 A 和 B 这两个步骤，并且具备“反向压力”能力。这时候，如果 A 的输出已经将 B 的输入队列占满，而 B 的输出又需要重新流向 B 的输入队列，那么由于“反向压力”的存在，B 会一直等到其输入队列有空间可用。而 B 的输入队列又因为 B 在等待，永远也不会有空间被释放，所以 B 会一直等待下去。同时，A 也会因为 B 的输入队列已满，由于反向压力的存在，它也只能不停地等待下去。</p>
+<p data-nodeid="28749">如此一来，整个流计算过程就形成了一个死锁，A 和 B 两个步骤都会永远等待下去，这样就出现了我们前边看到的程序“卡”住现象。</p>
+<h3 data-nodeid="28750">形成“环”的原因</h3>
+<p data-nodeid="28751">在图 2 所示的 DAG 中，我们是因为需要让 stepB 失败重试，所以“随手”就让 stepB 将其输出重新作为输入重新执行一次。这姑且算是一种比较特殊的需求吧。</p>
+<p data-nodeid="28752">但在实际开发过程中，我们的业务逻辑明显是可以分为多个依次执行的步骤，用 DAG 画出来时，也是“无环”的。但在写代码时，有时候一不小心，也会无意识地将一个本来无环的 DAG，实现成了有环的过程。下面图 4 就说明了这种情况。</p>
+<p data-nodeid="29925" class="te-preview-highlight"><img src="https://s0.lgstatic.com/i/image6/M00/03/AF/CioPOWAfi32AX5a1AAL9Aqk2D9Y454.png" alt="image (5).png" data-nodeid="29932"></p>
+
+
+<p data-nodeid="28755">在图 4 中，业务逻辑本来是 A 到 B 到 C 这样的“无环”图，<strong data-nodeid="28829">结果由于我们给这三个不同的步骤，分配了同一个执行器 executor，实际实现的流计算过程就成了一个“有环”的过程</strong>。</p>
+<p data-nodeid="28756">在这个“有环”的实现中，只要任意一个步骤的处理速度比其他步骤慢，就会造成执行器的输入队列占满。一旦输入队列占满，由于反向压力的存在，各个步骤的输出就不能再输入到队列中。最终，所有执行步骤将会阻塞，也就形成了死锁，整个系统也被“卡”死。</p>
+<h3 data-nodeid="28757">如何避免死锁</h3>
+<p data-nodeid="28758">所以，我们在流计算过程中，应该怎样避免死锁呢？其实很简单，有三种方法。</p>
+<p data-nodeid="28759">一是<strong data-nodeid="28838">不使用反向压力功能</strong>。只需要我们不使用反向压力功能，即使业务形成“环”了，也不会死锁，因为每个步骤只需要将其输出放到输入队列中，不会发生阻塞等待，所以就不会死锁了。但很显然，这种方法禁止使用。毕竟，没有反向压力功能，就又回到 OOM 问题了，这是万万不可的！</p>
+<p data-nodeid="28760">二是<strong data-nodeid="28844">避免业务流程形成“环”</strong>。这个方法最主要的作用，是指导我们在设计业务流程时，不要将业务流程设计成“有环”的了。否则如果系统有反向压力功能的话，容易出现类似于图 3 的死锁问题。</p>
+<p data-nodeid="28761">三是<strong data-nodeid="28850">千万不要让多个步骤使用相同的队列或执行器</strong>。这个是最容易忽略的问题，特别是一些对异步编程和流计算理解不深的开发人员，最容易给不同的业务步骤分配相同的队列或执行器，在不知不觉中就埋下了死锁的隐患。</p>
+<p data-nodeid="28762">总的来说，在流计算过程中，反向压力功能是必不可少的，<strong data-nodeid="28856">为了避免“死锁”的问题，流计算过程中的任何一个步骤，它的输出绝不能再重新流回作为它的输入</strong>。</p>
+<p data-nodeid="28763">只需要注意以上几点，你就可以放心大胆地使用“流”式编程了，而且不用考虑“锁”的问题。由于没有了竞态问题，这既可以简化你编程的过程，也可以给程序带来显著的性能提升。</p>
+<h3 data-nodeid="28764">小结</h3>
+<p data-nodeid="28765">今天，我们分析了流计算过程中的死锁问题。这是除 OOM 问题外，另一个需要尤其注意的问题。</p>
+<p data-nodeid="28766">我们之前说过，“流”的本质是“异步”的，并且你可以看到，我们今天实现描述流计算过程的 DAG 时，用的就是 CompletableFuture 这个异步编程框架。所以，其实流计算的这种死锁问题，在其他“异步”场景下也会出现。</p>
+<p data-nodeid="28767">如果你需要使用其他编程语言或其他异步编程框架（比如 Node.js 中的 async 和 await）进行程序开发的话，一定要注意以下问题：</p>
+<ul data-nodeid="28768">
+<li data-nodeid="28769">
+<p data-nodeid="28770">这个异步框架支持反向压力？没有不支持的话，是如何处理 OOM 问题的？</p>
+</li>
+<li data-nodeid="28771">
+<p data-nodeid="28772">这个异步框架会发生死锁吗？如果会死锁的话，是如何处理死锁问题的？</p>
+</li>
+</ul>
+<p data-nodeid="28773">那么，你在以往的异步编程过程中，有没有遇到过死锁的问题呢？你可以将你遇到的问题，写在留言区！</p>
+<blockquote data-nodeid="28774">
+<p data-nodeid="28775">本课时精华：</p>
+</blockquote>
+<p data-nodeid="28776"><img src="https://s0.lgstatic.com/i/image2/M01/0C/91/Cip5yGAY-4CAZ6B8AAiqciZrqLg086.png" alt="Drawing 4.png" data-nodeid="28868"></p>
+<p data-nodeid="28777"><a href="https://github.com/alain898/realtime_stream_computing_course" data-nodeid="28871">点击此链接查看本课程所有课时的源码</a></p>
+<hr data-nodeid="28778">
+<p data-nodeid="28779" class=""><a href="https://kaiwu.lagou.com/data_enhancement.html?utm_source=lagouedu&amp;utm_medium=zhuanlan&amp;utm_campaign=%E5%A4%A7%E6%95%B0%E6%8D%AE%E5%BC%80%E5%8F%91%E9%AB%98%E8%96%AA%E8%AE%AD%E7%BB%83%E8%90%A5#/index" data-nodeid="28876"><img src="https://s0.lgstatic.com/i/image2/M01/0C/98/CgpVE2AZCKKAa8TbAAUCrlmIuEw611.png" alt="image (3).png" data-nodeid="28875"></a><br>
+<a href="https://kaiwu.lagou.com/data_enhancement.html?utm_source=lagouedu&amp;utm_medium=zhuanlan&amp;utm_campaign=%E5%A4%A7%E6%95%B0%E6%8D%AE%E5%BC%80%E5%8F%91%E9%AB%98%E8%96%AA%E8%AE%AD%E7%BB%83%E8%90%A5#/index" data-nodeid="28880">PB 级企业大数据项目实战 + 拉勾硬核内推，5 个月全面掌握大数据核心技能。点击链接，全面赋能！</a></p></div>
+
+</body></html>

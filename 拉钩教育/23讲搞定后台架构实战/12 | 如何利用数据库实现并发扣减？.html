@@ -1,0 +1,976 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>12 |&nbsp;如何利用数据库实现并发扣减？</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>12 |&nbsp;如何利用数据库实现并发扣减？</h1><p data-nodeid="1197" class="">在后台开发领域，高并发的扣减一直是比较热门的话题。在各类技术博客、大会分享以及面试问题中，出现频率都非常高，可见它的重要性和技术知识点的密集性。从本讲开始，我将由浅入深、由简至繁地介绍三种能够支撑不同并发量级的解决方案，首先介绍的是基于纯数据库实现的扣减方案。</p>
+<h3 data-nodeid="1198">什么是扣减类业务</h3>
+<p data-nodeid="1199">看到这个标题很多人可能会有疑惑，扣减类业务不就是指秒杀吗，为什么要取这么抽象的名字呢？</p>
+<p data-nodeid="1490" class="">但其实秒杀只是扣减类业务中的一个有代表性、具备一定技术复杂度的场景，它并不能代表扣减类业务的全部场景。我将在“<strong data-nodeid="1496">第 16 讲</strong>”中详细讲解秒杀相关的内容。除了秒杀之外，常见的扣减类业务有：</p>
+
+<ul data-nodeid="1201">
+<li data-nodeid="1202">
+<p data-nodeid="1203">购买一个或多商品时扣减的库存</p>
+</li>
+<li data-nodeid="1204">
+<p data-nodeid="1205">商家针对用户设置的某个或几个商品最多购买次数</p>
+</li>
+<li data-nodeid="1206">
+<p data-nodeid="1207">支付订单时扣减的金额</p>
+</li>
+<li data-nodeid="1208">
+<p data-nodeid="1209">...</p>
+</li>
+</ul>
+<p data-nodeid="2083" class="">上述业务场景有几个共性点：购买的或设置需要扣减的数量一次可以是一个或多个；数量是共享的，每个用户都可以扣减某一个数据的数量。基于上述分析，可以给扣减类业务下一个定义：</p>
+
+<blockquote data-nodeid="1211">
+<p data-nodeid="1212">它是需要通过对一个或多个已有的、用户间或用户内共享的数量，精准扣减成功才能继续的业务。</p>
+</blockquote>
+<p data-nodeid="2671" class="">通过定义，将我们要讨论的扣减类业务圈定了一个边界和清晰的概念。希望你在本模块里和我一起锚定这个定义，防止出现因为定义不清楚导致的认知偏差和讨论分歧。</p>
+
+<p data-nodeid="1214">在了解了扣减类业务的定义之后，再来看看它和前面几个模块中涉及的读业务与 UGC 写业务的区别。</p>
+<ul data-nodeid="31714">
+<li data-nodeid="31715">
+<p data-nodeid="31716" class="te-preview-highlight"><strong data-nodeid="31723">读业务的特点是写少读多</strong>，同时写入为非在线类运营操作，写入的 SLA（Service Level Agreement，服务等级协议）要求级别较低，对于读的 SLA 最高。读数据因为不会改或者频率很低，所以可以采用数据不断前置应对性能等的要求。</p>
+</li>
+<li data-nodeid="31717">
+<p data-nodeid="31718"><strong data-nodeid="31728">UGC 写业务则和扣减业务类似</strong>。写入均是 C 端（客户）操作，对写入的 SLA 要求级别最高。但 UGC 写业务的特点是写入的数据是用户私有的而不是共享的，同时写入不需要依赖已有的数据。对于 UGC 写业务，只要尽最大可能将数据存储下来即可。</p>
+</li>
+</ul>
+
+
+
+
+
+
+<p data-nodeid="10968" class="">相比上两类业务的各自特点与技术实现关注点，扣减类业务着重关注对历史已有数据的增减上，接下来我们就来具体看一看对扣减类业务的特点如何应对。</p>
+
+
+
+
+
+
+
+
+
+<h3 data-nodeid="1221">扣减类业务的技术关注点</h3>
+<p data-nodeid="1222">发生扣减必然就会存在归还。比如用户购买了商品之后因为一些原因想要退货，这个时候就需要将商品的库存、商品设置的购买次数及订单金额等进行归还。因此，在实现的时候还需要考虑归还。但是因归还的实现较通用，且归还是后置流程对并发性要求并不高，故本模块会先用三讲介绍如何应对高并发扣减，再来讲解如何实现归还。</p>
+<p data-nodeid="1223">基于扣减类业务的定义，我把关于扣减的实现，需要关注的技术点总结如下：</p>
+<ul data-nodeid="1224">
+<li data-nodeid="1225">
+<p data-nodeid="1226">当前剩余的数量需要大于等于当次需要扣减的数量，即不允许超卖；</p>
+</li>
+<li data-nodeid="1227">
+<p data-nodeid="1228">对同一个数据的数量存在用户并发扣减，需要保证并发一致性；</p>
+</li>
+<li data-nodeid="1229">
+<p data-nodeid="1230">需要保证可用性和性能，性能至少是秒级；</p>
+</li>
+<li data-nodeid="1231">
+<p data-nodeid="1232">一次的扣减会包含多个目标数量；</p>
+</li>
+<li data-nodeid="1233">
+<p data-nodeid="1234">当次扣减有多个数量时，其中一个扣减不成功即不成功，需要回滚。</p>
+</li>
+</ul>
+<p data-nodeid="24504" class="">对于返还的实现需要关注的技术点如下：</p>
+
+<ul data-nodeid="31112">
+<li data-nodeid="31113">
+<p data-nodeid="31114">必须有扣减才能返还；</p>
+</li>
+<li data-nodeid="31115">
+<p data-nodeid="31116">返还的数量必须要加回，不能丢失；</p>
+</li>
+<li data-nodeid="31117">
+<p data-nodeid="31118" class="">返还的数据总量不能大于扣减的总量；</p>
+</li>
+<li data-nodeid="31119">
+<p data-nodeid="31120">一次扣减可以有多次返还；</p>
+</li>
+<li data-nodeid="31121">
+<p data-nodeid="31122" class="">返还需要保证幂等。</p>
+</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+<p data-nodeid="1247">在了解了扣减类业务的场景、定义，确定了在实现时需要包含的功能点，以及各个功能点的实现要求后，下面我将介绍三种不同方式的实现方案。这三个方案都能够满足上述要求的功能和对应的技术点要求，但三个方案的实现复杂度以及能够支撑的性能和并发量级均有一定的区别。</p>
+<p data-nodeid="18024" class="">下面介绍的实现方案将直接以库存扣减为蓝本。其他扣减场景，比如：限次购买、支付扣减等技术方案基本类似，你可以举一反三。下面我们先来介绍第一种方案——纯数据库的扣减。</p>
+
+
+
+
+
+
+
+
+
+
+
+
+<h3 data-nodeid="1249">纯数据库式扣减实现</h3>
+<p data-nodeid="19798" class="">顾名思义，纯数据库的方案就是扣减业务的实现完全依赖数据库提供的各项功能，而不依赖其他额外的一些存储和中间件了。<strong data-nodeid="19804">纯数据库实现的好处是逻辑简单、开发及部署成本低</strong>。</p>
+
+
+
+<p data-nodeid="1251">纯数据库的实现之所以能够满足扣减业务的各项功能要求，主要是依赖各类主流数据库提供的两个特性：</p>
+<ul data-nodeid="1252">
+<li data-nodeid="1253">
+<p data-nodeid="1254">第一是基于数据库乐观锁的方式保证数据并发扣减的强一致性；</p>
+</li>
+<li data-nodeid="1255">
+<p data-nodeid="1256">第二是基于数据库的事务实现批量扣减部分失败时的数据回滚。</p>
+</li>
+</ul>
+<p data-nodeid="1257">基于上述特性实现的架构方案如下图 1 所示，它包含一个扣减服务和一个数量数据库。</p>
+<p data-nodeid="1258"><img src="https://s0.lgstatic.com/i/image6/M00/04/56/Cgp9HWApcLGAA14FAAEV09SPPKc433.png" alt="图片1.png" data-nodeid="1390"></p>
+<div data-nodeid="1259"><p style="text-align:center">图 1：纯数据库扣减架构图</p></div>
+<blockquote data-nodeid="20391">
+<p data-nodeid="20392" class="">注意，扣减服务是一个后端服务，因本课程是介绍后台架构，对于扣减中涉及的前端技术不进行赘述，后续再提到的各种服务可直接默认为提供 RPC 接口的后端应用。</p>
+</blockquote>
+
+<p data-nodeid="1262">数量数据库存储扣减中的所有数据，主要包含两张表：扣减剩余数量表和流水表。扣减剩余数量表是最主要的表，包含实时的剩余数量。主要结构如下表 1 所示：</p>
+<div data-nodeid="1263"><p style="text-align:center">表 1：扣减剩余数量表</p></div>
+<p data-nodeid="1264"><img src="https://s0.lgstatic.com/i/image6/M00/04/53/CioPOWApcMKAFTDqAAC_Cy-JUZw200.png" alt="图片2.png" data-nodeid="1395"></p>
+<p data-nodeid="1265">如上表所示，对于当前剩余可购买的数量，当用户进行取消订单、售后等场景时，都需要把数量加回到此字段。同时，当商家补齐库存时，也需要把数量加回。</p>
+<p data-nodeid="20980" class="">从完成业务功能的角度看，只要扣减剩余数量表即可。但在实际场景中，会需要查看明细进行对账、盘货、排查问题等需求。其次，在扣减后需要进行返还时是非常依赖流水的。因为只能返还有扣减记录的库存数量。最后，在技术上的幂等性，也非常依赖流水表。下面我们来看一下流水表的主要结构，如下表 2 所示：</p>
+<div data-nodeid="20981"><p style="text-align:center">表 2：扣减流水表</p></div>
+
+
+<p data-nodeid="1268"><img src="https://s0.lgstatic.com/i/image6/M00/04/53/CioPOWApcNCADIF0AADDNJfiBc4396.png" alt="图片3.png" data-nodeid="1400"></p>
+<h4 data-nodeid="1269">1. 扣减接口实现</h4>
+<p data-nodeid="1270">完成了存储的数据结构设计后，咱们再来学习一下扣减服务提供的扣减接口的实现。扣减接口接受用户提交的扣减请求，包含用户账号、一批商品及对应的购买数量，大致实现逻辑如下图 2 所示：</p>
+<p data-nodeid="1271"><img src="https://s0.lgstatic.com/i/image6/M00/04/56/Cgp9HWApcOmAJUgzAAFb9E3dPqI312.png" alt="图片4.png" data-nodeid="1407"></p>
+<div data-nodeid="1272"><p style="text-align:center">图 2：扣减实现流程</p></div>
+<p data-nodeid="1273">在图 2 的流程开始时，首先进行的是数据校验，在其中可以做一些常规的参数格式校验。其次，它还可以进行库存扣减的前置校验。比如当数据库中库存只有 8 个时，而用户要购买 10 个，此时在数据校验中即可前置拦截，减少对于数据库的写操作。纯读不会加锁，性能较高，可以采用此种方式提升并发量。</p>
+<p data-nodeid="21569" class="">当用户只购买某商品 2 个时，如果在校验时剩余库存有 8 个，此时校验会通过。但在后续的实际扣减时，因为其他用户也在并发的扣减，可能会出现了幻读，即此用户实际去扣减时不足 2 个，导致失败。这种场景就会导致多一次数据库查询，降低了整体的扣减性能。其次，即使将校验放置在事务内，先查询数据库数量校验通过后再扣减，也会增加性能。</p>
+
+<p data-nodeid="22735" class="">那是不是前置校验就不需要了呢？在实践中，前置校验是需要的。相比读，扣减的事务性能更差，两弊相衡取其轻，能避免则避免。此外，扣减服务提供的数量查询接口和校验中的反查底层实现是相同的，如果反查走库则都走库。在“<strong data-nodeid="22741">模块二：构建高性读服务</strong>”中我们了解到，正常情况下，读比写的量级至少大十倍以上。因此，查询的性能问题仍须解决。关于如何规避性能问题、如何降低给数据库带来的压力，我们会在本讲后半部分详细讲解。</p>
+
+
+<p data-nodeid="1276" class="">在事务之后，则是数据库更新操作。因为用户扣减的商品数量可以是一个或多个，只要其中一个扣减不成功，则判定用户不能购买。注意，因为在事务之后，对商品使用 for 循环进行处理，每一次循环都需要判断结果。如果一个扣减失败，则进行事务回滚。基于上述提供的两张表结构，单条商品的扣减 SQL 大致如下：</p>
+<pre class="lang-java" data-nodeid="1277"><code data-language="java">update stock set leavedAmount=leavedAmount-currentAmount where skuid=<span class="hljs-string">'123456'</span> and leavedAmount&gt;=currentAmount
+</code></pre>
+<p data-nodeid="23916" class="">此 SQL 采用了类似乐观锁的方式实现了原子性，在 where 条件里判断此次需要的数量小于等于剩余的数量。在扣减服务的代码里，判断此 SQL 的返回值，如果值为 1 表示扣减成功，即用户此次购买的数量，当前的库存可以满足否则，返回 0 进行回滚即可。</p>
+
+<p data-nodeid="1279">扣减完成之后，需要记录流水数据。每一次扣减时，都需要外部用户传入一个 uuid 作为流水编号，此编号是全局唯一的。用户在扣减时传入唯一的编号有两个作用。</p>
+<ol data-nodeid="1280">
+<li data-nodeid="1281">
+<p data-nodeid="1282">当用户归还数量时，需要带回此编号，用来标识此次返还属于历史上的具体哪次扣减。</p>
+</li>
+<li data-nodeid="1283">
+<p data-nodeid="1284">进行幂等性控制。当用户调用扣减接口出现超时时，因为用户不知道是否成功，用户可以采用此编号进行重试或反查。在重试时，使用此编号进行标识防重。</p>
+</li>
+</ol>
+<p data-nodeid="1285">当每一个 SKU 按上述流程都扣减成功了，则提交事务，说明整个扣减成功。</p>
+<h4 data-nodeid="1286">2. 扣减接口实现升级</h4>
+<p data-nodeid="1287">在上面提到了前置校验的好处及存在的问题：多一次查询，就会增加数据库的压力，同时对整体服务性能也有一定影响。此外，对外提供的查询库存数量的接口也会对数据库产生压力，同时读的请求量要远大于写，由此带来的压力会更大。</p>
+<p data-nodeid="23328" class="">根据业务场景分析，读库存的请求一般是顾客浏览商品时产生，而调用扣减库存的请求基本上是用户购买时才会触发。用户购买请求的业务价值相比读请求会更大，因此对于写需要重点保障。转换到技术上，价值相对低的读来说是可以降级的、有损的。对于写要尽可能性能好、尽量减少不必要的读与写请求（写本身非常消耗性能）等。</p>
+
+<p data-nodeid="1289">针对上述的问题，可以对整体架构进行升级，升级后的架构如下图 3 所示：</p>
+<p data-nodeid="1290"><img src="https://s0.lgstatic.com/i/image6/M00/04/56/Cgp9HWApcPuAcMC5AAFXGYoBi64806.png" alt="图片5.png" data-nodeid="1430"></p>
+<div data-nodeid="1291"><p style="text-align:center">图 3：读写分离的扣减架构图</p></div>
+<p data-nodeid="1292">整体的升级策略采用了读写分离的方式，另外主从复制直接使用了 MySQL 等数据库已有功能，改动上非常小，只要在扣减服务里配置两个数据源。当客户查询剩余库存数量、扣减服务中的前置校验时，读取从数据库即可。而真正的数据扣减还是使用主数据库。</p>
+<p data-nodeid="1293">读写分离之后，根据二八原则，80% 的均为读流量，主库的压力降低了 80%。但采用了读写分离也会导致读取的数据不准确的问题，不过库存数量本身就在实时变化，短暂的差异业务上是可以容忍的，最终的实际扣减会保证数据的准确性。</p>
+<p data-nodeid="1294">不过，在上面提到的因为在扣减前，为了降低数据库的压力，增加的前置校验导致的性能下降问题，并没有得到太多实质性的升级解决。那么，接下来我们该从什么方向上解决这个问题呢？</p>
+<h4 data-nodeid="1295">3. 扣减接口实现再升级</h4>
+<p data-nodeid="1296">在基于数据库的主从复制降低了主库流量压力之后，还需要升级的就是读取的性能了。这里用到了我们在“<strong data-nodeid="1442">模块二：构建高性能读服务</strong>”里学习到的：使用 Binlog 实现简单、可靠的异构数据同步的技能，应用此方案后整体的架构如下图 4 所示：</p>
+<p data-nodeid="1297"><img src="https://s0.lgstatic.com/i/image6/M00/04/53/CioPOWApcQ6AUK4xAAHzcrHHvOU268.png" alt="图片6.png" data-nodeid="1445"></p>
+<div data-nodeid="1298"><p style="text-align:center">图 4：读写基于不同存储的架构图</p></div>
+<p data-nodeid="1299">和上面第 2 点实现的区别是增加了<strong data-nodeid="1455">缓存</strong>，用来提升读取从库的性能。在技术实现上，采用了在“<strong data-nodeid="1456">模块二：构建高性能读服务</strong>”里介绍的 Binlog 技术，这里不再赘述。</p>
+<p data-nodeid="1300">经过此次方案升级后，基本上解决了在前置扣减里校验环节及获取库存数量接口的性能问题，提高了用户体验性。</p>
+<h3 data-nodeid="1301">纯数据库扣减方案适用性</h3>
+<p data-nodeid="1302">要知道，任何方案都是根据业务需求、实现成本进行综合分析和取舍，很难有一个实现方案将所有诉求 100% 满足，它都是有一定的优点也有对应的缺点。</p>
+<p data-nodeid="1303">对于采用数据库实现扣减服务的方案也不例外，整体实现方案上也是有它适用的场景以及它不适用的场景。</p>
+<p data-nodeid="1304">纯数据库方案主要有以下几个优点：</p>
+<ul data-nodeid="1305">
+<li data-nodeid="1306">
+<p data-nodeid="1307">实现简单，即使读使用了前置缓存，整体代码工程就两个，即扣减服务与数据映射服务，在需求交付周期非常短、人力紧张的场景是非常适用的；</p>
+</li>
+<li data-nodeid="1308">
+<p data-nodeid="1309">使用了数据库的 ACID 特性进行扣减。业务上，库存数量既不会出现超卖，也不会出现少卖。</p>
+</li>
+</ul>
+<p data-nodeid="1310">但不足之处是，当扣减 SKU 数量增多时，性能非常差。因为对每一个 SKU 都需要单独扣减，导致事务非常大，极端情况下，可能出现几十秒的情况。</p>
+<p data-nodeid="1311">在上述的优点和不足背景下，请你思考以下两个问题：</p>
+<ul data-nodeid="1312">
+<li data-nodeid="1313">
+<p data-nodeid="1314">此方案在落地上有适用场景吗？</p>
+</li>
+<li data-nodeid="1315">
+<p data-nodeid="1316">或者有哪些适用场景呢？</p>
+</li>
+</ul>
+<p data-nodeid="1317">在一些企业内部 ERP 系统里的次数限制、中小电商站点的库存管理、政府系统等场景里，其实此方案是比较适合的。因为此类系统的用户并发数、对于请求的耗时要求、购买商品的数量都比较小，如果一开始就采用后几<strong data-nodeid="1473">讲</strong>里介绍的方案，其实是一种浪费。</p>
+<p data-nodeid="1318">当业务不断发展时，对上述指标有要求时，再去升级也不迟，毕竟系统是演化迭代来的，不是一天建成的。</p>
+<p data-nodeid="1319">到这里我们今天的重点内容就讲完了，此时你可能会有以下两个疑问，本讲的标题是“如何实现万级并发的扣减服务”，但从本篇所讲方案里和描述里，一没有提到具体数据，二从方案上看数据库并不能支持并发上万的扣减量，是不是有点标题党呢？</p>
+<p data-nodeid="1320">首先回答第一个疑问，在这里想做下正本清源，以后你看到任何类似单机过万的数字都要小心与仔细思考。因为任何没有机器配置的指标，都是耍流氓。如果我采用 Oracle 的数据库、100 多核的刀锋服务器、SSD 的硬盘，在一定情况下，即使是纯数据库的扣减方案，也是可以达到单机上万的 TPS 的。</p>
+<p data-nodeid="1321">对于第二个疑问，我想表达的思想是，任何架构都是不完美的，都是有取舍的。不要觉得单机过万或者并发过百万、千万就是最好，因为它在其他指标上会有更多的成本消耗。对于本讲标题设定的目标，请见后续章节分解。</p>
+<h3 data-nodeid="1322">总结</h3>
+<p data-nodeid="1323">为了让你对扣减类业务有一个清晰的认知，我首先介绍了什么是扣减类业务、适用场景，以及它的实现需要满足的功能要求。之所以没有直接讲解各种实现方案的原因是：一个优秀的方案一定是建立在对本质问题的理解之上，也就是定义问题，偏离问题的解决方案是事倍功半的。这个思想是本讲的要点之一，希望你牢记并在未来进行系统架构时第一时间定义问题再进行设计。</p>
+<p data-nodeid="1324">在此之上，本讲还介绍了递进式的架构设计演化方案，先介绍了一个满足基本功能的纯数据库方案。当新的问题出现时，又递进地介绍了采用主从分离的方案以及进一步的主从 + 缓存前置的方案。在理解了这两个递进方案的实现之外，也希望你了解，方案是演化的，而不是一步到位的。</p>
+<h3 data-nodeid="1325">练习题</h3>
+<p data-nodeid="1326"><strong data-nodeid="1486">最后，我再给你留两道思考题</strong>。</p>
+<ol data-nodeid="1327">
+<li data-nodeid="1328">
+<p data-nodeid="1329">除了使用主从同步来提升读取性能，是否可以使用数据库索引来提升性能？另外，数量数据库应如何设置索引来满足如防重等诉求？</p>
+</li>
+<li data-nodeid="1330">
+<p data-nodeid="1331">能否将数据库进行分库或者分表，利用分库或分表来提升扣减写入的并发性？</p>
+</li>
+</ol>
+<p data-nodeid="1332" class="">你可以把你的答案、思路或者课后总结写在留言区，如果你觉得今天的内容对你有所启发，欢迎分享给身边的朋友。我们一起交流！</p></div>
+
+</body></html>

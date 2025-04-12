@@ -1,0 +1,1314 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>14 | 重试机制是网络操作的基本保证</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>14 | 重试机制是网络操作的基本保证</h1><p data-nodeid="21258">在真实的微服务系统中， ZooKeeper、etcd 等服务发现组件一般会独立部署成一个集群，业务服务通过网络连接这些服务发现节点，完成注册和订阅操作。但即使是机房内部的稳定网络，也无法保证两个节点之间的请求一定成功，因此 Dubbo 这类 RPC 框架在稳定性和容错性方面，就受到了比较大的挑战。<strong data-nodeid="21264">为了保证服务的可靠性，重试机制就变得必不可少了</strong>。</p>
+
+
+
+<p data-nodeid="22099" class="">所谓的 <strong data-nodeid="22105">“重试机制”就是在请求失败时，客户端重新发起一个一模一样的请求，尝试调用相同或不同的服务端，完成相应的业务操作</strong>。能够使用重试机制的业务接口得是“幂等”的，也就是无论请求发送多少次，得到的结果都是一样的，例如查询操作。</p>
+
+<h3 data-nodeid="21681" class="">核心设计</h3>
+
+<p data-nodeid="20413">在上一课时中，我们介绍了 AbstractRegistry 中的 register()/unregister()、subscribe()/unsubscribe() 以及 notify() 等核心操作，详细分析了通过<strong data-nodeid="20504">本地缓存</strong>实现的容错功能。其实，这几个核心方法同样也是<strong data-nodeid="20505">重试机制</strong>的关注点。</p>
+<p data-nodeid="22934"><strong data-nodeid="22940">dubbo-registry 将重试机制的相关实现放到了 AbstractRegistry 的子类—— FailbackRegistry 中</strong>。如下图所示，接入 ZooKeeper、etcd 等开源服务发现组件的 Registry 实现，都继承了 FailbackRegistry，也就都拥有了失败重试的能力。</p>
+<p data-nodeid="22935" class=""><img src="https://s0.lgstatic.com/i/image/M00/4D/B9/Ciqc1F9bIqGAH2BVAAHKapYWDoE565.png" alt="Registry继承关系.png" data-nodeid="22943"></p>
+
+
+<p data-nodeid="20416"><strong data-nodeid="20518">FailbackRegistry 设计核心是</strong>：覆盖了 AbstractRegistry 中 register()/unregister()、subscribe()/unsubscribe() 以及 notify() 这五个核心方法，结合前面介绍的时间轮，实现失败重试的能力；真正与服务发现组件的交互能力则是放到了 doRegister()/doUnregister()、doSubscribe()/doUnsubscribe() 以及 doNotify() 这五个抽象方法中，由具体子类实现。这是典型的模板方法模式的应用。</p>
+<h3 data-nodeid="23362" class="">核心字段介绍</h3>
+
+<p data-nodeid="20418">分析一个实现类的第一步就是了解其核心字段，那 FailbackRegistry 的核心字段有哪些呢？</p>
+<ul data-nodeid="20419">
+<li data-nodeid="20420">
+<p data-nodeid="20421"><strong data-nodeid="20525">retryTimer（HashedWheelTimer 类型）</strong>：用于定时执行失败重试操作的时间轮。</p>
+</li>
+<li data-nodeid="20422">
+<p data-nodeid="20423"><strong data-nodeid="20530">retryPeriod（int 类型）</strong>：重试操作的时间间隔。</p>
+</li>
+<li data-nodeid="20424">
+<p data-nodeid="20425"><strong data-nodeid="20537">failedRegistered（ConcurrentMap&lt;URL, FailedRegisteredTask&gt;类型）</strong>：注册失败的 URL 集合，其中 Key 是注册失败的 URL，Value 是对应的重试任务。</p>
+</li>
+<li data-nodeid="20426">
+<p data-nodeid="20427"><strong data-nodeid="20544">failedUnregistered（ConcurrentMap&lt;URL, FailedUnregisteredTask&gt;类型）</strong>：取消注册失败的 URL 集合，其中 Key 是取消注册失败的 URL，Value 是对应的重试任务。</p>
+</li>
+<li data-nodeid="20428">
+<p data-nodeid="20429"><strong data-nodeid="20551">failedSubscribed（ConcurrentMap&lt;Holder, FailedSubscribedTask&gt;类型）</strong>：订阅失败 URL 集合，其中 Key 是订阅失败的 URL + Listener 集合，Value 是相应的重试任务。</p>
+</li>
+<li data-nodeid="20430">
+<p data-nodeid="20431"><strong data-nodeid="20560">failedUnsubscribed（ConcurrentMap&lt;URL, Set<notifylistener>&gt;类型）</notifylistener></strong>：取消订阅失败的 URL 集合，其中 Key 是取消订阅失败的 URL + Listener 集合，Value 是相应的重试任务。</p>
+</li>
+<li data-nodeid="20432">
+<p data-nodeid="20433"><strong data-nodeid="20567">failedNotified（ConcurrentMap&lt;Holder, FailedNotifiedTask&gt;类型）</strong>：通知失败的 URL 集合，其中 Key 是通知失败的 URL + Listener 集合，Value 是相应的重试任务。</p>
+</li>
+</ul>
+<p data-nodeid="20434">在 FailbackRegistry 的构造方法中，首先会调用父类 AbstractRegistry 的构造方法完成本地缓存相关的初始化操作，然后从传入的 URL 参数中获取重试操作的时间间隔（即retry.period 参数）来初始化 retryPeriod 字段，最后初始化 retryTimer****时间轮。整个代码比较简单，这里就不展示了。</p>
+<h3 data-nodeid="23782" class="">核心方法实现分析</h3>
+
+<p data-nodeid="20436">FailbackRegistry 对 register()/unregister() 方法和 subscribe()/unsubscribe() 方法的具体实现非常类似，所以这里我们就只介绍其中<strong data-nodeid="20577">register() 方法</strong>的具体实现流程。</p>
+<ol data-nodeid="20437">
+<li data-nodeid="20438">
+<p data-nodeid="20439">根据 registryUrl 中 accepts 参数指定的匹配模式，决定是否接受当前要注册的 Provider URL。</p>
+</li>
+<li data-nodeid="20440">
+<p data-nodeid="20441">调用父类 AbstractRegistry 的 register() 方法，将 Provider URL 写入 registered 集合中。</p>
+</li>
+<li data-nodeid="20442">
+<p data-nodeid="20443">调用 removeFailedRegistered() 方法和 removeFailedUnregistered() 方法，将该 Provider URL 从 failedRegistered 集合和 failedUnregistered 集合中删除，并停止相关的重试任务。</p>
+</li>
+<li data-nodeid="20444">
+<p data-nodeid="20445">调用 doRegister() 方法，与服务发现组件进行交互。该方法由子类实现，每个子类只负责接入一个特定的服务发现组件。</p>
+</li>
+<li data-nodeid="20446">
+<p data-nodeid="20447">在 doRegister() 方法出现异常的时候，会根据 URL 参数以及异常的类型，进行分类处理：待注册 URL 的 check 参数为 true（默认值为 true）；待注册的 URL 不是 consumer 协议；registryUrl 的 check 参数也为 true（默认值为 true）。若满足这三个条件或者抛出的异常为 SkipFailbackWrapperException，则直接抛出异常。否则，就会创建重试任务并添加到 failedRegistered 集合中。</p>
+</li>
+</ol>
+<p data-nodeid="20448">明确 register() 方法的核心流程之后，我们再来看 register() 方法的具体代码实现：</p>
+<pre class="lang-java hljs" data-nodeid="20449"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">register</span><span class="hljs-params">(URL url)</span> </span>{
+&nbsp; &nbsp; <span class="hljs-keyword">if</span> (!acceptable(url)) { 
+&nbsp; &nbsp; &nbsp; &nbsp; logger.info(<span class="hljs-string">"..."</span>); <span class="hljs-comment">// 打印相关的提示日志</span>
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">return</span>;
+&nbsp; &nbsp; }
+&nbsp; &nbsp; <span class="hljs-keyword">super</span>.register(url); <span class="hljs-comment">// 完成本地文件缓存的初始化</span>
+    <span class="hljs-comment">// 清理failedRegistered集合和failedUnregistered集合，并取消相关任务</span>
+&nbsp; &nbsp; removeFailedRegistered(url); 
+&nbsp; &nbsp; removeFailedUnregistered(url);
+&nbsp; &nbsp; <span class="hljs-keyword">try</span> {
+&nbsp; &nbsp; &nbsp; &nbsp; doRegister(url); &nbsp;<span class="hljs-comment">// 与服务发现组件进行交互，具体由子类实现</span>
+&nbsp; &nbsp; } <span class="hljs-keyword">catch</span> (Exception e) {
+&nbsp; &nbsp; &nbsp; &nbsp; Throwable t = e;
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-comment">// 检测check参数，决定是否直接抛出异常</span>
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">boolean</span> check = getUrl().getParameter(Constants.CHECK_KEY,
+               <span class="hljs-keyword">true</span>) &amp;&amp; url.getParameter(Constants.CHECK_KEY, <span class="hljs-keyword">true</span>)
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &amp;&amp; !CONSUMER_PROTOCOL.equals(url.getProtocol());
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">boolean</span> skipFailback = t <span class="hljs-keyword">instanceof</span> 
+            SkipFailbackWrapperException;
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">if</span> (check || skipFailback) {
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">if</span> (skipFailback) {
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; t = t.getCause();
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; }
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> IllegalStateException(<span class="hljs-string">"Failed to register"</span>);
+&nbsp; &nbsp; &nbsp; &nbsp; }
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-comment">// 如果不抛出异常，则创建失败重试的任务，并添加到failedRegistered集合中</span>
+&nbsp; &nbsp; &nbsp; &nbsp; addFailedRegistered(url);
+&nbsp; &nbsp; }
+}
+</code></pre>
+<p data-nodeid="20450">从以上代码可以看出，当 Provider 向 Registry 注册 URL 的时候，如果注册失败，且未设置 check 属性，则创建一个定时任务，添加到时间轮中。</p>
+<p data-nodeid="20451">下面我们再来看看创建并添加这个重试任务的相关方法——<strong data-nodeid="20590">addFailedRegistered() 方法</strong>，具体实现如下：</p>
+<pre class="lang-java hljs" data-nodeid="20452"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title">addFailedRegistered</span><span class="hljs-params">(URL url)</span> </span>{
+&nbsp; &nbsp; FailedRegisteredTask oldOne = failedRegistered.get(url);
+&nbsp; &nbsp; <span class="hljs-keyword">if</span> (oldOne != <span class="hljs-keyword">null</span>) { <span class="hljs-comment">// 已经存在重试任务，则无须创建，直接返回</span>
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">return</span>;
+&nbsp; &nbsp; }
+&nbsp; &nbsp; FailedRegisteredTask newTask = <span class="hljs-keyword">new</span> FailedRegisteredTask(url, 
+        <span class="hljs-keyword">this</span>);
+&nbsp; &nbsp; oldOne = failedRegistered.putIfAbsent(url, newTask); 
+&nbsp; &nbsp; <span class="hljs-keyword">if</span> (oldOne == <span class="hljs-keyword">null</span>) {
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-comment">// 如果是新建的重试任务，则提交到时间轮中，等待retryPeriod毫秒后执行</span>
+&nbsp; &nbsp; &nbsp; &nbsp; retryTimer.newTimeout(newTask, retryPeriod, 
+          TimeUnit.MILLISECONDS);
+&nbsp; &nbsp; }
+}
+</code></pre>
+<h3 data-nodeid="25038" class="">重试任务</h3>
+
+
+
+
+<p data-nodeid="25864">FailbackRegistry.addFailedRegistered() 方法中创建的 FailedRegisteredTask 任务以及其他的重试任务，<strong data-nodeid="25871">都继承了 AbstractRetryTask 抽象类</strong>，如下图所示：</p>
+<p data-nodeid="25865" class=""><img src="https://s0.lgstatic.com/i/image/M00/4D/C5/CgqCHl9bIseASX_6AAEchEJzpew190.png" alt="重试任务.png" data-nodeid="25874"></p>
+
+
+<p data-nodeid="20457">在 AbstractRetryTask 中维护了当前任务关联的 URL、当前重试的次数等信息，在其 run() 方法中，会根据重试 URL 中指定的重试次数（retry.times 参数，默认值为 3）、任务是否被取消以及时间轮的状态，决定此次任务的 doRetry() 方法是否正常执行。</p>
+<pre class="lang-java hljs" data-nodeid="28576"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">run</span><span class="hljs-params">(Timeout timeout)</span> <span class="hljs-keyword">throws</span> Exception </span>{
+&nbsp; &nbsp; <span class="hljs-keyword">if</span> (timeout.isCancelled() || timeout.timer().isStop() || isCancel()) { <span class="hljs-comment">// 检测定时任务状态和时间轮状态</span>
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">return</span>;
+&nbsp; &nbsp; }
+&nbsp; &nbsp; <span class="hljs-keyword">if</span> (times &gt; retryTimes) { <span class="hljs-comment">// 检查重试次数</span>
+&nbsp; &nbsp; &nbsp; &nbsp; logger.warn(<span class="hljs-string">"..."</span>);
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">return</span>;
+&nbsp; &nbsp; }
+&nbsp; &nbsp; <span class="hljs-keyword">try</span> {
+&nbsp; &nbsp; &nbsp; &nbsp; doRetry(url, registry, timeout); <span class="hljs-comment">// 执行重试</span>
+&nbsp; &nbsp; } <span class="hljs-keyword">catch</span> (Throwable t) { 
+&nbsp; &nbsp; &nbsp; &nbsp; reput(timeout, retryPeriod); <span class="hljs-comment">// 重新添加定时任务，等待重试</span>
+&nbsp; &nbsp; }
+}
+</code></pre>
+<p data-nodeid="28577">如果任务的 doRetry() 方法执行出现异常，AbstractRetryTask 会通过 reput() 方法将当前任务重新放入时间轮中，并递增当前任务的执行次数。</p>
+<pre class="lang-java hljs" data-nodeid="30395"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">protected</span> <span class="hljs-keyword">void</span> <span class="hljs-title">reput</span><span class="hljs-params">(Timeout timeout, <span class="hljs-keyword">long</span> tick)</span> </span>{
+&nbsp; &nbsp; <span class="hljs-keyword">if</span> (timeout == <span class="hljs-keyword">null</span>) { <span class="hljs-comment">// 边界检查</span>
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> IllegalArgumentException();
+&nbsp; &nbsp; }
+&nbsp; &nbsp; Timer timer = timeout.timer(); <span class="hljs-comment">// 检查定时任务</span>
+&nbsp; &nbsp; <span class="hljs-keyword">if</span> (timer.isStop() || timeout.isCancelled() || isCancel()) {
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">return</span>;
+&nbsp; &nbsp; }
+&nbsp; &nbsp; times++; <span class="hljs-comment">// 递增times</span>
+    <span class="hljs-comment">// 添加定时任务</span>
+&nbsp; &nbsp; timer.newTimeout(timeout.task(), tick, TimeUnit.MILLISECONDS);
+}
+</code></pre>
+<p data-nodeid="30396">AbstractRetryTask 将 doRetry() 方法作为抽象方法，留给子类实现具体的重试逻辑，这也是模板方法的使用。</p>
+<p data-nodeid="30397">在子类 FailedRegisteredTask 的 doRetry() 方法实现中，会再次执行关联 Registry 的 doRegister() 方法，完成与服务发现组件交互。如果注册成功，则会调用 removeFailedRegisteredTask() 方法将当前关联的 URL 以及当前重试任务从 failedRegistered 集合中删除。如果注册失败，则会抛出异常，执行上文介绍的 reput ()方法重试。</p>
+<pre class="lang-java hljs" data-nodeid="30849"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">protected</span> <span class="hljs-keyword">void</span> <span class="hljs-title">doRetry</span><span class="hljs-params">(URL url, FailbackRegistry registry, Timeout timeout)</span> </span>{
+&nbsp; &nbsp; registry.doRegister(url); <span class="hljs-comment">// 重新注册</span>
+&nbsp; &nbsp; registry.removeFailedRegisteredTask(url); <span class="hljs-comment">// 删除重试任务</span>
+}
+<span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">removeFailedRegisteredTask</span><span class="hljs-params">(URL url)</span> </span>{
+&nbsp; &nbsp; failedRegistered.remove(url);
+}
+</code></pre>
+<p data-nodeid="30850">另外，在 register() 方法入口处，会主动调用 removeFailedRegistered() 方法和 removeFailedUnregistered() 方法来清理指定 URL 关联的定时任务：</p>
+<pre class="lang-java hljs" data-nodeid="31298"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">register</span><span class="hljs-params">(URL url)</span> </span>{
+&nbsp; &nbsp; <span class="hljs-keyword">super</span>.register(url);
+&nbsp; &nbsp; removeFailedRegistered(url); <span class="hljs-comment">// 清理FailedRegisteredTask定时任务</span>
+&nbsp; &nbsp; removeFailedUnregistered(url); <span class="hljs-comment">// 清理FailedUnregisteredTask定时任务</span>
+&nbsp; &nbsp; <span class="hljs-keyword">try</span> {
+&nbsp; &nbsp; &nbsp; &nbsp; doRegister(url);
+&nbsp; &nbsp; } <span class="hljs-keyword">catch</span> (Exception e) {
+&nbsp; &nbsp; &nbsp; &nbsp; addFailedRegistered(url);
+&nbsp; &nbsp; }
+}
+</code></pre>
+<h3 data-nodeid="31744" class="">其他核心方法</h3>
+
+<p data-nodeid="31300">unregister() 方法以及 unsubscribe() 方法的实现方式与 register() 方法类似，只是调用的 do*() 抽象方法、依赖的 AbstractRetryTask 有所不同而已，这里就不再展开细讲。</p>
+<p data-nodeid="31301">你还记得上一课时我们介绍的 AbstractRegistry 通过本地文件缓存实现的容错机制吗？FailbackRegistry.subscribe() 方法在处理异常的时候，会先获取缓存的订阅数据并调用 notify() 方法，如果没有缓存相应的订阅数据，才会检查 check 参数决定是否抛出异常。</p>
+<p data-nodeid="31302">通过上一课时对 AbstractRegistry.notify() 方法的介绍，我们知道其核心逻辑之一就是回调 NotifyListener。下面我们就来看一下 FailbackRegistry 对 notify() 方法的覆盖：</p>
+<pre class="lang-java hljs" data-nodeid="31303"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">protected</span> <span class="hljs-keyword">void</span> <span class="hljs-title">notify</span><span class="hljs-params">(URL url, NotifyListener listener, 
+        List&lt;URL&gt; urls)</span> </span>{
+&nbsp; &nbsp; ... <span class="hljs-comment">// 检查url和listener不为空(略)</span>
+&nbsp; &nbsp; <span class="hljs-keyword">try</span> {
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-comment">// FailbackRegistry.doNotify()方法实际上就是调用父类</span>
+&nbsp; &nbsp; &nbsp; &nbsp;&nbsp;<span class="hljs-comment">//&nbsp;AbstractRegistry.notify()方法，没有其他逻辑</span>
+&nbsp; &nbsp; &nbsp; &nbsp; doNotify(url, listener, urls);&nbsp;
+&nbsp; &nbsp; } <span class="hljs-keyword">catch</span> (Exception t) {
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-comment">// doNotify()方法出现异常，则会添加一个定时任务</span>
+&nbsp; &nbsp; &nbsp; &nbsp; addFailedNotified(url, listener, urls);
+&nbsp; &nbsp; }
+}
+</code></pre>
+<p data-nodeid="31304">addFailedNotified() 方法会创建相应的 FailedNotifiedTask 任务，添加到 failedNotified 集合中，同时也会添加到时间轮中等待执行。如果已存在相应的 FailedNotifiedTask 重试任务，则会更新任务需要处理的 URL 集合。</p>
+<p data-nodeid="31305">在 FailedNotifiedTask 中维护了一个 URL 集合，用来记录当前任务一次运行需要通知的 URL，每执行完一次任务，就会清空该集合，具体实现如下：</p>
+<pre class="lang-java hljs" data-nodeid="31306"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">protected</span> <span class="hljs-keyword">void</span> <span class="hljs-title">doRetry</span><span class="hljs-params">(URL url, FailbackRegistry registry, 
+        Timeout timeout)</span> </span>{
+    <span class="hljs-comment">// 如果urls集合为空，则会通知所有Listener，该任务也就啥都不做了</span>
+&nbsp; &nbsp; <span class="hljs-keyword">if</span> (CollectionUtils.isNotEmpty(urls)) { 
+&nbsp; &nbsp; &nbsp; &nbsp; listener.notify(urls);
+&nbsp; &nbsp; &nbsp; &nbsp; urls.clear();
+&nbsp; &nbsp; }
+&nbsp; &nbsp; reput(timeout, retryPeriod); <span class="hljs-comment">// 将任务重新添加到时间轮中等待执行</span>
+}
+</code></pre>
+<p data-nodeid="31307">从上面的代码可以看出，FailedNotifiedTask 重试任务一旦被添加，就会一直运行下去，但真的是这样吗？在 FailbackRegistry 的 subscribe()、unsubscribe() 方法中，可以看到 removeFailedNotified() 方法的调用，这里就是清理 FailedNotifiedTask 任务的地方。我们以 FailbackRegistry.subscribe() 方法为例进行介绍：</p>
+<pre class="lang-java hljs" data-nodeid="32162"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">subscribe</span><span class="hljs-params">(URL url, NotifyListener listener)</span> </span>{
+&nbsp; &nbsp; <span class="hljs-keyword">super</span>.subscribe(url, listener);
+&nbsp; &nbsp; removeFailedSubscribed(url, listener); <span class="hljs-comment">// 关注这个方法</span>
+&nbsp; &nbsp; <span class="hljs-keyword">try</span> {
+&nbsp; &nbsp; &nbsp; &nbsp; doSubscribe(url, listener);
+&nbsp; &nbsp; } <span class="hljs-keyword">catch</span> (Exception e) {
+&nbsp; &nbsp; &nbsp; &nbsp; addFailedSubscribed(url, listener);
+&nbsp; &nbsp; }
+}
+<span class="hljs-comment">// removeFailedSubscribed()方法中会清理FailedSubscribedTask、FailedUnsubscribedTask、FailedNotifiedTask三类定时任务</span>
+<span class="hljs-function"><span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title">removeFailedSubscribed</span><span class="hljs-params">(URL url, NotifyListener listener)</span> </span>{
+&nbsp; &nbsp; Holder h = <span class="hljs-keyword">new</span> Holder(url, listener); <span class="hljs-comment">// 清理FailedSubscribedTask</span>
+&nbsp; &nbsp; FailedSubscribedTask f = failedSubscribed.remove(h);
+&nbsp; &nbsp; <span class="hljs-keyword">if</span> (f != <span class="hljs-keyword">null</span>) {
+&nbsp; &nbsp; &nbsp; &nbsp; f.cancel();
+&nbsp; &nbsp; }
+&nbsp; &nbsp; removeFailedUnsubscribed(url, listener);<span class="hljs-comment">// 清理FailedUnsubscribedTask</span>
+&nbsp; &nbsp; removeFailedNotified(url, listener); <span class="hljs-comment">// 清理FailedNotifiedTask</span>
+}
+</code></pre>
+<p data-nodeid="32163">介绍完 FailbackRegistry 中最核心的注册/订阅实现之后，我们再来关注其实现的恢复功能，也就是 recover() 方法。该方法会直接通过 FailedRegisteredTask 任务处理 registered 集合中的全部 URL，通过 FailedSubscribedTask 任务处理 subscribed 集合中的 URL 以及关联的 NotifyListener。</p>
+<p data-nodeid="32164">FailbackRegistry 在生命周期结束时，会调用自身的 destroy() 方法，其中除了调用父类的 destroy() 方法之外，还会调用时间轮（即 retryTimer 字段）的 stop() 方法，释放时间轮相关的资源。</p>
+<h3 data-nodeid="32589" class="">总结</h3>
+
+<p data-nodeid="32166">本课时重点介绍了 AbstractRegistry 的实现类——FailbackRegistry 的核心实现，它主要是在 AbstractRegistry 的基础上，提供了重试机制。具体方法就是通过之前课时介绍的时间轮，在 register()/ unregister()、subscribe()/ unsubscribe() 等核心方法失败时，添加重试定时任务，实现重试机制，同时也添加了相应的定时任务清理逻辑。</p></div>
+
+</body></html>

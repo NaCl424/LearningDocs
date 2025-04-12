@@ -1,0 +1,1407 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>27 | 限流器：如何实现熔断器和限流器防止宕机和雪崩？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>27 | 限流器：如何实现熔断器和限流器防止宕机和雪崩？</h1><p data-nodeid="15478" class="">前面我介绍过，熔断器和限流器是高并发下保障服务稳定运行的有效手段。虽然各语言实现逻辑差不多，但由于特性不同，具体的实现也就有所不同。比如 Go 语言中的 Channel、 Goroutine、Atomic 很强大，你可以用它们来实现熔断器和限流器，但这并不意味着你用它们的时候会很顺利。相反，在没有充分了解它们的特点时，你可能会遇到各种坑。</p>
+<p data-nodeid="15479">接下来，我给你详细介绍下 Go 语言的一些高级编程技巧，以及如何用它们来实现熔断器和限流器。</p>
+<h3 data-nodeid="15480">熔断器</h3>
+<p data-nodeid="15481">实现熔断器的基本思路是：</p>
+<ol data-nodeid="15482">
+<li data-nodeid="15483">
+<p data-nodeid="15484">划分一个时间窗口，如 100 毫秒，并设置判断条件，如失败率超过 5%、请求数超过 1000 等；</p>
+</li>
+<li data-nodeid="15485">
+<p data-nodeid="15486">在请求进来的时候，判断条件是否满足熔断条件，如果满足就拒绝请求，如果不满足就继续处理请求；</p>
+</li>
+<li data-nodeid="15487">
+<p data-nodeid="15488">请求处理完后，统计时间窗口内请求失败率、延迟不达标率、请求数等指标，以便作为后续请求的判断条件。</p>
+</li>
+</ol>
+<p data-nodeid="15489">熔断器中最关键的部分是计数器和判断条件，这是因为它们为熔断器提供了判断依据。所以，为了实现计数器，我基于 int64 定义了一个 Counter 类型，并用原子操作为它实现了用于自增的 Add 方法、用于获取当前计数的 Load 方法、用于重置的 Reset 方法。具体代码如下：</p>
+<pre class="lang-go hljs" data-nodeid="15490"><code data-language="go"><span class="hljs-keyword">type</span> Counter <span class="hljs-keyword">int64</span>
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(c *Counter)</span> <span class="hljs-title">Add</span><span class="hljs-params">()</span> <span class="hljs-title">int64</span></span> {
+   <span class="hljs-keyword">return</span> atomic.AddInt64((*<span class="hljs-keyword">int64</span>)(c), <span class="hljs-number">1</span>)
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(c *Counter)</span> <span class="hljs-title">Load</span><span class="hljs-params">()</span> <span class="hljs-title">int64</span></span> {
+   <span class="hljs-keyword">return</span> atomic.LoadInt64((*<span class="hljs-keyword">int64</span>)(c))
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(c *Counter)</span> <span class="hljs-title">Reset</span><span class="hljs-params">()</span></span> {
+   atomic.StoreInt64((*<span class="hljs-keyword">int64</span>)(c), <span class="hljs-number">0</span>)
+}
+</code></pre>
+<p data-nodeid="15491">并且我还定义了一个 CircuitBreaker 结构体用于实现熔断器，它主要有这些字段：请求计数器 totalCounter、失败请求计数器 failsCounter、时间窗口 duration、最大延迟限制 latencyLimit、最大请求数限制 totalLimit、最大失败率限制 failsRateLimit、恢复请求的最低失败率 recoverFailsRate、时间窗口开始时间 lastTime、当前是否允许请求执行 allow。代码如下：</p>
+<pre class="lang-go hljs" data-nodeid="15492"><code data-language="go"><span class="hljs-keyword">type</span> CircuitBreaker <span class="hljs-keyword">struct</span> {
+   totalCounter Counter
+   failsCounter Counter
+   duration       <span class="hljs-keyword">int64</span>
+   latencyLimit   <span class="hljs-keyword">int64</span>
+   totalLimit     <span class="hljs-keyword">int64</span>
+   failsRateLimit <span class="hljs-keyword">int64</span>
+   recoverFailsRate <span class="hljs-keyword">int64</span>
+   lastTime         <span class="hljs-keyword">int64</span>
+   allow            <span class="hljs-keyword">int64</span>
+}
+</code></pre>
+<p data-nodeid="15493">然后我实现了一个函数 NewCircuitBreaker 用来根据参数创建一个熔断器，并且定义了一个类型 CBOption 来实现可扩展的变参。具体代码如下：</p>
+<pre class="lang-go hljs" data-nodeid="15494"><code data-language="go"><span class="hljs-keyword">type</span> CBOption <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(cb *CircuitBreaker)</span></span>
+<span class="hljs-keyword">const</span> (
+   minDuration  = <span class="hljs-number">100</span>
+   minTotal     = <span class="hljs-number">1000</span>
+   minFailsRate = <span class="hljs-number">2</span>
+)
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">WithDuration</span><span class="hljs-params">(duration <span class="hljs-keyword">int64</span>)</span> <span class="hljs-title">CBOption</span></span> {
+   <span class="hljs-keyword">return</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(cb *CircuitBreaker)</span></span> {
+      cb.duration = duration
+   }
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">WithLatencyLimit</span><span class="hljs-params">(latencyLimit <span class="hljs-keyword">int64</span>)</span> <span class="hljs-title">CBOption</span></span> {
+   <span class="hljs-keyword">return</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(cb *CircuitBreaker)</span></span> {
+      cb.latencyLimit = latencyLimit
+   }
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">WithFailsLimit</span><span class="hljs-params">(failsRateLimit <span class="hljs-keyword">int64</span>)</span> <span class="hljs-title">CBOption</span></span> {
+   <span class="hljs-keyword">return</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(cb *CircuitBreaker)</span></span> {
+      cb.failsRateLimit = failsRateLimit
+   }
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">WithTotalLimit</span><span class="hljs-params">(totalLimit <span class="hljs-keyword">int64</span>)</span> <span class="hljs-title">CBOption</span></span> {
+   <span class="hljs-keyword">return</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(cb *CircuitBreaker)</span></span> {
+      cb.totalLimit = totalLimit
+   }
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">NewCircuitBreaker</span><span class="hljs-params">(opts ...CBOption)</span> *<span class="hljs-title">CircuitBreaker</span></span> {
+   cb := &amp;CircuitBreaker{
+      totalCounter:   <span class="hljs-number">0</span>,
+      failsCounter:   <span class="hljs-number">0</span>,
+      duration:       <span class="hljs-number">0</span>,
+      lastTime:       <span class="hljs-number">0</span>,
+      failsRateLimit: <span class="hljs-number">0</span>,
+      latencyLimit:   <span class="hljs-number">0</span>,
+      totalLimit:     <span class="hljs-number">0</span>,
+      allow:          <span class="hljs-number">1</span>,
+   }
+   <span class="hljs-keyword">for</span> _, opt := <span class="hljs-keyword">range</span> opts {
+      opt(cb)
+   }
+   <span class="hljs-keyword">if</span> cb.duration &lt; minDuration {
+      cb.duration = minDuration
+   }
+   <span class="hljs-keyword">if</span> cb.totalLimit &lt; minTotal {
+      cb.totalLimit = minTotal
+   }
+   <span class="hljs-keyword">if</span> cb.failsRateLimit &lt; minFailsRate {
+      cb.failsRateLimit = minFailsRate
+   }
+   cb.recoverFailsRate = cb.failsRateLimit / <span class="hljs-number">2</span>
+   <span class="hljs-keyword">return</span> cb
+}
+</code></pre>
+<p data-nodeid="15495">以上代码都在<strong data-nodeid="15552">infrastructure/utils/circuit_breaker.go</strong>这个文件中。</p>
+<p data-nodeid="15496"><strong data-nodeid="15557">熔断器最核心的是 Allow 方法，它支持传入一个类型为函数的参数 f ，返回该请求是否允许执行。</strong> Allow 方法先更新请求计数器和时间窗口，并判断当前是否满足执行条件。如果不满足条件则返回 false；如果满足条件，则更新当前执行状态，并根据参数 f 的执行结果来更新失败计数器。代码如下：</p>
+<pre class="lang-go hljs" data-nodeid="15497"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(cb *CircuitBreaker)</span> <span class="hljs-title">Allow</span><span class="hljs-params">(f <span class="hljs-keyword">func</span>()</span> <span class="hljs-title">bool</span>) <span class="hljs-title">bool</span></span> {
+   fails := cb.failsCounter.Load()
+   total := cb.totalCounter.Load()
+   start := time.Now().UnixNano() / <span class="hljs-keyword">int64</span>(time.Millisecond)
+   <span class="hljs-keyword">if</span> start &gt; cb.lastTime+cb.duration {
+      atomic.StoreInt64(&amp;cb.lastTime, start)
+      cb.failsCounter.Reset()
+      cb.totalCounter.Reset()
+      atomic.StoreInt64(&amp;cb.allow, <span class="hljs-number">1</span>)
+   }
+   cb.totalCounter.Add()
+   allow := !(total &gt; <span class="hljs-number">0</span> &amp;&amp; fails*<span class="hljs-number">100</span>/cb.failsRateLimit &gt;= total || total &gt;= cb.totalLimit)
+   <span class="hljs-keyword">if</span> atomic.LoadInt64(&amp;cb.allow) == <span class="hljs-number">0</span> {
+      <span class="hljs-keyword">if</span> fails*<span class="hljs-number">100</span>/cb.recoverFailsRate &gt; total {
+         allow = <span class="hljs-literal">false</span>
+      } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> allow {
+         atomic.StoreInt64(&amp;cb.allow, <span class="hljs-number">1</span>)
+      }
+   } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> !allow {
+      atomic.StoreInt64(&amp;cb.allow, <span class="hljs-number">0</span>)
+   }
+   <span class="hljs-keyword">if</span> !allow {
+      logrus.Error(<span class="hljs-string">"not allowed"</span>)
+      <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>
+   }
+   ok := f()
+   end := time.Now().UnixNano() / <span class="hljs-keyword">int64</span>(time.Millisecond)
+   <span class="hljs-keyword">if</span> (cb.latencyLimit &gt; <span class="hljs-number">0</span> &amp;&amp; end-start &gt;= cb.latencyLimit) || !ok {
+      cb.failsCounter.Add()
+   }
+   <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>
+}
+</code></pre>
+<p data-nodeid="15498">接下来，我在 interfaces/api/middlewares/circuit_break.go 中实现熔断器中间件生成函数 NewCircuitBreakMiddleware，它主要是根据传入的熔断器返回一个熔断器中间件，在该中间件中调用熔断器的 Allow 方法，以此来控制当前请求是否需要熔断。如果发生熔断，则将请求的返回状态设置为 http.StatusServiceUnavailable，立刻中断请求并返回结果。代码如下：</p>
+<pre class="lang-go hljs" data-nodeid="15499"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">NewCircuitBreakMiddleware</span><span class="hljs-params">(cb *utils.CircuitBreaker)</span> <span class="hljs-title">gin</span>.<span class="hljs-title">HandlerFunc</span></span> {
+   <span class="hljs-keyword">return</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(c *gin.Context)</span></span> {
+      ok := cb.Allow(<span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span> <span class="hljs-title">bool</span></span> {
+         c.Next()
+         <span class="hljs-keyword">if</span> c.Writer.Status() &gt;= http.StatusInternalServerError {
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>
+         }
+         <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>
+      })
+      <span class="hljs-keyword">if</span> !ok {
+         c.AbortWithStatus(http.StatusServiceUnavailable)
+      }
+   }
+}
+</code></pre>
+<p data-nodeid="15500">最后，我们修改 interfaces/api/routers.go 的代码，将中间件注入框架中。我们可以根据业务特点，为不同的接口生成不同的熔断器，合理分配服务器资源。</p>
+<p data-nodeid="16558" class="te-preview-highlight">比如我们可以将活动信息接口 限制为 100 毫秒内最多处理 2000 次请求、最大延迟 100 毫秒、最大失败率 5%，而购物车接口则限制为 100 毫秒内最多处理 1000 次请求、最大延迟 200 毫秒、最大失败率 5%。<strong data-nodeid="16564">需要注意的是，熔断器中间件需要放到所有中间件的最前面，这样确保在第一时间拦截承载能力外的请求。</strong> 代码如下：</p>
+
+
+
+
+
+<pre class="lang-go hljs" data-nodeid="15502"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">initRouters</span><span class="hljs-params">(g *gin.Engine)</span></span> {
+   g.POST(<span class="hljs-string">"/login"</span>, api.User{}.Login)
+   eventCB := utils.NewCircuitBreaker(
+      utils.WithDuration(<span class="hljs-number">100</span>),
+      utils.WithTotalLimit(<span class="hljs-number">2000</span>),
+      utils.WithLatencyLimit(<span class="hljs-number">100</span>),
+      utils.WithFailsLimit(<span class="hljs-number">5</span>),
+   )
+   eventCBMdw := middlewares.NewCircuitBreakMiddleware(eventCB)
+   event := g.Group(<span class="hljs-string">"/event"</span>).Use(eventCBMdw, middlewares.NewAuthMiddleware(<span class="hljs-literal">false</span>))
+   eventApp := api.Event{}
+   event.GET(<span class="hljs-string">"/list"</span>, eventApp.List)
+   event.GET(<span class="hljs-string">"/info"</span>, eventApp.Info)
+   subscribe := g.Group(<span class="hljs-string">"/event/subscribe"</span>).Use(middlewares.NewAuthMiddleware(<span class="hljs-literal">true</span>))
+   subscribe.POST(<span class="hljs-string">"/"</span>, eventApp.Subscribe)
+   shopCB := utils.NewCircuitBreaker(
+      utils.WithDuration(<span class="hljs-number">100</span>),
+      utils.WithTotalLimit(<span class="hljs-number">1000</span>),
+      utils.WithLatencyLimit(<span class="hljs-number">200</span>),
+      utils.WithFailsLimit(<span class="hljs-number">5</span>),
+   )
+   shopCBMdw := middlewares.NewCircuitBreakMiddleware(shopCB)
+   shop := g.Group(<span class="hljs-string">"/shop"</span>).Use(shopCBMdw, middlewares.NewAuthMiddleware(<span class="hljs-literal">true</span>), middlewares.Blacklist)
+   shopApp := api.Shop{}
+   shop.PUT(<span class="hljs-string">"/cart/add"</span>, shopApp.AddCart)
+}
+</code></pre>
+<h3 data-nodeid="15503">限流器</h3>
+<p data-nodeid="15504">在 Go 语言中，如果不借助任何第三方库，有两种经典模式实现限流器：<strong data-nodeid="15575">Fan-In 和 Fan-Out</strong>，也叫扇入和扇出。它们各有优缺点，适合不同的业务场景。</p>
+<h4 data-nodeid="15505">Fan-In 模式</h4>
+<p data-nodeid="15506">Fan-In 模式是一种多对一的模式，也就是说它有多个生产者，而只有一个消费者。它相当于限流算法中的漏桶算法，处理速度取决于消费者的速度。</p>
+<p data-nodeid="15507">这种模式最大的作用是将生产者的数据排队，在消费端以固定速度消费并处理，它也比较适合需要在消费端操作分布式锁的场景。比如：在秒杀系统中控制队列的消费速度，并通过分布式锁和原子操作扣减库存。</p>
+<p data-nodeid="15508">前面我提到过，在 Go 语言中，Channel 可以当队列来用，而生产者和消费者就是 Goroutine 了。所以，对于Fan-In 模式来说，它可以看作是多个 Goroutine 生产数据到一个 Channel，由一个 Goroutine 来消费 Channel。</p>
+<h4 data-nodeid="15509">Fan-Out 模式</h4>
+<p data-nodeid="15510">Fan-Out 模式又是怎样的呢？它是一种一对多的模式，也就是说它只有一个生产者，却有多个消费者。它类似于限流算法中的令牌桶算法，处理速度取决于生产者的速度。</p>
+<p data-nodeid="15511">这种模式最大的作用是在源头通过限制生产者的速度，来控制下游系统的压力。由于下游系统偏重业务，涉及 Redis、mysql 等操作，通常每次请求会有一定的延迟。为了提升吞吐量，通常是采用多个 Goroutine 的来消费队列中的数据，配合连接池并发请求下游系统。</p>
+<p data-nodeid="15512">以上是Fan-In 和 Fan-Out 的作用介绍，<strong data-nodeid="15588">在高并发系统中，通常会将两者搭配使用，这种方式也叫组合模式。</strong> 举个例子：秒杀系统中，用户的抢购请求在获得初步资格后，先通过 Fan-In 进入队列，由一个 Goroutine 消费队列，并通过 Fan-Out 将请求转发给多个 Goroutine 来并发操作多个商品的库存。</p>
+<h4 data-nodeid="15513">代码实现</h4>
+<p data-nodeid="15514">这三种模式共同特点是什么呢？它们都需要有一个 Push 方法提供给生产者推送数据，一个 Pop 方法提供给消费者消费数据，一个 Close 方法用于关闭限流器。这里我把它们抽象成 RateLimiter 接口类，代码在 infrastructure/utils/rate_limiter.go 文件中。如下所示：</p>
+<pre class="lang-go hljs" data-nodeid="15515"><code data-language="go"><span class="hljs-keyword">type</span> RateLimiter <span class="hljs-keyword">interface</span> {
+   Push(t pool.Task) <span class="hljs-keyword">bool</span>
+   Pop() (pool.Task, <span class="hljs-keyword">bool</span>)
+   Close() error
+}
+</code></pre>
+<p data-nodeid="15516">为了复用代码，我还定义了一个 fanInOut 结构体用于实现三种模式的限流器，它的核心字段主要是用于 Fan-In 模式的队列 queueIn，用于 Fan-Out 模式的队列 queueOut，以及一些控制流量速度的参数。然后，我实现了一个函数 NewRateLimiter，它接收 size、rate、mode 这三个参数，分别用于设置队列缓冲区、流量速度、模式等。其中，mode 参数用来控制三种模式的主要流程。该函数主要执行一些初始化的工作，比如初始化队列。相关代码如下所示：</p>
+<pre class="lang-go hljs" data-nodeid="15517"><code data-language="go"><span class="hljs-keyword">type</span> fanInOut <span class="hljs-keyword">struct</span> {
+   sync.RWMutex
+   queueIn  <span class="hljs-keyword">chan</span> pool.Task
+   queueOut <span class="hljs-keyword">chan</span> pool.Task
+   lastTime <span class="hljs-keyword">int64</span>
+   rate     <span class="hljs-keyword">int64</span>
+   duration time.Duration
+   closed   <span class="hljs-keyword">int64</span>
+   mode     <span class="hljs-keyword">int</span>
+}
+<span class="hljs-keyword">const</span> (
+   minRate = <span class="hljs-number">1</span>
+   minSize = <span class="hljs-number">10</span>
+   FanIn  = <span class="hljs-number">1</span> &lt;&lt; <span class="hljs-number">0</span>
+   FanOut = <span class="hljs-number">1</span> &lt;&lt; <span class="hljs-number">1</span>
+)
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">NewRateLimiter</span><span class="hljs-params">(size <span class="hljs-keyword">int</span>, rate <span class="hljs-keyword">int64</span>, mode <span class="hljs-keyword">int</span>)</span> <span class="hljs-params">(RateLimiter, error)</span></span> {
+   modeMask := FanIn | FanOut
+   <span class="hljs-keyword">if</span> mode &gt; modeMask || modeMask&amp;mode == <span class="hljs-number">0</span> {
+      <span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>, errors.New(<span class="hljs-string">"wrong flag"</span>)
+   }
+   <span class="hljs-keyword">if</span> rate &lt; minRate {
+      rate = minRate
+   }
+   <span class="hljs-keyword">if</span> size &lt; minSize {
+      size = minSize
+   }
+   f := &amp;fanInOut{
+      lastTime: <span class="hljs-number">0</span>,
+      rate:     rate,
+      duration: time.Second / time.Duration(rate),
+      closed:   <span class="hljs-number">0</span>,
+      mode:     mode,
+   }
+   <span class="hljs-keyword">if</span> FanIn&amp;mode != <span class="hljs-number">0</span> {
+      f.queueIn = <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> pool.Task, size)
+   }
+   <span class="hljs-keyword">if</span> FanOut&amp;mode != <span class="hljs-number">0</span> {
+      f.queueOut = <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> pool.Task, size)
+   }
+   <span class="hljs-keyword">if</span> mode == modeMask {
+      <span class="hljs-keyword">go</span> f.exchange()
+   }
+   <span class="hljs-keyword">return</span> f, <span class="hljs-literal">nil</span>
+}
+</code></pre>
+<p data-nodeid="15518"><strong data-nodeid="15598">在限流器中，比较关键的是如何控制好速度。</strong> 也就是说，如何根据 rate 参数来控制每次操作数据的时间间隔。这里我实现了一个 sleep 方法，用于计算出需要等待的时间，如等待 500 毫秒后再返回。</p>
+<p data-nodeid="15519">如果是 Fan-In 模式，在 Push 方法里将采用非阻塞模式将数据推送到队列，而 Fan-Out 模式下则需要等待一段时间后再以阻塞的模式推送数据，确保速度不会超过限制。在 Pop 方法里，如果是 Fan-Out 模式，则直接消费队列并返回，如果是 Fan-In 模式，则等待一段时间再去消费队列，同样是为了确保速度不超过限制。</p>
+<p data-nodeid="15520">对于组合模式，我实现了一个 exchange 方法，用于以固定速度将数据从 Fan-In 的队列里搬到 Fan-Out 的队列里。代码如下所示：</p>
+<pre class="lang-go hljs" data-nodeid="15521"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(f *fanInOut)</span> <span class="hljs-title">Push</span><span class="hljs-params">(t pool.Task)</span> <span class="hljs-title">bool</span></span> {
+   <span class="hljs-keyword">if</span> atomic.LoadInt64(&amp;f.closed) == <span class="hljs-number">1</span> {
+      <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>
+   }
+   f.RLock()
+   <span class="hljs-keyword">defer</span> f.RUnlock()
+   <span class="hljs-keyword">if</span> atomic.LoadInt64(&amp;f.closed) == <span class="hljs-number">1</span> {
+      <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>
+   }
+   <span class="hljs-keyword">if</span> FanIn&amp;f.mode != <span class="hljs-number">0</span> {
+      <span class="hljs-keyword">select</span> {
+      <span class="hljs-keyword">case</span> f.queueIn &lt;- t:
+         <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>
+      <span class="hljs-keyword">default</span>:
+         <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>
+      }
+   } <span class="hljs-keyword">else</span> {
+      f.sleep()
+      f.queueIn &lt;- t
+      <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>
+   }
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(f *fanInOut)</span> <span class="hljs-title">Pop</span><span class="hljs-params">()</span> <span class="hljs-params">(pool.Task, <span class="hljs-keyword">bool</span>)</span></span> {
+   <span class="hljs-keyword">if</span> FanOut&amp;f.mode != <span class="hljs-number">0</span> {
+      t, ok := &lt;-f.queueOut
+      <span class="hljs-keyword">return</span> t, ok
+   } <span class="hljs-keyword">else</span> {
+      f.sleep()
+      t, ok := &lt;-f.queueIn
+      <span class="hljs-keyword">return</span> t, ok
+   }
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(f *fanInOut)</span> <span class="hljs-title">sleep</span><span class="hljs-params">()</span></span> {
+   now := time.Now().UnixNano()
+   delta := f.duration - time.Duration(now-atomic.LoadInt64(&amp;f.lastTime))
+   <span class="hljs-keyword">if</span> delta &gt; time.Millisecond {
+      time.Sleep(delta)
+   }
+   atomic.StoreInt64(&amp;f.lastTime, now)
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(f *fanInOut)</span> <span class="hljs-title">exchange</span><span class="hljs-params">()</span></span> {
+   <span class="hljs-keyword">for</span> t := <span class="hljs-keyword">range</span> f.queueIn {
+      f.sleep()
+      f.queueOut &lt;- t
+   }
+   <span class="hljs-built_in">close</span>(f.queueOut)
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(f *fanInOut)</span> <span class="hljs-title">Close</span><span class="hljs-params">()</span> <span class="hljs-title">error</span></span> {
+   f.Lock()
+   <span class="hljs-keyword">defer</span> f.Unlock()
+   <span class="hljs-keyword">if</span> atomic.CompareAndSwapInt64(&amp;f.closed, <span class="hljs-number">0</span>, <span class="hljs-number">1</span>) {
+      <span class="hljs-keyword">if</span> f.mode&amp;FanIn != <span class="hljs-number">0</span> {
+         <span class="hljs-built_in">close</span>(f.queueIn)
+      } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> f.mode == FanOut {
+         <span class="hljs-built_in">close</span>(f.queueOut)
+      }
+   }
+   <span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>
+}
+</code></pre>
+<h3 data-nodeid="15522">小结</h3>
+<p data-nodeid="15523">这一讲，我主要给你介绍了 Go 语言中常用的熔断器和限流器实现方法。希望你已经掌握并能熟练运用到工作中。需要注意的是，熔断器和限流器实现方法有多种。我这里只是给你介绍了常用的几种实现方式，而开源社区还有一些更优秀的代码实现，你在项目中需要充分评估优缺点，做好性能对比分析。</p>
+<p data-nodeid="15524">接下来，为你留一个思考题：熔断器和限流器的单元测试和性能测试该如何做呢？</p>
+<p data-nodeid="15525">你可以把答案写在留言区。期待你的回答哦！</p>
+<p data-nodeid="15526">好了，这一讲就到这里了。下一讲，我将给你介绍“如何使用队列和分布式锁防止库存超售”。到时见！</p>
+<p data-nodeid="15527">源码地址：</p>
+<p data-nodeid="15528"><a href="https://github.com/lagoueduCol/MiaoSha-Yiletian/tree/main/infrastructure/utils" data-nodeid="15609">https://github.com/lagoueduCol/MiaoSha-Yiletian/tree/main/infrastructure/utils</a></p>
+<p data-nodeid="15529"><a href="https://github.com/lagoueduCol/MiaoSha-Yiletian/tree/main/interfaces/api" data-nodeid="15612">https://github.com/lagoueduCol/MiaoSha-Yiletian/tree/main/interfaces/api</a></p>
+<hr data-nodeid="15628">
+<p data-nodeid="15629"><a href="https://shenceyun.lagou.com/t/Mka" data-nodeid="15636"><img src="https://s0.lgstatic.com/i/image/M00/6D/3E/CgqCHl-s60-AC0B_AAhXSgFweBY762.png" alt="1.png" data-nodeid="15635"></a></p>
+<p data-nodeid="15630"><strong data-nodeid="15640">《Java 工程师高薪训练营》</strong></p>
+<p data-nodeid="15631" class="">实战训练+面试模拟+大厂内推，想要提升技术能力，进大厂拿高薪，<a href="https://shenceyun.lagou.com/t/Mka" data-nodeid="15644">点击链接，提升自己</a>！</p></div>
+
+</body></html>

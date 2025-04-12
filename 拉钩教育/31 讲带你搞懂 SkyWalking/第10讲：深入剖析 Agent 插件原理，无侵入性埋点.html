@@ -1,0 +1,1113 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第10讲：深入剖析 Agent 插件原理，无侵入性埋点</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>第10讲：深入剖析 Agent 插件原理，无侵入性埋点</h1><p>在前面介绍 SkyWalking Agent 启动流程时，同时介绍了插件中 skywalking-agent.def 文件的查找、解析流程，AbstractClassEnhancePluginDefine 抽象类的核心定义，以及插件类与 AgentBuilder 配合为目标类动态添加埋点功能的核心流程。本课时将深入介绍 AbstractClassEnhancePluginDefine 抽象类以及其子类的运行原理。</p>
+<h3>AbstractClassEnhancePluginDefine 核心实现</h3>
+<p>在开始之前，先简单回顾上一课时中关于 AbstractClassEnhancePluginDefine 的一个核心知识点：AbstractClassEnhancePluginDefine 是所有插件的父类，SkywalkingAgent.Transformer 会通过其 enhanceClass() 方法返回的 ClassMatch 对象，匹配到要增强的目标类。在不同的插件实现类中，enhanceClass() 方法返回的 ClassMatch 对象不同，例如：</p>
+<ul>
+<li>Dubbo 插件拦截的是 com.alibaba.dubbo.monitor.support.MonitorFilter 这个类；</li>
+<li>Tomcat 插件拦截的是 org.apache.catalina.core.StandardHostValve 这个类。</li>
+</ul>
+<p>后面会详细介绍上述两个插件的具体实现。</p>
+<p>完成目标类和插件类的匹配之后，会进入 define() 方法，其核心逻辑如下：</p>
+<ol>
+<li>通过 witnessClass() 方法确定当前插件与当前拦截到的目标类的版本是否匹配。若版本不匹配，则 define() 方法直接结束，当前插件类不会增强该类；若版本匹配，则继续后续逻辑。</li>
+<li>进入 enhance() 方法执行增强逻辑。</li>
+<li>设置插件增强标识。</li>
+</ol>
+<h3>witnessClass() 方法</h3>
+<p>很多开源组件和工具类库的功能会不断增加，架构也会随之重构，导致不同版本的兼容性得不到很好的保证。例如，MySQL 常用的版本有 5.6、5.7、8.0 多个版本，在使用 JDBC 连接 MySQL 时使用的 mysql-connector-java.jar 包也分为 5.x、6.x、8.x 等版本，对应的 JDBC 协议的版本也各不相同。</p>
+<p>SkyWalking Agent 提供的 MySQL 插件本质上是增强 mysql-connector-java.jar 中的关键方法，例如 ConnectionImpl.getInstance() 方法，但在 mysql-connector-java.jar 的 5.x 版本和 8.x 版本中，ConnectionImpl 的包名不同，如下所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/84/1A/Cgq2xl6MPj2AU2eYAAApRprNPxs507.png" alt=""></p>
+<p>这仅仅是一个简单的示例，在有的开源组件或类库中，不同版本中同名类的功能和结构已经发生了翻天覆地的变化。要通过一个 SkyWalking Agent 插件完成对一个开源组件所有版本的增强，是非常难实现的，即使勉强能够实现，该插件的实现也会变的非常臃肿，扩展性也会成问题。</p>
+<p>SkyWalking 怎么解决这个问题呢？回到 MySQL 示例，SkyWalking 为每个版本的 mysql-connector-java.jar 提供了不同版本的插件，这些插件的 witnessClass() 方法返回值不同，具体返回的是对应版本 mysql-connector-java.jar 所特有的一个类，如下表所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/0B/04/Ciqah16MPj2AVwefAABSICn8OOA333.png" alt=""></p>
+<p>若当前类加载器无法扫描到插件 witnessClass() 方法指定的类，表示当前插件版本不合适，即使拦截到了目标类，也不能进行增强。AbstractClassEnhancePluginDefine.define() 方法中的相关片段如下：</p>
+<pre><code data-language="java" class="lang-java">String[]&nbsp;witnessClasses&nbsp;=&nbsp;witnessClasses();&nbsp;
+<span class="hljs-keyword">if</span>&nbsp;(witnessClasses&nbsp;!=&nbsp;<span class="hljs-keyword">null</span>)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">for</span>&nbsp;(String&nbsp;witnessClass&nbsp;:&nbsp;witnessClasses)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;判断指定类加载器中是否存在witnessClasses()指定的类</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(!WitnessClassFinder.INSTANCE.exist(witnessClass,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;classLoader))&nbsp;{&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;<span class="hljs-keyword">null</span>;&nbsp;<span class="hljs-comment">//&nbsp;若不存在则表示版本不匹配，直接返回</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;}
+}
+</code></pre>
+<h3>增强 static 静态方法</h3>
+<p>完成上述插件版本的匹配之后，开始进入 enhance() 方法对目标类进行增强。如下图所示， ClassEnhancePluginDefine 继承了 AbstractClassEnhancePluginDefine 抽象类：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/84/1A/Cgq2xl6MPj2AJ6ODAADEpCb6bgs755.png" alt=""></p>
+<p>在&nbsp;ClassEnhancePluginDefine 实现的 enhance() 方法中，会分别完成对 static 静态方法以及实例方法的增强：</p>
+<pre><code data-language="java" class="lang-java"><span class="hljs-keyword">protected</span>&nbsp;DynamicType.Builder&lt;?&gt;&nbsp;enhance(...)&nbsp;<span class="hljs-keyword">throws</span>&nbsp;PluginException&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;增强static方法</span>
+&nbsp;&nbsp;&nbsp;&nbsp;newClassBuilder&nbsp;=&nbsp;<span class="hljs-keyword">this</span>.enhanceClass(typeDescription,&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;newClassBuilder,&nbsp;classLoader);&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;增强构造方法和实例方法</span>
+&nbsp;&nbsp;&nbsp;&nbsp;newClassBuilder&nbsp;=&nbsp;<span class="hljs-keyword">this</span>.enhanceInstance(typeDescription,&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;newClassBuilder,&nbsp;classLoader,&nbsp;context);&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;newClassBuilder;
+}
+</code></pre>
+<p>在增强静态方法时会使用到 StaticMethodsInterceptPoint 这个接口，它描述了当前插件要拦截目标类的哪些 static 静态方法，以及委托给哪个类去增强，其定义如下：</p>
+<pre><code data-language="java" class="lang-java"><span class="hljs-keyword">public</span>&nbsp;<span class="hljs-class"><span class="hljs-keyword">interface</span>&nbsp;<span class="hljs-title">StaticMethodsInterceptPoint</span>&nbsp;</span>{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;用于匹配目标静态方法</span>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-function">ElementMatcher&lt;MethodDescription&gt;&nbsp;<span class="hljs-title">getMethodsMatcher</span><span class="hljs-params">()</span></span>;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;拦截到的静态方法交给哪个Interceptor来增强</span>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-function">String&nbsp;<span class="hljs-title">getMethodsInterceptor</span><span class="hljs-params">()</span></span>;
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;增强过程中是否需要修改参数</span>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-function"><span class="hljs-keyword">boolean</span>&nbsp;<span class="hljs-title">isOverrideArgs</span><span class="hljs-params">()</span></span>;
+}
+</code></pre>
+<p>这里以 mysql-8.x-plugin 插件中的实现为例进行说明，其中ConnectionImplCreateInstrumentation 这个插件类的 enhanceClass() 方法如下：</p>
+<pre><code data-language="java" class="lang-java"><span class="hljs-function"><span class="hljs-keyword">protected</span>&nbsp;ClassMatch&nbsp;<span class="hljs-title">enhanceClass</span><span class="hljs-params">()</span>&nbsp;</span>{&nbsp;<span class="hljs-comment">//&nbsp;拦截目标类为ConnectionImpl</span>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;byName(<span class="hljs-string">"com.mysql.cj.jdbc.ConnectionImpl"</span>);
+}
+</code></pre>
+<p>其 getStaticMethodsInterceptPoints() 方法返回的下面这个 StaticMethodsInterceptPoint 实现（StaticMethodsInterceptPoint 接口的实现基本都是这种匿名内部类）：</p>
+<pre><code data-language="java" class="lang-java">new&nbsp;StaticMethodsInterceptPoint[]&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;new&nbsp;StaticMethodsInterceptPoint()&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;@Override
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;ElementMatcher&lt;MethodDescription&gt;&nbsp;getMethodsMatcher()&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return&nbsp;named("getInstance");&nbsp;//&nbsp;增强&nbsp;getInstance()方法
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;@Override
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;String&nbsp;getMethodsInterceptor()&nbsp;{&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;//&nbsp;委托给&nbsp;ConnectionCreateInterceptor进行增强
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return&nbsp;"org.apache.skywalking.apm.plugin.jdbc
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.mysql.v8.ConnectionCreateInterceptor";
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;@Override
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;public&nbsp;boolean&nbsp;isOverrideArgs()&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return&nbsp;false;&nbsp;//&nbsp;增强过程中无需修改方法参数
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;}
+}
+</code></pre>
+<p>也就是说，ConnectionImplCreateInstrumentation 这个插件拦截的是&nbsp; com.mysql.jdbc.ConnectionImpl.getInstance() 这个静态方法。</p>
+<p>接下来回到 ClassEnhancePluginDefine.enhanceClass() 方法的具体实现：</p>
+<pre><code data-language="java" class="lang-java"><span class="hljs-keyword">private</span>&nbsp;DynamicType.Builder&lt;?&gt;&nbsp;enhanceClass(TypeDescription&nbsp;typeDescription,
+&nbsp;&nbsp;&nbsp;&nbsp;DynamicType.Builder&lt;?&gt;&nbsp;newClassBuilder,&nbsp;ClassLoader&nbsp;classLoader)&nbsp;<span class="hljs-keyword">throws</span>&nbsp;PluginException&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;获取当前插件的静态方法拦截点，如果该插件不增强静态方法，则该数组为空</span>
+&nbsp;&nbsp;&nbsp;&nbsp;StaticMethodsInterceptPoint[]&nbsp;staticMethodsInterceptPoints&nbsp;=&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;getStaticMethodsInterceptPoints();
+&nbsp;&nbsp;&nbsp;&nbsp;String&nbsp;enhanceOriginClassName&nbsp;=&nbsp;typeDescription.getTypeName();
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">for</span>&nbsp;(StaticMethodsInterceptPoint&nbsp;staticMethodsInterceptPoint&nbsp;:
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;staticMethodsInterceptPoints)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;进行具体增强的Interceptor名称</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;String&nbsp;interceptor&nbsp;=&nbsp;staticMethodsInterceptPoint
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.getMethodsInterceptor();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;在增强过程中，是否要修改参数。</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(staticMethodsInterceptPoint.isOverrideArgs())&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;前面介绍了&nbsp;Byte&nbsp;Buddy&nbsp;用法，这里也是一样的，通过method()方法</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;指定拦截方法的条件</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;newClassBuilder&nbsp;=&nbsp;newClassBuilder.method(isStatic()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.and(staticMethodsInterceptPoint.getMethodsMatcher()))&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.intercept(&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MethodDelegation.withDefaultConfiguration()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.withBinders(&nbsp;<span class="hljs-comment">//&nbsp;要用Morph注解，需要先绑定</span>
+Morph.Binder.install(OverrideCallable<span class="hljs-class">.<span class="hljs-keyword">class</span>)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;//&nbsp;<span class="hljs-title">StaticMethodsInterWithOverrideArgs</span>后面展开说
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;).<span class="hljs-title">to</span>(<span class="hljs-title">new</span>&nbsp;<span class="hljs-title">StaticMethodsInterWithOverrideArgs</span>(<span class="hljs-title">interceptor</span>))
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)</span>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}&nbsp;<span class="hljs-keyword">else</span>&nbsp;{&nbsp;<span class="hljs-comment">//&nbsp;下面是不需要修改参数的增强</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;newClassBuilder&nbsp;=&nbsp;newClassBuilder.method(isStatic()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.and(staticMethodsInterceptPoint.getMethodsMatcher()))
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.intercept(MethodDelegation.withDefaultConfiguration()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.to(<span class="hljs-keyword">new</span>&nbsp;StaticMethodsInter(interceptor))
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;newClassBuilder;
+}
+</code></pre>
+<p>根据前文对 Byte Buddy API 的介绍，通过 method() 方法拦截到静态方法之后，如果需要修改方法参数，则会通过 StaticMethodsInterWithOverrideArgs 对象进行增强，其中的 intercept() 方法是其核心实现：</p>
+<pre><code data-language="java" class="lang-java"><span class="hljs-meta">@RuntimeType</span>
+<span class="hljs-function"><span class="hljs-keyword">public</span>&nbsp;Object&nbsp;<span class="hljs-title">intercept</span><span class="hljs-params">(@Origin&nbsp;Class&lt;?&gt;&nbsp;clazz,&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;@AllArguments&nbsp;Object[]&nbsp;allArguments,&nbsp;@Origin&nbsp;Method&nbsp;method,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;@Morph&nbsp;OverrideCallable&nbsp;zuper)</span>&nbsp;<span class="hljs-keyword">throws</span>&nbsp;Throwable&nbsp;</span>{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;加载插件指定的StaticMethodsAroundInterceptor</span>
+&nbsp;&nbsp;&nbsp;&nbsp;StaticMethodsAroundInterceptor&nbsp;interceptor&nbsp;=&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;InterceptorInstanceLoader
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.load(staticMethodsAroundInterceptorClassName,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;clazz.getClassLoader());
+&nbsp;&nbsp;&nbsp;&nbsp;MethodInterceptResult&nbsp;result&nbsp;=&nbsp;<span class="hljs-keyword">new</span>&nbsp;MethodInterceptResult();
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;调用&nbsp;interceptor.before()做前置处理</span>
+&nbsp;&nbsp;&nbsp;&nbsp;interceptor.beforeMethod(clazz,&nbsp;method,&nbsp;allArguments,&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;method.getParameterTypes(),&nbsp;result);
+&nbsp;&nbsp;&nbsp;&nbsp;Object&nbsp;ret&nbsp;=&nbsp;<span class="hljs-keyword">null</span>;
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">try</span>&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;根据before()的处理结果判定是否调用目标方法</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(!result.isContinue())&nbsp;{&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ret&nbsp;=&nbsp;result._ret();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}&nbsp;<span class="hljs-keyword">else</span>&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;注意：这里是需要传参的，这些参数我们是可以在before()方法中改动</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;的，这就是OverrideArgs的意义</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ret&nbsp;=&nbsp;zuper.call(allArguments);&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;}&nbsp;<span class="hljs-keyword">catch</span>&nbsp;(Throwable&nbsp;t)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;如果出现异常，会先通知interceptor中的</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;handleMethodException()方法进行处理</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;interceptor.handleMethodException(clazz,&nbsp;method,&nbsp;allArguments,&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;method.getParameterTypes(),&nbsp;t);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">throw</span>&nbsp;t;
+&nbsp;&nbsp;&nbsp;&nbsp;}&nbsp;<span class="hljs-keyword">finally</span>&nbsp;{&nbsp;<span class="hljs-comment">//&nbsp;通过after()方法进行后置处理</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ret&nbsp;=&nbsp;interceptor.afterMethod(clazz,&nbsp;method,&nbsp;allArguments,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;method.getParameterTypes(),&nbsp;ret);
+&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;ret;
+}
+</code></pre>
+<p>如果不需要修改方法参数，则会通过 StaticMethodsInter 对象进行增强，其实现与 StaticMethodsInterWithOverrideArgs 类似，唯一区别在于调用目标方法时无法修改参数。</p>
+<p>上面使用的 StaticMethodsAroundInterceptor 是个接口，其中定义了如下三个方法：</p>
+<ul>
+<li>before()：在目标方法之前调用。</li>
+<li>after()：在目标方法之后调用。</li>
+<li>handleMethodException()：在目标方法抛出异常时调用。</li>
+</ul>
+<p>通过实现 StaticMethodsAroundInterceptor 接口，各个 Agent 插件就可以在静态方法前后添加自定义的逻辑了。</p>
+<p>前面提到的&nbsp;mysql-8.x-plugin 中的 ConnectionImplCreateInstrumentation 自然也实现了该接口。通过对&nbsp;StaticMethodsInterWithOverrideArgs 以及 StaticMethodsAroundInterceptor 接口的介绍，我们会发现 Agent 插件对静态方法的增强逻辑与&nbsp;Spring AOP 中环绕通知的逻辑非常类似。</p>
+<blockquote>
+<p>设计模式 TIP<br>
+ClassEnhancePluginDefine 是个典型的模板方法模式的使用场景，其 enhanceClass() 方法只实现了增强静态方法的基本流程，真正的增强逻辑全部通过 getStaticMethodsInterceptPoints() 抽象方法推迟到子类实现。在后面增强对象的构造方法和实例方法时，同样会看到类似的实现。</p>
+</blockquote>
+<h3>增强实例对象</h3>
+<p>分析完增强 static 静态方法的相关逻辑之后，我们继续分析增强一个 Java 实例对象的相关逻辑 —— 入口是 enhanceInstance() 方法。enhanceInstance() 方法将分成三个部分来分析其实现：</p>
+<ul>
+<li><strong>实现 EnhancedInstance 接口</strong></li>
+<li><strong>增强构造方法</strong></li>
+<li><strong>增强实例方法</strong></li>
+</ul>
+<h4>实现 EnhancedInstance 接口</h4>
+<p>enhanceInstance() 方法首先会为目标类添加了一个字段，同时会让目标类实现 EnhancedInstance 接口，具体实现如下：</p>
+<pre><code data-language="java" class="lang-java">//&nbsp;EnhanceContext记录了整个增强过程中的上下文信息，里面就两个boolean值
+if&nbsp;(!context.isObjectExtended())&nbsp;{&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;newClassBuilder&nbsp;=&nbsp;newClassBuilder
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;//&nbsp;定义一个字段private&nbsp;volatile的字段，该字段为Object类型
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.defineField("_$EnhancedClassField_ws",&nbsp;Object.class,&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ACC_PRIVATE&nbsp;|&nbsp;ACC_VOLATILE)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;//&nbsp;实现EnhancedInstance接口的方式是读写新
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;//&nbsp;增的"_$EnhancedClassField_ws"字段
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.implement(EnhancedInstance.class)&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.intercept(FieldAccessor.ofField(CONTEXT_ATTR_NAME));
+&nbsp;&nbsp;&nbsp;&nbsp;context.extendObjectCompleted();&nbsp;//&nbsp;标记一下上线文信息
+}
+</code></pre>
+<p>EnhancedInstance 接口中定义了 getSkyWalkingDynamicField() 和setSkyWalkingDynamicField() 两个方法，分别读写新增的 _$EnhancedClassField_ws 字段。以前文 demo-webapp 示例中的 HelloWorldController 这个类为例，在 skywalking-agent/debugging/ 目录下可以看到增强后的类如下：</p>
+<pre><code data-language="java" class="lang-java"><span class="hljs-comment">//&nbsp;实现了EnhancedInstance接口</span>
+<span class="hljs-keyword">public</span>&nbsp;<span class="hljs-class"><span class="hljs-keyword">class</span>&nbsp;<span class="hljs-title">HelloWorldController</span>&nbsp;<span class="hljs-keyword">implements</span>&nbsp;<span class="hljs-title">EnhancedInstance</span>&nbsp;</span>{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">private</span>&nbsp;<span class="hljs-keyword">volatile</span>&nbsp;Object&nbsp;_$EnhancedClassField_ws;&nbsp;<span class="hljs-comment">//&nbsp;新增字段</span>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;对EnhancedInstance的实现</span>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-function"><span class="hljs-keyword">public</span>&nbsp;Object&nbsp;<span class="hljs-title">getSkyWalkingDynamicField</span><span class="hljs-params">()</span>&nbsp;</span>{&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;<span class="hljs-keyword">this</span>._$EnhancedClassField_ws;
+&nbsp;&nbsp;&nbsp;&nbsp;}
+
+
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-function"><span class="hljs-keyword">public</span>&nbsp;<span class="hljs-keyword">void</span>&nbsp;<span class="hljs-title">setSkyWalkingDynamicField</span><span class="hljs-params">(Object&nbsp;var1)</span>&nbsp;</span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">this</span>._$EnhancedClassField_ws&nbsp;=&nbsp;var1;
+&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;...&nbsp;...&nbsp;<span class="hljs-comment">//&nbsp;省略其他业务逻辑相关的方法</span>
+}
+</code></pre>
+<h4>增强构造方法</h4>
+<p>接下来，ehanceInstance() 方法会增强实例对象的构造方法，具体流程与增强 static 静态方法的流程类似，唯一区别是这里使用的是 ConstructorInterceptPoint，相关代码片段如下：</p>
+<pre><code data-language="java" class="lang-java">ConstructorInterceptPoint[]&nbsp;constructorInterceptPoints&nbsp;=&nbsp;
+&nbsp;&nbsp;&nbsp;getConstructorsInterceptPoints();
+<span class="hljs-keyword">for</span>&nbsp;(ConstructorInterceptPoint&nbsp;constructorInterceptPoint&nbsp;:&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;constructorInterceptPoints)&nbsp;{&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;newClassBuilder&nbsp;=&nbsp;newClassBuilder.constructor(
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;constructorInterceptPoint.getConstructorMatcher())
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;这里对&nbsp;SuperMethodCall的使用方式和介绍&nbsp;Byte&nbsp;Buddy基础时说的一毛一样</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.intercept(SuperMethodCall.INSTANCE
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.andThen(MethodDelegation.withDefaultConfiguration()&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.to(<span class="hljs-keyword">new</span>&nbsp;ConstructorInter(constructorInterceptPoint
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.getConstructorInterceptor(),&nbsp;classLoader))
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)
+&nbsp;&nbsp;&nbsp;&nbsp;);
+}
+</code></pre>
+<p>ConstructorInterceptPoint 中描述了插件要增强的构造方法以及增强的 Interceptor 类，与StaticMethodsInterceptPoint 类似，不再展开介绍。</p>
+<p>ConstructorInter 与 StaticMethodsInter 类似（这里没有修改构造方法参数的 OverriderArgs 版本，因为此时的构造方法已经调用完成了），ConstructorInter.intercept() 方法的实现如下：</p>
+<pre><code data-language="java" class="lang-java"><span class="hljs-meta">@RuntimeType</span>
+<span class="hljs-function"><span class="hljs-keyword">public</span>&nbsp;<span class="hljs-keyword">void</span>&nbsp;<span class="hljs-title">intercept</span><span class="hljs-params">(@This&nbsp;Object&nbsp;obj,&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;@AllArguments&nbsp;Object[]&nbsp;allArguments)</span>&nbsp;</span>{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;前面已经让该对象实现了EnhancedInstance接口，所以这里的类型转换是安全的</span>
+&nbsp;&nbsp;&nbsp;&nbsp;EnhancedInstance&nbsp;targetObject&nbsp;=&nbsp;(EnhancedInstance)obj;
+&nbsp;&nbsp;&nbsp;&nbsp;interceptor.onConstruct(targetObject,&nbsp;allArguments);
+}
+</code></pre>
+<p>这里使用的 InstanceConstructorInterceptor 接口与前文介绍的 StaticMethodsAroundInterceptor 接口作用相同，都是留给各个插件去实现增强逻辑的。InstanceConstructorInterceptor 接口的定义如下：</p>
+<pre><code data-language="java" class="lang-java"><span class="hljs-keyword">public</span>&nbsp;<span class="hljs-class"><span class="hljs-keyword">interface</span>&nbsp;<span class="hljs-title">InstanceConstructorInterceptor</span>&nbsp;</span>{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-function"><span class="hljs-keyword">void</span>&nbsp;<span class="hljs-title">onConstruct</span><span class="hljs-params">(EnhancedInstance&nbsp;objInst,&nbsp;Object[]&nbsp;allArguments)</span></span>;
+}
+</code></pre>
+<h4>mysql-8.x-plugin 插件对 ConnectionImpl 的增强</h4>
+<p>到这里你可能感觉实现逻辑有点乱，这里我将以 mysql-8.x-plugin 插件为例，把静态方法增强、构造方法增强等逻辑串起来。</p>
+<p>首先来看 mysql-connector-java-8.x.jar 中 &nbsp;com.mysql.cj.jdbc.ConnectionImpl.getInstance() 方法，这是我们创建数据连接的最常用方法，具体实现：</p>
+<pre><code data-language="java" class="lang-java"><span class="hljs-function"><span class="hljs-keyword">public</span>&nbsp;<span class="hljs-keyword">static</span>&nbsp;JdbcConnection&nbsp;<span class="hljs-title">getInstance</span><span class="hljs-params">(HostInfo&nbsp;hostInfo)</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">throws</span>&nbsp;SQLException&nbsp;</span>{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;<span class="hljs-keyword">new</span>&nbsp;ConnectionImpl(hostInfo);&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;创建&nbsp;ConnectionImpl实例</span>
+}
+</code></pre>
+<p>先来看 mysql-8.x-plugin 模块的 skywalking-plugin.def 文件，其中定义了ConnectionInstrumentation 这个插件类，它会被 AgentClassLoader 加载，其 enhanceClass() 方法返回的 Matcher 拦截的目标类是 com.mysql.cj.jdbc.ConnectionImpl。</p>
+<p>虽然 ConnectionInstrumentation 并不拦截构造方法（因为它的 getConstructorsInterceptPoints() 方法返回的是空数组），但是依然会修改 ConnectionImpl，为其添加 _$EnhancedClassField_ws 字段并实现 EnhanceInstance接口。</p>
+<p>在 skywalking-plugin.def 文件中还定义了 ConnectionImplCreateInstrumentation 这个插件类，正如前面介绍的那样，它会拦截 com.mysql.cj.jdbc.ConnectionImpl 的 getInstance() 方法，并委托给 ConnectionCreateInterceptor 进行增强。ConnectionCreateInterceptor 中的 before() 和 handleMethodException() 方法都是空实现，其 after() 方法会记录新建 Connection 的一些信息，具体实现如下：</p>
+<pre><code data-language="java" class="lang-java"><span class="hljs-function"><span class="hljs-keyword">public</span>&nbsp;Object&nbsp;<span class="hljs-title">afterMethod</span><span class="hljs-params">(Class&nbsp;clazz,&nbsp;Method&nbsp;method,&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Object[]&nbsp;allArguments,&nbsp;Class&lt;?&gt;[]&nbsp;parameterTypes,&nbsp;Object&nbsp;ret)</span>&nbsp;</span>{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(ret&nbsp;<span class="hljs-keyword">instanceof</span>&nbsp;EnhancedInstance)&nbsp;{&nbsp;<span class="hljs-comment">//&nbsp;ConnectionImpl已经被增强了</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;ConnectionInfo中记录了DB名称、DB类型以及地址等等信息，具体构造过程省</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;略，它会被记录到前面新增的&nbsp;_$EnhancedClassField_ws&nbsp;那个字段中</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ConnectionInfo&nbsp;connectionInfo&nbsp;=&nbsp;...
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;((EnhancedInstance)&nbsp;ret).setSkyWalkingDynamicField(
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;connectionInfo);
+&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;ret;
+}
+</code></pre>
+<p>另外，这里还会看到一个 AbstractMysqlInstrumentation 抽象类，继承关系如下图所示：<br>
+<img src="https://s0.lgstatic.com/i/image3/M01/0B/04/Ciqah16MPj6AWNsiAABSl6fhydc390.png" alt=""></p>
+<p>AbstractMysqlInstrumentation 实现了 witnessClasses() 方法以及 ClassEnhancePluginDefine 中的三个 get*InterceptPoints() 抽象方法（这三个方法都返回 null），其中 witnessClasses() 方法返回"com.mysql.cj.interceptors.QueryInterceptor"字符串，witnessClasses() 方法作用不再重复。</p>
+<p>AbstractMysqlInstrumentation 的子类只需根据需求实现相应的 get*InterceptPoints() 方法即可，无需再提供其他剩余 get*InterceptPoints() 方法的空实现。在其他版本的 MySQL 插件中也有 AbstractMysqlInstrumentation 这个抽象类，功能相同，不再重复。</p>
+<h4>增强实例方法</h4>
+<p>最后，我们来看 enhanceInstance() 方法对实例方法的增强，其实和增强静态方法的套路一样，我们直接看代码吧：</p>
+<pre><code data-language="java" class="lang-java">InstanceMethodsInterceptPoint[]&nbsp;instanceMethodsInterceptPoints&nbsp;=&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;getInstanceMethodsInterceptPoints();
+<span class="hljs-keyword">for</span>&nbsp;(InstanceMethodsInterceptPoint&nbsp;instanceMethodsInterceptPoint&nbsp;:&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;instanceMethodsInterceptPoints)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;String&nbsp;interceptor&nbsp;=&nbsp;instanceMethodsInterceptPoint
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.getMethodsInterceptor();
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;目标方法的匹配条件</span>
+&nbsp;&nbsp;&nbsp;&nbsp;ElementMatcher.Junction&lt;MethodDescription&gt;&nbsp;junction&nbsp;=
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;not(isStatic()).and(instanceMethodsInterceptPoint
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.getMethodsMatcher());&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(instanceMethodsInterceptPoint&nbsp;<span class="hljs-keyword">instanceof</span>&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;DeclaredInstanceMethodsInterceptPoint)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;目标方法必须定义在目标类中</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;junction&nbsp;=&nbsp;junction.and(ElementMatchers.
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&lt;MethodDescription&gt;isDeclaredBy(typeDescription));&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(instanceMethodsInterceptPoint.isOverrideArgs()){&nbsp;<span class="hljs-comment">//修改方法参数</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;newClassBuilder&nbsp;=&nbsp;newClassBuilder
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.method(junction)&nbsp;<span class="hljs-comment">//&nbsp;匹配目标方法</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.intercept(MethodDelegation.withDefaultConfiguration()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;使用@Morph注解之前，需要通过Morph.Binder绑定一下</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.withBinders(Morph.Binder.install(OverrideCallable<span class="hljs-class">.<span class="hljs-keyword">class</span>))
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.<span class="hljs-title">to</span>(<span class="hljs-title">new</span>&nbsp;<span class="hljs-title">InstMethodsInterWithOverrideArgs</span>(<span class="hljs-title">interceptor</span>,&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-title">classLoader</span>)))</span>;
+&nbsp;&nbsp;&nbsp;&nbsp;}&nbsp;<span class="hljs-keyword">else</span>&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;...省略不需要重载参数的部分...</span>
+&nbsp;&nbsp;&nbsp;&nbsp;}
+}
+</code></pre>
+<p>增强实例方法过程中使用到的类，在增强静态方法中都有对应的类，如下表所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/84/1A/Cgq2xl6MPj6AdwW_AABSs_M53Tk880.png" alt=""></p>
+<p>这些类的具体功能不再展开介绍了。</p>
+<p>最后依然以 mysql-8.x-plugin 插件为例介绍一下它对实例方法的增强过程，其中 &nbsp;ConnectionInstrumentation.getInstanceMethodsInterceptPoints() 方法返回了 5 个 InstanceMethodsInterceptPoint 对象，这里只看其中的第一个对象：它负责拦截 &nbsp;ConnectionImpl 的 prepareStatement() 方法，并委托给 CreatePreparedStatementInterceptor（不修改方法参数），具体实现代码就不展示了。</p>
+<p>在 CreatePreparedStatementInterceptor 中，before() 和 handleMethodException() 方法都是空实现，其 after() 方法实现如下：</p>
+<pre><code data-language="java" class="lang-java"><span class="hljs-function"><span class="hljs-keyword">public</span>&nbsp;Object&nbsp;<span class="hljs-title">afterMethod</span><span class="hljs-params">(EnhancedInstance&nbsp;objInst,&nbsp;Method&nbsp;method,&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;Object[]&nbsp;allArguments,&nbsp;Class&lt;?&gt;[]&nbsp;argumentsTypes,
+&nbsp;&nbsp;&nbsp;&nbsp;Object&nbsp;ret)</span>&nbsp;<span class="hljs-keyword">throws</span>&nbsp;Throwable&nbsp;</span>{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(ret&nbsp;<span class="hljs-keyword">instanceof</span>&nbsp;EnhancedInstance)&nbsp;{&nbsp;<span class="hljs-comment">//&nbsp;ConnectionImpl已被增强过</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;更新_$EnhancedClassField_ws字段，StatementEnhanceInfos中不仅封</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;装了原有的ConnectionInfo，还包含了具体执行的SQL语句和SQL参数等信息</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;((EnhancedInstance)ret).setSkyWalkingDynamicField(
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">new</span>&nbsp;StatementEnhanceInfos(
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(ConnectionInfo)objInst.getSkyWalkingDynamicField(),
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(String)allArguments[<span class="hljs-number">0</span>],&nbsp;<span class="hljs-string">"PreparedStatement"</span>));
+&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;ret;
+}
+</code></pre>
+<h3>InterceptorInstanceLoader</h3>
+<p>前面加载 Interceptpr 的 ClassLoader 并没有使用 AgentClassLoader 的默认实例或是Application ClassLoader，而是通过 InterceptorInstanceLoader 完成加载的。&nbsp;在 InterceptorInstanceLoader 里面会维护一个 ClassLoader Cache，以及一个 Instance Cache，如下所示：</p>
+<pre><code data-language="java" class="lang-java"><span class="hljs-comment">//&nbsp;记录了&nbsp;instanceKey与实例之间的映射关系，保证单例</span>
+<span class="hljs-keyword">static</span>&nbsp;ConcurrentHashMap&lt;String,&nbsp;Object&gt;&nbsp;INSTANCE_CACHE&nbsp;=&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">new</span>&nbsp;ConcurrentHashMap&lt;String,&nbsp;Object&gt;();
+
+<span class="hljs-comment">//&nbsp;记录了&nbsp;targetClassLoader以及其子&nbsp;AgentClassLoader的对应关系</span>
+<span class="hljs-keyword">static</span>&nbsp;Map&lt;ClassLoader,&nbsp;ClassLoader&gt;&nbsp;EXTEND_PLUGIN_CLASSLOADERS&nbsp;=&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">new</span>&nbsp;HashMap&lt;ClassLoader,&nbsp;ClassLoader&gt;();
+</code></pre>
+<p>在通过 InterceptorInstanceLoader.load() 这个静态方法加载 Interceptor 类时的核心逻辑如下：</p>
+<pre><code data-language="java" class="lang-java"><span class="hljs-keyword">public</span>&nbsp;<span class="hljs-keyword">static</span>&nbsp;&lt;T&gt;&nbsp;<span class="hljs-function">T&nbsp;<span class="hljs-title">load</span><span class="hljs-params">(String&nbsp;className,&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ClassLoader&nbsp;targetClassLoader)</span></span>{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(targetClassLoader&nbsp;==&nbsp;<span class="hljs-keyword">null</span>)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;targetClassLoader&nbsp;=&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;InterceptorInstanceLoader<span class="hljs-class">.<span class="hljs-keyword">class</span>.<span class="hljs-title">getClassLoader</span>()</span>;
+&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;通过该&nbsp;instanceKey保证该&nbsp;Interceptor在一个&nbsp;ClassLoader中只创建一次</span>
+&nbsp;&nbsp;&nbsp;&nbsp;String&nbsp;instanceKey&nbsp;=&nbsp;className&nbsp;+&nbsp;<span class="hljs-string">"_OF_"</span>&nbsp;+&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;targetClassLoader.getClass().getName()&nbsp;+&nbsp;<span class="hljs-string">"@"</span>&nbsp;+&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Integer.toHexString(targetClassLoader.hashCode());
+&nbsp;&nbsp;&nbsp;&nbsp;Object&nbsp;inst&nbsp;=&nbsp;INSTANCE_CACHE.get(instanceKey);
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(inst&nbsp;==&nbsp;<span class="hljs-keyword">null</span>)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;查找targetClassLoader对应的子AgentClassLoader</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ClassLoader&nbsp;pluginLoader&nbsp;=&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;EXTEND_PLUGIN_CLASSLOADERS.get(targetClassLoader);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(pluginLoader&nbsp;==&nbsp;<span class="hljs-keyword">null</span>)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;为&nbsp;targetClassLoader创建子AgentClassLoader</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;pluginLoader&nbsp;=&nbsp;<span class="hljs-keyword">new</span>&nbsp;AgentClassLoader(targetClassLoader);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;EXTEND_PLUGIN_CLASSLOADERS.put(targetClassLoader,&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;pluginLoader);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;通过子AgentClassLoader加载Interceptor类</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;inst&nbsp;=&nbsp;Class.forName(className,&nbsp;<span class="hljs-keyword">true</span>,&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;pluginLoader).newInstance();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(inst&nbsp;!=&nbsp;<span class="hljs-keyword">null</span>)&nbsp;{&nbsp;<span class="hljs-comment">//&nbsp;记录Interceptor对象</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;INSTANCE_CACHE.put(instanceKey,&nbsp;inst);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;(T)&nbsp;inst;
+}
+</code></pre>
+<p>以 demo-webapp 为例，其类加载器的结构如下图所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/0B/04/Ciqah16MPj6ACCrQAAETGCYTq30304.png" alt=""></p>
+<h3>总结</h3>
+<p>本课时深入介绍了 Agent 插件增强目标类的实现，这是 Agent 最核心功能，其中深入分析了增强静态方法、构造方法、实例方法的原理，以及插件如何让目标实例对象实现 EnhanceInstance 接口，如何为目标实例对象添加新字段等。为了帮助你更好的理解，在分析的过程中还以 mysql-8.x-plugin 插件为例将上述核心逻辑串连起来。</p></div>
+
+</body></html>

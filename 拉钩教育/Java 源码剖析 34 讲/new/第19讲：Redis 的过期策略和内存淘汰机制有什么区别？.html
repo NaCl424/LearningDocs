@@ -1,0 +1,1259 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第19讲：Redis 的过期策略和内存淘汰机制有什么区别？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>第19讲：Redis 的过期策略和内存淘汰机制有什么区别？</h1><p>Redis 和 MySQL 是面试绕不过的两座大山，他们一个是关系型数据库的代表（MySQL），一个是键值数据库以及缓存中间件的一哥。尤其 Redis 几乎是所有互联网公司都在用的技术，比如国内的 BATJ、新浪、360、小米等公司；国外的微软、Twitter、Stack Overflow、GitHub、暴雪等公司。我从业了十几年，就职过 4、5 家公司，有的公司用 MySQL、有的用 SQL Server、甚至还有的用 Oracle 和 DB2，但缓存无一例外使用的都是 Redis，从某种程度上来讲 Redis 是普及率最高的技术，没有之一。</p>
+<p>我们本课时的面试题是，Redis 是如何处理过期数据的？当内存不够用时 Redis 又是如何处理的？</p>
+<h3>典型回答</h3>
+<p>我们在新增 Redis 缓存时可以设置缓存的过期时间，该时间保证了数据在规定的时间内失效，可以借助这个特性来实现很多功能。比如，存储一定天数的用户（登录）会话信息，这样在一定范围内用户不用重复登录了，但为了安全性，需要在一定时间之后重新验证用户的信息。因此，我们可以使用 Redis 设置过期时间来存储用户的会话信息。</p>
+<p>对于已经过期的数据，Redis 将使用两种策略来删除这些过期键，它们分别是<strong>惰性删除</strong>和<strong>定期删除</strong>。</p>
+<p><strong>惰性删除</strong>是指 Redis 服务器不主动删除过期的键值，而是当访问键值时，再检查当前的键值是否过期，如果过期则执行删除并返回 null 给客户端；如果没过期则正常返回值信息给客户端。</p>
+<p>它的优点是不会浪费太多的系统资源，只是在每次访问时才检查键值是否过期。缺点是删除过期键不及时，造成了一定的空间浪费。</p>
+<p>惰性删除的源码位于 src/db.c 文件的 expireIfNeeded 方法中，如下所示：</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">expireIfNeeded</span><span class="hljs-params">(redisDb *db, robj *key)</span> </span>{
+    <span class="hljs-comment">// 判断键是否过期</span>
+    <span class="hljs-keyword">if</span> (!keyIsExpired(db,key)) <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">if</span> (server.masterhost != NULL) <span class="hljs-keyword">return</span> <span class="hljs-number">1</span>;
+    <span class="hljs-comment">/* 删除过期键 */</span>
+    <span class="hljs-comment">// 增加过期键个数</span>
+    server.stat_expiredkeys++;
+    <span class="hljs-comment">// 传播键过期的消息</span>
+    propagateExpire(db,key,server.lazyfree_lazy_expire);
+    notifyKeyspaceEvent(NOTIFY_EXPIRED,
+        <span class="hljs-string">"expired"</span>,key,db-&gt;id);
+    <span class="hljs-comment">// server.lazyfree_lazy_expire 为 1 表示异步删除，否则则为同步删除</span>
+    <span class="hljs-keyword">return</span> server.lazyfree_lazy_expire ? dbAsyncDelete(db,key) :
+                                         dbSyncDelete(db,key);
+}
+<span class="hljs-comment">// 判断键是否过期</span>
+<span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">keyIsExpired</span><span class="hljs-params">(redisDb *db, robj *key)</span> </span>{
+    mstime_t when = getExpire(db,key);
+    <span class="hljs-keyword">if</span> (when &lt; <span class="hljs-number">0</span>) <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>; 
+    <span class="hljs-keyword">if</span> (server.loading) <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+    mstime_t now = server.lua_caller ? server.lua_time_start : mstime();
+    <span class="hljs-keyword">return</span> now &gt; when;
+}
+<span class="hljs-comment">// 获取键的过期时间</span>
+<span class="hljs-function"><span class="hljs-keyword">long</span> <span class="hljs-keyword">long</span> <span class="hljs-title">getExpire</span><span class="hljs-params">(redisDb *db, robj *key)</span> </span>{
+    dictEntry *de;
+    <span class="hljs-keyword">if</span> (dictSize(db-&gt;expires) == <span class="hljs-number">0</span> ||
+       (de = dictFind(db-&gt;expires,key-&gt;ptr)) == NULL) <span class="hljs-keyword">return</span> -<span class="hljs-number">1</span>;
+    serverAssertWithInfo(NULL,key,dictFind(db-&gt;dict,key-&gt;ptr) != NULL);
+    <span class="hljs-keyword">return</span> dictGetSignedIntegerVal(de);
+}
+</code></pre>
+<p>惰性删除的执行流程如下图所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/08/B3/CgqCHl67XjqAPZOAAAA2gxqwspY599.png" alt="图片1.png"></p>
+<p>除了惰性删除之外，Redis 还提供了定期删除功能以弥补惰性删除的不足。</p>
+<p>定期删除是指 Redis 服务器每隔一段时间会检查一下数据库，看看是否有过期键可以被清除。</p>
+<p>默认情况下 Redis 定期检查的频率是每秒扫描 10 次，用于定期清除过期键。当然此值还可以通过配置文件进行设置，在 redis.conf 中修改配置“hz”即可，默认的值为“hz 10”。</p>
+<blockquote>
+<p>小贴士：定期删除的扫描并不是遍历所有的键值对，这样的话比较费时且太消耗系统资源。Redis 服务器采用的是随机抽取形式，每次从过期字典中，取出 20 个键进行过期检测，过期字典中存储的是所有设置了过期时间的键值对。如果这批随机检查的数据中有 25% 的比例过期，那么会再抽取 20 个随机键值进行检测和删除，并且会循环执行这个流程，直到抽取的这批数据中过期键值小于 25%，此次检测才算完成。</p>
+</blockquote>
+<p>定期删除的源码在 expire.c 文件的 activeExpireCycle 方法中，如下所示：</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">activeExpireCycle</span><span class="hljs-params">(<span class="hljs-keyword">int</span> type)</span> </span>{
+    <span class="hljs-keyword">static</span> unsigned <span class="hljs-keyword">int</span> current_db = <span class="hljs-number">0</span>; <span class="hljs-comment">/* 上次定期删除遍历到的数据库ID */</span>
+    <span class="hljs-keyword">static</span> <span class="hljs-keyword">int</span> timelimit_exit = <span class="hljs-number">0</span>;      
+    <span class="hljs-keyword">static</span> <span class="hljs-keyword">long</span> <span class="hljs-keyword">long</span> last_fast_cycle = <span class="hljs-number">0</span>; <span class="hljs-comment">/* 上次执行定期删除的时间点 */</span>
+    <span class="hljs-keyword">int</span> j, iteration = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">int</span> dbs_per_call = CRON_DBS_PER_CALL; <span class="hljs-comment">// 需要遍历数据库的数量</span>
+    <span class="hljs-keyword">long</span> <span class="hljs-keyword">long</span> start = ustime(), timelimit, elapsed;
+    <span class="hljs-keyword">if</span> (clientsArePaused()) <span class="hljs-keyword">return</span>;
+    <span class="hljs-keyword">if</span> (type == ACTIVE_EXPIRE_CYCLE_FAST) {
+        <span class="hljs-keyword">if</span> (!timelimit_exit) <span class="hljs-keyword">return</span>;
+        <span class="hljs-comment">// ACTIVE_EXPIRE_CYCLE_FAST_DURATION 快速定期删除的执行时长</span>
+        <span class="hljs-keyword">if</span> (start &lt; last_fast_cycle + ACTIVE_EXPIRE_CYCLE_FAST_DURATION*<span class="hljs-number">2</span>) <span class="hljs-keyword">return</span>;
+        last_fast_cycle = start;
+    }
+    <span class="hljs-keyword">if</span> (dbs_per_call &gt; server.dbnum || timelimit_exit)
+        dbs_per_call = server.dbnum;
+    <span class="hljs-comment">// 慢速定期删除的执行时长</span>
+    timelimit = <span class="hljs-number">1000000</span>*ACTIVE_EXPIRE_CYCLE_SLOW_TIME_PERC/server.hz/<span class="hljs-number">100</span>;
+    timelimit_exit = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">if</span> (timelimit &lt;= <span class="hljs-number">0</span>) timelimit = <span class="hljs-number">1</span>;
+    <span class="hljs-keyword">if</span> (type == ACTIVE_EXPIRE_CYCLE_FAST)
+        timelimit = ACTIVE_EXPIRE_CYCLE_FAST_DURATION; <span class="hljs-comment">/* 删除操作花费的时间 */</span>
+    <span class="hljs-keyword">long</span> total_sampled = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">long</span> total_expired = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">for</span> (j = <span class="hljs-number">0</span>; j &lt; dbs_per_call &amp;&amp; timelimit_exit == <span class="hljs-number">0</span>; j++) {
+        <span class="hljs-keyword">int</span> expired;
+        redisDb *db = server.db+(current_db % server.dbnum);
+        current_db++;
+        <span class="hljs-keyword">do</span> {
+            <span class="hljs-comment">// .......</span>
+            expired = <span class="hljs-number">0</span>;
+            ttl_sum = <span class="hljs-number">0</span>;
+            ttl_samples = <span class="hljs-number">0</span>;
+            <span class="hljs-comment">// 每个数据库中检查的键的数量</span>
+            <span class="hljs-keyword">if</span> (num &gt; ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP)
+                num = ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP;
+            <span class="hljs-comment">// 从数据库中随机选取 num 个键进行检查</span>
+            <span class="hljs-keyword">while</span> (num--) {
+                dictEntry *de;
+                <span class="hljs-keyword">long</span> <span class="hljs-keyword">long</span> ttl;
+                <span class="hljs-keyword">if</span> ((de = dictGetRandomKey(db-&gt;expires)) == NULL) <span class="hljs-keyword">break</span>;
+                ttl = dictGetSignedInteger
+                <span class="hljs-comment">// 过期检查，并对过期键进行删除</span>
+                <span class="hljs-keyword">if</span> (activeExpireCycleTryExpire(db,de,now)) expired++;
+                <span class="hljs-keyword">if</span> (ttl &gt; <span class="hljs-number">0</span>) {
+                    ttl_sum += ttl;
+                    ttl_samples++;
+                }
+                total_sampled++;
+            }
+            total_expired += expired;
+            <span class="hljs-keyword">if</span> (ttl_samples) {
+                <span class="hljs-keyword">long</span> <span class="hljs-keyword">long</span> avg_ttl = ttl_sum/ttl_samples;
+                <span class="hljs-keyword">if</span> (db-&gt;avg_ttl == <span class="hljs-number">0</span>) db-&gt;avg_ttl = avg_ttl;
+                db-&gt;avg_ttl = (db-&gt;avg_ttl/<span class="hljs-number">50</span>)*<span class="hljs-number">49</span> + (avg_ttl/<span class="hljs-number">50</span>);
+            }
+            <span class="hljs-keyword">if</span> ((iteration &amp; <span class="hljs-number">0xf</span>) == <span class="hljs-number">0</span>) { <span class="hljs-comment">/* check once every 16 iterations. */</span>
+                elapsed = ustime()-start;
+                <span class="hljs-keyword">if</span> (elapsed &gt; timelimit) {
+                    timelimit_exit = <span class="hljs-number">1</span>;
+                    server.stat_expired_time_cap_reached_count++;
+                    <span class="hljs-keyword">break</span>;
+                }
+            }
+            <span class="hljs-comment">/* 判断过期键删除数量是否超过 25% */</span>
+        } <span class="hljs-keyword">while</span> (expired &gt; ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP/<span class="hljs-number">4</span>);
+    }
+    <span class="hljs-comment">// .......</span>
+}
+</code></pre>
+<p>定期删除的执行流程，如下图所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/08/B3/Ciqc1F67Xl6ARsvYAADOQ1M6viA643.png" alt="图片2.png"></p>
+<blockquote>
+<p>小贴士：Redis 服务器为了保证过期删除策略不会导致线程卡死，会给过期扫描增加了最大执行时间为 25ms。</p>
+</blockquote>
+<p>以上是 Redis 服务器对待过期键的处理方案，当 Redis 的内存超过最大允许的内存之后，Redis 会触发内存淘汰策略，这和过期策略是完全不同的两个概念，经常有人把二者搞混，这两者一个是在正常情况下清除过期键，一个是在非正常情况下为了保证 Redis 顺利运行的保护策略。</p>
+<p>当 Redis 内存不够用时，Redis 服务器会根据服务器设置的淘汰策略，删除一些不常用的数据，以保证 Redis 服务器的顺利运行。</p>
+<h3>考点分析</h3>
+<p>本课时的面试题并非 Redis 的入门级面试题，需要面试者对 Redis 有一定的了解才能对答如流，并且 Redis 的过期淘汰策略和内存淘汰策略的概念比较类似，都是用于淘汰数据的。因此很多人会把二者当成一回事，但其实并不是，这个面试者特别注意一下，和此知识点相关的面试题还有以下这些：</p>
+<ul>
+<li>Redis 内存淘汰策略有哪些？</li>
+<li>Redis 有哪些内存淘汰算法？</li>
+</ul>
+<h3>知识扩展</h3>
+<h4>Redis 内存淘汰策略</h4>
+<p>我们可以使用 config get maxmemory-policy 命令，来查看当前 Redis 的内存淘汰策略，示例代码如下：</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-number">127.0</span><span class="hljs-number">.0</span><span class="hljs-number">.1</span>:<span class="hljs-number">6379</span>&gt; config get maxmemory-policy
+<span class="hljs-number">1</span>) <span class="hljs-string">"maxmemory-policy"</span>
+<span class="hljs-number">2</span>) <span class="hljs-string">"noeviction"</span>
+</code></pre>
+<p>从上面的结果可以看出，当前 Redis 服务器设置的是“noeviction”类型的内存淘汰策略，那么这表示什么含义呢？Redis 又有几种内存淘汰策略呢？</p>
+<p>在 4.0 版本之前 Redis 的内存淘汰策略有以下 6 种。</p>
+<ul>
+<li>noeviction：不淘汰任何数据，当内存不足时，执行缓存新增操作会报错，它是 Redis 默认内存淘汰策略。</li>
+<li>allkeys-lru：淘汰整个键值中最久未使用的键值。</li>
+<li>allkeys-random：随机淘汰任意键值。</li>
+<li>volatile-lru：淘汰所有设置了过期时间的键值中最久未使用的键值。</li>
+<li>volatile-random：随机淘汰设置了过期时间的任意键值。</li>
+<li>volatile-ttl：优先淘汰更早过期的键值。</li>
+</ul>
+<p>可以看出我们上面示例使用的是 Redis 默认的内存淘汰策略“noeviction”。</p>
+<p>而在 Redis 4.0 版本中又新增了 2 种淘汰策略：</p>
+<ul>
+<li>volatile-lfu，淘汰所有设置了过期时间的键值中最少使用的键值；</li>
+<li>allkeys-lfu，淘汰整个键值中最少使用的键值。</li>
+</ul>
+<blockquote>
+<p>小贴士：从以上内存淘汰策略中可以看出，allkeys-xxx 表示从所有的键值中淘汰数据，而 volatile-xxx 表示从设置了过期键的键值中淘汰数据。</p>
+</blockquote>
+<p>这个内存淘汰策略我们可以通过配置文件来修改，redis.conf 对应的配置项是“maxmemory-policy noeviction”，只需要把它修改成我们需要设置的类型即可。</p>
+<p>需要注意的是，如果使用修改 redis.conf 的方式，当设置完成之后需要重启 Redis 服务器才能生效。</p>
+<p>还有另一种简单的修改内存淘汰策略的方式，我们可以使用命令行工具输入“config set maxmemory-policy noeviction”来修改内存淘汰的策略，这种修改方式的好处是执行成功之后就会生效，无需重启 Redis 服务器。但它的坏处是不能持久化内存淘汰策略，每次重启 Redis 服务器之后设置的内存淘汰策略就会丢失。</p>
+<h4>Redis 内存淘汰算法</h4>
+<p>内存淘汰算法主要包含两种：LRU 淘汰算法和 LFU 淘汰算法。</p>
+<p><strong>LRU</strong>（ Least Recently Used，最近最少使用）<strong>淘汰算法</strong>：是一种常用的页面置换算法，也就是说最久没有使用的缓存将会被淘汰。</p>
+<p>LRU 是基于链表结构实现的，链表中的元素按照操作顺序从前往后排列，最新操作的键会被移动到表头，当需要进行内存淘汰时，只需要删除链表尾部的元素即可。</p>
+<p>Redis 使用的是一种近似 LRU 算法，目的是为了更好的节约内存，它的实现方式是给现有的数据结构添加一个额外的字段，用于记录此键值的最后一次访问时间。Redis 内存淘汰时，会使用随机采样的方式来淘汰数据，它是随机取 5 个值 (此值可配置) ，然后淘汰最久没有使用的数据。</p>
+<p><strong>LFU</strong>（Least Frequently Used，最不常用的）<strong>淘汰算法</strong>：最不常用的算法是根据总访问次数来淘汰数据的，它的核心思想是“如果数据过去被访问多次，那么将来被访问的频率也更高”。</p>
+<p>LFU 相对来说比 LRU 更“智能”，因为它解决了使用频率很低的缓存，只是最近被访问了一次就不会被删除的问题。如果是使用 LRU 类似这种情况数据是不会被删除的，而使用 LFU 的话，这个数据就会被删除。</p>
+<p>Redis 内存淘汰策略使用了 LFU 和近 LRU 的淘汰算法，具体使用哪种淘汰算法，要看服务器是如何设置内存淘汰策略的，也就是要看“maxmemory-policy”的值是如何设置的。</p>
+<h3>小结</h3>
+<p>本课时我们讲了 Redis 的过期删除策略：惰性删除 + 定期删除；还讲了 Redis 的内存淘汰策略，它和过期策略是完全不同的两个概念，内存淘汰策略是当内存不够用时才会触发的一种机制，它在 Redis 4.0 之后提供了 8 种内存淘汰策略，这些淘汰策略主要使用了近 LRU 淘汰算法和 LFU 淘汰算法。</p></div>
+
+</body></html>

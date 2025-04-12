@@ -1,0 +1,991 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第32讲：Flink 和 Kafka 整合时间窗口设计</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>第32讲：Flink 和 Kafka 整合时间窗口设计</h1><p data-nodeid="68850">我们在第 31 课时中讲过，在计算 PV 和 UV 等指标前，用 Flink 将原始数据进行了清洗，清洗完毕的数据被发送到另外的 Kafka Topic 中，接下来我们只需要消费指定 Topic 的数据，然后就可以进行指标计算了。</p>
+
+
+
+<h3 data-nodeid="68107">Flink 消费 Kafka 数据反序列化</h3>
+<p data-nodeid="68108">上一课时定义了用户的行为信息的 Java 对象，我们现在需要消费新的 Kafka Topic 信息，并且把序列化的消息转化为用户的行为对象：</p>
+<pre class="lang-java" data-nodeid="68109"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">UserClick</span> </span>{ 
+    <span class="hljs-keyword">private</span> String userId; 
+    <span class="hljs-keyword">private</span> Long timestamp; 
+    <span class="hljs-keyword">private</span> String action; 
+    <span class="hljs-function"><span class="hljs-keyword">public</span> String <span class="hljs-title">getUserId</span><span class="hljs-params">()</span> </span>{ 
+        <span class="hljs-keyword">return</span> userId; 
+    } 
+    <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">setUserId</span><span class="hljs-params">(String userId)</span> </span>{ 
+        <span class="hljs-keyword">this</span>.userId = userId; 
+    } 
+    <span class="hljs-function"><span class="hljs-keyword">public</span> Long <span class="hljs-title">getTimestamp</span><span class="hljs-params">()</span> </span>{ 
+        <span class="hljs-keyword">return</span> timestamp; 
+    } 
+    <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">setTimestamp</span><span class="hljs-params">(Long timestamp)</span> </span>{ 
+        <span class="hljs-keyword">this</span>.timestamp = timestamp; 
+    } 
+    <span class="hljs-function"><span class="hljs-keyword">public</span> String <span class="hljs-title">getAction</span><span class="hljs-params">()</span> </span>{ 
+        <span class="hljs-keyword">return</span> action; 
+    } 
+    <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">setAction</span><span class="hljs-params">(String action)</span> </span>{ 
+        <span class="hljs-keyword">this</span>.action = action; 
+    } 
+    <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-title">UserClick</span><span class="hljs-params">(String userId, Long timestamp, String action)</span> </span>{ 
+        <span class="hljs-keyword">this</span>.userId = userId; 
+        <span class="hljs-keyword">this</span>.timestamp = timestamp; 
+        <span class="hljs-keyword">this</span>.action = action; 
+    } 
+} 
+<span class="hljs-keyword">enum</span> UserAction{ 
+    <span class="hljs-comment">//点击 </span>
+    CLICK(<span class="hljs-string">"CLICK"</span>), 
+    <span class="hljs-comment">//购买 </span>
+    PURCHASE(<span class="hljs-string">"PURCHASE"</span>), 
+    <span class="hljs-comment">//其他 </span>
+    OTHER(<span class="hljs-string">"OTHER"</span>); 
+    <span class="hljs-keyword">private</span> String action; 
+    UserAction(String action) { 
+        <span class="hljs-keyword">this</span>.action = action; 
+    } 
+} 
+</code></pre>
+<p data-nodeid="68110">首先，我们需要新建自己的 Kafka Condumer，在第 12 和 24 课时中详细讲解了 Flink 消费 Kafak 消息的原理和实现。在计算 PV 和 UV 的业务场景中，我们选择使用消息中自带的事件时间作为时间特征，代码如下：</p>
+<pre class="lang-java" data-nodeid="68111"><code data-language="java">StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment(); 
+env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime); 
+<span class="hljs-comment">// 检查点配置,如果要用到状态后端，那么必须配置 </span>
+env.setStateBackend(<span class="hljs-keyword">new</span> MemoryStateBackend(<span class="hljs-keyword">true</span>)); 
+Properties properties = <span class="hljs-keyword">new</span> Properties(); 
+properties.setProperty(<span class="hljs-string">"bootstrap.servers"</span>, <span class="hljs-string">"127.0.0.1:9092"</span>); 
+properties.setProperty(FlinkKafkaConsumerBase.KEY_PARTITION_DISCOVERY_INTERVAL_MILLIS, <span class="hljs-string">"10"</span>); 
+FlinkKafkaConsumer&lt;String&gt; consumer = <span class="hljs-keyword">new</span> FlinkKafkaConsumer&lt;&gt;(<span class="hljs-string">"log_user_action"</span>, <span class="hljs-keyword">new</span> SimpleStringSchema(), properties); 
+<span class="hljs-comment">//设置从最早的offset消费 </span>
+consumer.setStartFromEarliest(); 
+DataStream&lt;UserClick&gt; dataStream = env 
+        .addSource(consumer) 
+        .name(<span class="hljs-string">"log_user_action"</span>) 
+        .map(message -&gt; { 
+            JSONObject record = JSON.parseObject(message); 
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> UserClick( 
+                    record.getString(<span class="hljs-string">"user_id"</span>), 
+                    record.getLong(<span class="hljs-string">"timestamp"</span>), 
+                    record.getString(<span class="hljs-string">"action"</span>) 
+            ); 
+        }) 
+        .returns(TypeInformation.of(UserClick.class)); 
+</code></pre>
+<p data-nodeid="68112">在上面的代码中，我们消费第 31 课时中写入的新的 Kafka Topic，并且将读取到的数据反序列化为 UserClick 的 DataStream。</p>
+<h3 data-nodeid="68113">水印和窗口设计</h3>
+<p data-nodeid="68114">我们得到 UserClick 的 DataStream 后，需要进行水印和窗口的设计，可在 DataStream 上调用 assignTimestampsAndWatermarks 方法。我们在第 8 和 25 课时中，详细讲解过 Flink 支持的时间戳提取器和水印发射器：</p>
+<ul data-nodeid="68115">
+<li data-nodeid="68116">
+<p data-nodeid="68117">周期性水印：AssignerWithPeriodicWatermarks</p>
+</li>
+<li data-nodeid="68118">
+<p data-nodeid="68119">特定事件触发水印：PunctuatedWatermark</p>
+</li>
+</ul>
+<p data-nodeid="68120">由于我们的用户访问日志可能存在乱序，所以使用 BoundedOutOfOrdernessTimestampExtractor&nbsp; 来处理乱序消息和延迟时间，我们指定消息的乱序时间 30 秒，具体代码如下：</p>
+<pre class="lang-java" data-nodeid="68121"><code data-language="java">SingleOutputStreamOperator&lt;UserClick&gt; userClickSingleOutputStreamOperator = dataStream.assignTimestampsAndWatermarks(<span class="hljs-keyword">new</span> BoundedOutOfOrdernessTimestampExtractor&lt;UserClick&gt;(Time.seconds(<span class="hljs-number">30</span>)) { 
+    <span class="hljs-meta">@Override</span> 
+    <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">long</span> <span class="hljs-title">extractTimestamp</span><span class="hljs-params">(UserClick element)</span> </span>{ 
+        <span class="hljs-keyword">return</span> element.getTimestamp(); 
+    } 
+}); 
+</code></pre>
+<h3 data-nodeid="68122">窗口触发器</h3>
+<h4 data-nodeid="68123">窗口设置</h4>
+<p data-nodeid="68124">到目前为止，我们已经通过读取 Kafka 中的数据，序列化为用户点击事件的 DataStream，并且完成了水印和时间戳的设计和开发。</p>
+<p data-nodeid="68125">接下来，按照业务需要，我们需要开窗并且进行一天内用户点击事件的 PV、UV 计算。在第 8 课时中讲解了 Flink 支持的窗口类型：</p>
+<ul data-nodeid="68126">
+<li data-nodeid="68127">
+<p data-nodeid="68128"><strong data-nodeid="68195">滚动窗口</strong>，窗口数据有固定的大小，窗口中的数据不会叠加；</p>
+</li>
+<li data-nodeid="68129">
+<p data-nodeid="68130"><strong data-nodeid="68200">滑动窗口</strong>，窗口数据有固定的大小，并且有生成间隔；</p>
+</li>
+<li data-nodeid="68131">
+<p data-nodeid="68132"><strong data-nodeid="68205">会话窗口</strong>，窗口数据没有固定的大小，根据用户传入的参数进行划分，窗口数据无叠加。</p>
+</li>
+</ul>
+<p data-nodeid="68133">很明显，我们需要使用滚动窗口：TumblingProcessingTimeWindow，并且按照一般逻辑，需每天 0 点到 24 点进行一次计算和输出。</p>
+<p data-nodeid="68134">这里我们使用 Flink 提供的滚动窗口，在构造滚动窗口之前先来看一下滚动窗口的实现：</p>
+<pre class="lang-java" data-nodeid="68135"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">TumblingEventTimeWindows</span> <span class="hljs-keyword">extends</span> <span class="hljs-title">WindowAssigner</span>&lt;<span class="hljs-title">Object</span>, <span class="hljs-title">TimeWindow</span>&gt; </span>{ 
+   <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-keyword">long</span> serialVersionUID = <span class="hljs-number">1L</span>; 
+   <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-keyword">long</span> size; 
+   <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-keyword">long</span> offset; 
+   <span class="hljs-function"><span class="hljs-keyword">protected</span> <span class="hljs-title">TumblingEventTimeWindows</span><span class="hljs-params">(<span class="hljs-keyword">long</span> size, <span class="hljs-keyword">long</span> offset)</span> </span>{ 
+      <span class="hljs-keyword">if</span> (Math.abs(offset) &gt;= size) { 
+         <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> IllegalArgumentException(<span class="hljs-string">"TumblingEventTimeWindows parameters must satisfy abs(offset) &lt; size"</span>); 
+      } 
+      <span class="hljs-keyword">this</span>.size = size; 
+      <span class="hljs-keyword">this</span>.offset = offset; 
+   } 
+   ... 
+</code></pre>
+<p data-nodeid="68136">这里需要注意的是，很多人会认为，窗口时间的开始时间会是我们的代码启动时间。事实上，根据上面的源码可见，TumblingEventTimeWindows 在构造时，需要指定两个参数：<strong data-nodeid="68217">窗口的长度</strong>和<strong data-nodeid="68218">窗口的 offset</strong>（默认为 0）。</p>
+<pre class="lang-java" data-nodeid="68137"><code data-language="java"><span class="hljs-comment">/** 
+ * Creates a new {<span class="hljs-doctag">@code</span> TumblingEventTimeWindows} {<span class="hljs-doctag">@link</span> WindowAssigner} that assigns 
+ * elements to time windows based on the element timestamp and offset. 
+ * 
+ * &lt;p&gt;For example, if you want window a stream by hour,but window begins at the 15th minutes 
+ * of each hour, you can use {<span class="hljs-doctag">@code</span> of(Time.hours(1),Time.minutes(15))},then you will get 
+ * time windows start at 0:15:00,1:15:00,2:15:00,etc. 
+ * 
+ * &lt;p&gt;Rather than that,if you are living in somewhere which is not using UTC±00:00 time, 
+ * such as China which is using UTC+08:00,and you want a time window with size of one day, 
+ * and window begins at every 00:00:00 of local time,you may use {<span class="hljs-doctag">@code</span> of(Time.days(1),Time.hours(-8))}. 
+ * The parameter of offset is {<span class="hljs-doctag">@code</span> Time.hours(-8))} since UTC+08:00 is 8 hours earlier than UTC time. 
+ * 
+ * <span class="hljs-doctag">@param</span> size The size of the generated windows. 
+ * <span class="hljs-doctag">@param</span> offset The offset which window start would be shifted by. 
+ * <span class="hljs-doctag">@return</span> The time policy. 
+ */</span> 
+<span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> TumblingEventTimeWindows <span class="hljs-title">of</span><span class="hljs-params">(Time size, Time offset)</span> </span>{ 
+   <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> TumblingEventTimeWindows(size.toMilliseconds(), offset.toMilliseconds()); 
+} 
+</code></pre>
+<p data-nodeid="68138">我们如何取得某一天的 0 点这个时间起始点呢？TumblingEventTimeWindows 的 of 方法中已经给了提示：</p>
+<blockquote data-nodeid="68139">
+<p data-nodeid="68140">window begins at every 00:00:00 of local time,you may use {@code of(Time.days(1),Time.hours(-8))}.</p>
+</blockquote>
+<p data-nodeid="68141">我们只需要通过 TumblingProcessingTimeWindows.of(Time.days(1), Time.hours(-8)) 就可以指定在中国的 0&nbsp;点开始创建窗口，然后每天计算一次输出结果即可。</p>
+<p data-nodeid="68142">但是，在实际生产环境中，对于大窗口的计算，一般都会设置<strong data-nodeid="68227">触发器</strong>，以一定的频率输出中间结果，而不是等到一天结束时仅仅触发一次。</p>
+<p data-nodeid="68143">这里我们就需要设置数据流的 Trigger 属性。</p>
+<h4 data-nodeid="68144">触发器设置</h4>
+<p data-nodeid="68145">窗口的计算是依赖触发器进行的，每种类型的窗口都有自己的触发器机制，如果用户没有指定，那么会使用默认的触发器。例如 TumblingEventTimeWindows 中自带的触发器如下：</p>
+<pre class="lang-java" data-nodeid="68146"><code data-language="java"><span class="hljs-meta">@Override</span> 
+<span class="hljs-function"><span class="hljs-keyword">public</span> Trigger&lt;Object, TimeWindow&gt; <span class="hljs-title">getDefaultTrigger</span><span class="hljs-params">(StreamExecutionEnvironment env)</span> </span>{ 
+   <span class="hljs-keyword">return</span> EventTimeTrigger.create(); 
+} 
+</code></pre>
+<p data-nodeid="68147">可以看到源码中包含了一个 DefaultTrigger：EventTimeTrigger，而 EventTimeTrigger 的实现如下：</p>
+<pre class="lang-java" data-nodeid="68148"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">EventTimeTrigger</span> <span class="hljs-keyword">extends</span> <span class="hljs-title">Trigger</span>&lt;<span class="hljs-title">Object</span>, <span class="hljs-title">TimeWindow</span>&gt; </span>{ 
+   <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-keyword">long</span> serialVersionUID = <span class="hljs-number">1L</span>; 
+   <span class="hljs-function"><span class="hljs-keyword">private</span> <span class="hljs-title">EventTimeTrigger</span><span class="hljs-params">()</span> </span>{} 
+   <span class="hljs-meta">@Override</span> 
+   <span class="hljs-function"><span class="hljs-keyword">public</span> TriggerResult <span class="hljs-title">onElement</span><span class="hljs-params">(Object element, <span class="hljs-keyword">long</span> timestamp, TimeWindow window, TriggerContext ctx)</span> <span class="hljs-keyword">throws</span> Exception </span>{ 
+      <span class="hljs-keyword">if</span> (window.maxTimestamp() &lt;= ctx.getCurrentWatermark()) { 
+         <span class="hljs-keyword">return</span> TriggerResult.FIRE; 
+      } <span class="hljs-keyword">else</span> { 
+         ctx.registerEventTimeTimer(window.maxTimestamp()); 
+         <span class="hljs-keyword">return</span> TriggerResult.CONTINUE; 
+      } 
+   } 
+   <span class="hljs-meta">@Override</span> 
+   <span class="hljs-function"><span class="hljs-keyword">public</span> TriggerResult <span class="hljs-title">onEventTime</span><span class="hljs-params">(<span class="hljs-keyword">long</span> time, TimeWindow window, TriggerContext ctx)</span> </span>{ 
+      <span class="hljs-keyword">return</span> time == window.maxTimestamp() ? 
+         TriggerResult.FIRE : 
+         TriggerResult.CONTINUE; 
+   } 
+   <span class="hljs-meta">@Override</span> 
+   <span class="hljs-function"><span class="hljs-keyword">public</span> TriggerResult <span class="hljs-title">onProcessingTime</span><span class="hljs-params">(<span class="hljs-keyword">long</span> time, TimeWindow window, TriggerContext ctx)</span> <span class="hljs-keyword">throws</span> Exception </span>{ 
+      <span class="hljs-keyword">return</span> TriggerResult.CONTINUE; 
+   } 
+   <span class="hljs-meta">@Override</span> 
+   <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">clear</span><span class="hljs-params">(TimeWindow window, TriggerContext ctx)</span> <span class="hljs-keyword">throws</span> Exception </span>{ 
+      ctx.deleteEventTimeTimer(window.maxTimestamp()); 
+   } 
+   <span class="hljs-meta">@Override</span> 
+   <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">boolean</span> <span class="hljs-title">canMerge</span><span class="hljs-params">()</span> </span>{ 
+      <span class="hljs-keyword">return</span> <span class="hljs-keyword">true</span>; 
+   } 
+   <span class="hljs-meta">@Override</span> 
+   <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">onMerge</span><span class="hljs-params">(TimeWindow window, 
+         OnMergeContext ctx)</span> </span>{ 
+      <span class="hljs-keyword">long</span> windowMaxTimestamp = window.maxTimestamp(); 
+      <span class="hljs-keyword">if</span> (windowMaxTimestamp &gt; ctx.getCurrentWatermark()) { 
+         ctx.registerEventTimeTimer(windowMaxTimestamp); 
+      } 
+   } 
+   <span class="hljs-meta">@Override</span> 
+   <span class="hljs-function"><span class="hljs-keyword">public</span> String <span class="hljs-title">toString</span><span class="hljs-params">()</span> </span>{ 
+      <span class="hljs-keyword">return</span> <span class="hljs-string">"EventTimeTrigger()"</span>; 
+   } 
+   <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> EventTimeTrigger <span class="hljs-title">create</span><span class="hljs-params">()</span> </span>{ 
+      <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> EventTimeTrigger(); 
+   } 
+} 
+</code></pre>
+<p data-nodeid="69416">我们可以看到，EventTimeTrigger 触发器的工作原理是 判断当前的水印是否超过了窗口的结束时间，如果超过则触发对窗口内数据的计算，否则不触发计算。<br>
+Flink 本身提供了不同种类的触发器供我们使用，如下图所示：</p>
+<p data-nodeid="69417" class=""><img src="https://s0.lgstatic.com/i/image/M00/3C/9A/CgqCHl8n4MiAdhQPAACVaOaaD2Y990.png" alt="image.png" data-nodeid="69423"></p>
+
+
+<p data-nodeid="68151">触发器的类图如上图所示，它们的实际含义如下：</p>
+<ul data-nodeid="68152">
+<li data-nodeid="68153">
+<p data-nodeid="68154">EventTimeTrigger：通过对比 Watermark 和窗口的 Endtime 确定是否触发窗口计算，如果 Watermark 大于 Window EndTime 则触发，否则不触发，窗口将继续等待。</p>
+</li>
+<li data-nodeid="68155">
+<p data-nodeid="68156">ProcessTimeTrigger：通过对比 ProcessTime 和窗口 EndTime 确定是否触发窗口，如果 ProcessTime 大于 EndTime 则触发计算，否则窗口继续等待。</p>
+</li>
+<li data-nodeid="68157">
+<p data-nodeid="68158">ContinuousEventTimeTrigger：根据间隔时间周期性触发窗口或者 Window 的结束时间小于当前 EndTime 触发窗口计算。</p>
+</li>
+<li data-nodeid="68159">
+<p data-nodeid="68160">ContinuousProcessingTimeTrigger：根据间隔时间周期性触发窗口或者 Window 的结束时间小于当前 ProcessTime 触发窗口计算。</p>
+</li>
+<li data-nodeid="68161">
+<p data-nodeid="68162">CountTrigger：根据接入数据量是否超过设定的阈值判断是否触发窗口计算。</p>
+</li>
+<li data-nodeid="68163">
+<p data-nodeid="68164">DeltaTrigger：根据接入数据计算出来的 Delta 指标是否超过指定的 Threshold 去判断是否触发窗口计算。</p>
+</li>
+<li data-nodeid="68165">
+<p data-nodeid="68166">PurgingTrigger：可以将任意触发器作为参数转换为 Purge 类型的触发器，计算完成后数据将被清理。</p>
+</li>
+</ul>
+<p data-nodeid="68167">我们在这里可以选择使用：ContinuousProcessingTimeTrigger 来周期性的触发窗口阶段性计算。</p>
+<p data-nodeid="68168">实现代码如下：</p>
+<pre class="lang-java" data-nodeid="68169"><code data-language="java">dataStream     .windowAll(TumblingProcessingTimeWindows.of(Time.days(<span class="hljs-number">1</span>), Time.hours(-<span class="hljs-number">8</span>))) 
+.trigger(ContinuousProcessingTimeTrigger.of(Time.seconds(<span class="hljs-number">20</span>))) 
+</code></pre>
+<p data-nodeid="68170">我们使用 ContinuousProcessingTimeTrigger 每隔 20 秒触发计算，输出中间结果。</p>
+<p data-nodeid="68171">到目前为止，完成了除计算 PV 和 UV 的所有前置条件的开发，我们实现了：清洗原始数据、写入新的 Kafka Topic、消费新的 Topic 信息、自定义水印和时间戳、自定义窗口和触发器。</p>
+<h3 data-nodeid="68172">总结</h3>
+<p data-nodeid="68554">这一课时我们学习了 Flink 消费 Kafka 数据计算 PV 和 UV 的水印和窗口设计，并且定义了窗口计算的触发器，完成了计算 PV 和 UV 前的所有准备工作。</p></div>
+
+</body></html>

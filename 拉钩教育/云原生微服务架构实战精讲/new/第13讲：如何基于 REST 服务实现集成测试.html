@@ -1,0 +1,1384 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第13讲：如何基于 REST 服务实现集成测试</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>第13讲：如何基于 REST 服务实现集成测试</h1><p>本课时将介绍“如何实现 REST 服务的集成测试”。</p>
+<p>在第 12 课时中，介绍了微服务实现中的单元测试。单元测试只对单个对象进行测试，被测试对象所依赖的其他对象，一般使用 mock 对象来代替，单元测试可以确保每个对象的行为满足对它的期望。不过，这些对象集成在一起之后的行为是否正确，则需要由另外的测试来验证。这就是集成测试要解决的问题，与单元测试不同的是，集成测试一般由测试人员编写。本课时将介绍如何进行服务的集成测试。</p>
+<p>集成测试的目标是微服务本身，也就是说，把整个微服务看成是一个黑盒子，只通过微服务暴露的接口来进行测试，这个暴露的接口就是微服务的 API。对微服务的集成测试，实际上是对其 API 的测试。由于本专栏的微服务使用的是 REST API，所以着重介绍 REST API 的集成测试。</p>
+<p>REST API 的测试本身并不复杂，只需要发送特定的 HTTP 请求到 REST API 服务器，再验证 HTTP 响应的内容即可。在 Java 中，已经有 Apache HttpClient 和 OkHttp 这样的 HTTP 客户端，可以帮助在 Java 代码中发送 HTTP 请求。在测试中，推荐使用 <a href="http://rest-assured.io/">REST-assured</a> 这样的工具来验证 REST API。</p>
+<p>我们可以利用 Spring Boot 提供的集成测试支持来测试微服务的 REST API。在进行测试时，Spring Boot 可以在一个随机端口启动 REST API 服务器来作为测试的目标。本课时选择的测试目标是乘客管理服务的 REST API。</p>
+<p>下面介绍 3 种不同的测试 REST API 的方式。</p>
+<h4>手动发送 HTTP 请求</h4>
+<p>我们可以用 Spring Test 提供了的 WebTestClient 来编写 REST API 的验证代码。下面代码中的 PassengerControllerTest 类是乘客管理服务 REST API 的测试用例。</p>
+<p>PassengerControllerTest 类上的注解与第 12 课时中出现的 PassengerServiceTest 类上的注解存在很多相似性，一个显著的区别是 @SpringBootTest 注解中 webEnvironment 属性的值 WebEnvironment.RANDOM_PORT。这使得 Spring Boot 可以在一个随机的端口上启动 REST API 服务。PassengerControllerTest 类通过依赖注入的方式声明了 WebTestClient 类和 TestRestTemplate 类对象。</p>
+<p>WebTestClient 类提供了一个简单的 API 来发送 HTTP 请求并验证响应。在 testCreatePassenger 方法中，使用了 WebTestClient 类的 post 方法发送一个 POST 请求来创建乘客，并验证 HTTP 响应的状态码和 HTTP 头 Location。</p>
+<p>TestRestTemplate 类则用来获取 HTTP 响应的内容。在 testRemoveAddress 方法中，TestRestTemplate 类的 postForLocation 方法用来发送 POST 请求，并获取到 HTTP 头 Location 的内容，该内容是访问新创建的乘客对象的 URL。TestRestTemplate 类的 getForObject 方法访问这个 URL 并获取到表示乘客的 PassengerVO 对象。从 PassengerVO 对象中找到乘客的第一个地址的 ID，再构建出访问该地址的 URL。WebTestClient 类的 delete 方法用来发送 DELETE 请求到该地址对应的 URL，接着使用 WebTestClient 类的 get 方法获取乘客信息并验证地址数量。</p>
+<pre><code data-language="java" class="lang-java hljs">@SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
+@EnableAutoConfiguration
+@ComponentScan
+@Import(EmbeddedPostgresConfiguration.class)
+@ImportAutoConfiguration(classes = {
+    EmbeddedPostgreSQLDependenciesAutoConfiguration.class,
+    EmbeddedPostgreSQLBootstrapConfiguration.class
+})
+@TestPropertySource(properties = {
+    "embedded.postgresql.docker-image=postgres:12-alpine"
+})
+@DisplayName("Passenger controller test")
+public class PassengerControllerTest {
+
+  private final String baseUri = "/api/v1";
+
+  @Autowired
+  WebTestClient webClient;
+
+  @Autowired
+  TestRestTemplate restTemplate;
+
+  @Test
+  @DisplayName("Create a new passenger")
+  public void testCreatePassenger() {
+    webClient.post()
+        .uri(baseUri)
+        .bodyValue(PassengerUtils.buildCreatePassengerRequest(1))
+        .accept(MediaType.APPLICATION_JSON)
+        .exchange()
+        .expectStatus().isCreated()
+        .expectHeader().exists(HttpHeaders.LOCATION);
+  }
+
+  @Test
+  @DisplayName("Add a new address")
+  public void testAddUserAddress() {
+    URI passengerUri = restTemplate
+        .postForLocation(baseUri,
+            PassengerUtils.buildCreatePassengerRequest(1));
+    URI addressesUri = ServletUriComponentsBuilder.fromUri(passengerUri)
+        .path("/addresses").build().toUri();
+    webClient.post().uri(addressesUri)
+        .bodyValue(PassengerUtils.buildCreateUserAddressRequest())
+        .exchange()
+        .expectStatus().isOk()
+        .expectBody(PassengerVO.class)
+        .value(hasProperty("userAddresses", hasSize(2)));
+  }
+
+  @Test
+  @DisplayName("Remove an address")
+  public void testRemoveAddress() {
+    URI passengerUri = restTemplate
+        .postForLocation(baseUri,
+            PassengerUtils.buildCreatePassengerRequest(3));
+    PassengerVO passenger = restTemplate
+        .getForObject(passengerUri, PassengerVO.class);
+    String addressId = passenger.getUserAddresses().get(0).getId();
+    URI addressUri = ServletUriComponentsBuilder.fromUri(passengerUri)
+        .path("/addresses/" + addressId).build().toUri();
+    webClient.delete().uri(addressUri)
+        .exchange()
+        .expectStatus().isNoContent();
+    webClient.get().uri(passengerUri)
+        .exchange()
+        .expectStatus().isOk()
+        .expectBody(PassengerVO.class)
+        .value(hasProperty("userAddresses", hasSize(2)));
+  }
+
+}
+</code></pre>
+<h4>使用 Swagger 客户端</h4>
+<p>因为微服务实现采用 API 优先的策略，在有 OpenAPI 文档的前提下，我们可以使用 Swagger 代码生成工具来产生客户端代码，并在测试中使用。这种方式的好处是客户端代码屏蔽了 API 的一些细节，比如 API 的访问路径。如果 API 的访问路径发生了变化，那么测试代码并不需要修改，只需要使用新版本的客户端即可。在上一节的代码中，我们需要手动构建不同操作对应的 API 路径，这就产生了不必要的耦合。</p>
+<p>使用客户端的另外一个好处是，如果 OpenAPI 文档发生变化，则会造成客户端的接口变化。重新生成新的客户端代码之后，已有测试代码会无法通过编译，开发人员可以在第一时间发现问题并更新测试代码。而使用 HTTP 请求的测试代码，则需要在运行测试时才能发现问题。</p>
+<p>乘客管理服务 API 的客户端是示例应用的一个模块，只不过代码都是自动生成的。这里我们需要用到 Swagger 代码生成工具的 Maven 插件，下面的代码给出了该插件的使用方式：</p>
+<pre><code data-language="html" class="lang-html hljs"><span class="hljs-tag">&lt;<span class="hljs-name">plugin</span>&gt;</span>
+  <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>io.swagger.codegen.v3<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+  <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>swagger-codegen-maven-plugin<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+  <span class="hljs-tag">&lt;<span class="hljs-name">executions</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">execution</span>&gt;</span>
+      <span class="hljs-tag">&lt;<span class="hljs-name">goals</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">goal</span>&gt;</span>generate<span class="hljs-tag">&lt;/<span class="hljs-name">goal</span>&gt;</span>
+      <span class="hljs-tag">&lt;/<span class="hljs-name">goals</span>&gt;</span>
+      <span class="hljs-tag">&lt;<span class="hljs-name">configuration</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">inputSpec</span>&gt;</span>\${project.basedir}/src/main/resources/openapi.yml<span class="hljs-tag">&lt;/<span class="hljs-name">inputSpec</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">language</span>&gt;</span>java<span class="hljs-tag">&lt;/<span class="hljs-name">language</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">apiPackage</span>&gt;</span>io.vividcode.happyride.passengerservice.client.api<span class="hljs-tag">&lt;/<span class="hljs-name">apiPackage</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">generateModels</span>&gt;</span>false<span class="hljs-tag">&lt;/<span class="hljs-name">generateModels</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">generateApiTests</span>&gt;</span>false<span class="hljs-tag">&lt;/<span class="hljs-name">generateApiTests</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">importMappings</span>&gt;</span>
+          <span class="hljs-tag">&lt;<span class="hljs-name">importMapping</span>&gt;</span>CreatePassengerRequest=io.vividcode.happyride.passengerservice.api.web.CreatePassengerRequest<span class="hljs-tag">&lt;/<span class="hljs-name">importMapping</span>&gt;</span>
+          <span class="hljs-tag">&lt;<span class="hljs-name">importMapping</span>&gt;</span>CreateUserAddressRequest=io.vividcode.happyride.passengerservice.api.web.CreateUserAddressRequest<span class="hljs-tag">&lt;/<span class="hljs-name">importMapping</span>&gt;</span>
+          <span class="hljs-tag">&lt;<span class="hljs-name">importMapping</span>&gt;</span>PassengerVO=io.vividcode.happyride.passengerservice.api.web.PassengerVO<span class="hljs-tag">&lt;/<span class="hljs-name">importMapping</span>&gt;</span>
+          <span class="hljs-tag">&lt;<span class="hljs-name">importMapping</span>&gt;</span>UserAddressVO=io.vividcode.happyride.passengerservice.api.web.UserAddressVO<span class="hljs-tag">&lt;/<span class="hljs-name">importMapping</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">importMappings</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">configOptions</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">configOptions</span>&gt;</span>
+      <span class="hljs-tag">&lt;/<span class="hljs-name">configuration</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">execution</span>&gt;</span>
+  <span class="hljs-tag">&lt;/<span class="hljs-name">executions</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">plugin</span>&gt;</span>
+</code></pre>
+<p>下表给出了该插件的配置项说明。</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/00/3D/CgqCHl6pNKGAakEHAAC2a0ntw3I633.png" alt="微服务1.png"></p>
+<p>Swagger 的代码生成工具可以从 OpenAPI 文档的模式声明中产生对应的 Java 模型类。示例应用已经定义了相关的模型类，因此把配置项 generateModels 的值设置为 false 来禁用模型类的生成，同时使用 importMappings 来声明映射关系。</p>
+<p>当需要编写 REST API 测试时，我们只需要依赖这个 API 客户端模块即可。下面代码中的 PassengerControllerClientTest 类是使用 API 客户端的测试类。由于 API 服务器的端口是随机的，构造器中的 @LocalServerPort 注解的作用是获取到实际运行时的端口，该端口用来构建 API 客户端访问的服务器地址。</p>
+<p>PassengerApi 类是 API 客户端中自动生成的访问 API 的类。在测试方法中，我使用 PassengerApi 类的方法来执行不同的操作，并验证结果。相对于上一节中 WebTestClient 类的用法，使用 PassengerApi 类的代码更加直观易懂。</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-meta">@SpringBootTest</span>(webEnvironment = WebEnvironment.RANDOM_PORT)
+<span class="hljs-meta">@EnableAutoConfiguration</span>
+<span class="hljs-meta">@ComponentScan</span>
+<span class="hljs-meta">@Import</span>(EmbeddedPostgresConfiguration<span class="hljs-class">.<span class="hljs-keyword">class</span>)
+@<span class="hljs-title">ImportAutoConfiguration</span>(<span class="hljs-title">classes</span> </span>= {
+    EmbeddedPostgreSQLDependenciesAutoConfiguration<span class="hljs-class">.<span class="hljs-keyword">class</span>,
+    <span class="hljs-title">EmbeddedPostgreSQLBootstrapConfiguration</span>.<span class="hljs-title">class</span>
+})
+@<span class="hljs-title">TestPropertySource</span>(<span class="hljs-title">properties</span> </span>= {
+    <span class="hljs-string">"embedded.postgresql.docker-image=postgres:12-alpine"</span>
+})
+<span class="hljs-meta">@DisplayName</span>(<span class="hljs-string">"Passenger controller test"</span>)
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">PassengerControllerClientTest</span> </span>{
+
+  <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> PassengerApi passengerApi;
+
+  <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-title">PassengerControllerClientTest</span><span class="hljs-params">(@LocalServerPort <span class="hljs-keyword">int</span> serverPort)</span> </span>{
+    ApiClient apiClient = Configuration.getDefaultApiClient();
+    apiClient.setBasePath(<span class="hljs-string">"http://localhost:"</span> + serverPort + <span class="hljs-string">"/api/v1"</span>);
+    passengerApi = <span class="hljs-keyword">new</span> PassengerApi(apiClient);
+  }
+
+  <span class="hljs-meta">@Test</span>
+  <span class="hljs-meta">@DisplayName</span>(<span class="hljs-string">"Create a new passenger"</span>)
+  <span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">testCreatePassenger</span><span class="hljs-params">()</span> </span>{
+    <span class="hljs-keyword">try</span> {
+      ApiResponse&lt;Void&gt; response = passengerApi
+          .createPassengerWithHttpInfo(
+              PassengerUtils.buildCreatePassengerRequest(<span class="hljs-number">1</span>));
+      assertThat(response.getStatusCode()).isEqualTo(<span class="hljs-number">201</span>);
+      assertThat(response.getHeaders()).containsKey(<span class="hljs-string">"Location"</span>);
+    } <span class="hljs-keyword">catch</span> (ApiException e) {
+      fail(e);
+    }
+  }
+
+  <span class="hljs-meta">@Test</span>
+  <span class="hljs-meta">@DisplayName</span>(<span class="hljs-string">"Add a new address"</span>)
+  <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">testAddUserAddress</span><span class="hljs-params">()</span> </span>{
+    <span class="hljs-keyword">try</span> {
+      String passengerId = createPassenger(<span class="hljs-number">1</span>);
+      PassengerVO passenger = passengerApi
+        .createAddress(PassengerUtils.buildCreateUserAddressRequest(),
+              passengerId);
+      assertThat(passenger.getUserAddresses()).hasSize(<span class="hljs-number">2</span>);
+    } <span class="hljs-keyword">catch</span> (ApiException e) {
+      fail(e);
+    }
+  }
+
+  <span class="hljs-meta">@Test</span>
+  <span class="hljs-meta">@DisplayName</span>(<span class="hljs-string">"Remove an address"</span>)
+  <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">testRemoveAddress</span><span class="hljs-params">()</span> </span>{
+    <span class="hljs-keyword">try</span> {
+      String passengerId = createPassenger(<span class="hljs-number">3</span>);
+      PassengerVO passenger = passengerApi.getPassenger(passengerId);
+      String addressId = passenger.getUserAddresses().get(<span class="hljs-number">0</span>).getId();
+      passengerApi.deleteAddress(passengerId, addressId);
+      passenger = passengerApi.getPassenger(passengerId);
+      assertThat(passenger.getUserAddresses()).hasSize(<span class="hljs-number">2</span>);
+    } <span class="hljs-keyword">catch</span> (ApiException e) {
+      fail(e);
+    }
+  }
+
+  <span class="hljs-function"><span class="hljs-keyword">private</span> String <span class="hljs-title">createPassenger</span><span class="hljs-params">(<span class="hljs-keyword">int</span> numberOfAddresses)</span> <span class="hljs-keyword">throws</span> ApiException </span>{
+    ApiResponse&lt;Void&gt; response = passengerApi
+        .createPassengerWithHttpInfo(
+         PassengerUtils.buildCreatePassengerRequest(numberOfAddresses));
+    assertThat(response.getHeaders()).containsKey(<span class="hljs-string">"Location"</span>);
+    String location = response.getHeaders().get(<span class="hljs-string">"Location"</span>).get(<span class="hljs-number">0</span>);
+    <span class="hljs-keyword">return</span> StringUtils.substringAfterLast(location, <span class="hljs-string">"/"</span>);
+  }
+}
+</code></pre>
+<h4>使用 BDD</h4>
+<p>不管是手动发送 HTTP 请求或是使用 Swagger 客户端，相关的测试用例都需要由测试人员来编写。当应用的业务逻辑比较复杂时，测试人员可能需要了解很多的业务知识，才能编写出正确的测试用例。以保险业务为例，一个理赔申请能否被批准，背后有复杂的业务逻辑来确定。这样的测试用例，如果由测试人员来编写，则可能的结果是测试用例所验证的情况，从业务逻辑上来说是错误的，起不到测试的效果。</p>
+<p>更好的做法是由业务人员来编写测试用例，这样可以保证应用的实际行为，满足真实业务的期望。但是业务人员并不懂得编写代码。为了解决这个问题， 我们需要让业务人员以他们所能理解的方式来描述对不同行为的期望，这就是<strong>行为驱动开发</strong>（Behaviour Driven Development，BDD）的思想。</p>
+<p>BDD 的出发点是提供了一种自然语言的方式来描述应用的行为，对行为的描述由 3 个部分组成，分别是<strong>前置条件</strong>、<strong>动作</strong>和<strong>期望结果</strong>，也就是 Given-When-Then 结构，该结构表达的是当对象处于某个状态中时，如果执行该对象的某个动作，所应该产生的结果是什么。比如，对于一个数据结构中常用的栈对象来说，在栈为空的前提下，如果执行栈的弹出动作，那么应该抛出异常；在栈不为空的前提下，如果执行栈的弹出动作，那么返回值应该是栈顶的元素。这样的行为描述，可以很容易转换成测试用例，来验证对象的实际行为。</p>
+<p>BDD 一般使用自然语言来描述行为，业务人员使用自然语言来描述行为，形成 BDD 文档，这个文档是业务知识的具体化。我们只需要把这个文档转换成可执行的测试用例，就可以验证代码实现是否满足业务的需求。这个转换的过程需要工具的支持，本课时介绍的工具是 <a href="https://cucumber.io/">Cucumber</a>。</p>
+<p>Cucumber 使用名为 Gherkin 的语言来描述行为，Gherkin 语言使用半结构化的形式。下表给出了 Gherkin 语言中的常用结构。</p>
+<p><img src="https://s0.lgstatic.com/i/image/M00/00/3D/CgqCHl6pNRKAMlt_AABWRPxiWY4472.png" alt="微服务2.png"></p>
+<p>下面的代码给出了乘客管理服务的 BDD 文档示例，其中的第一个场景描述的是添加地址的行为。前置条件是乘客有 1 个地址，动作是添加一个新的地址，期望的结果是乘客有 2 个地址。第二个场景描述的是删除地址的行为，与第一个场景有类似的描述。</p>
+<pre><code data-language="sql" class="lang-sql hljs">Feature: Address management
+  Manage a passenger's addresses
+
+  Scenario: Add a new address
+    Given a passenger <span class="hljs-keyword">with</span> <span class="hljs-number">1</span> addresses
+    <span class="hljs-keyword">When</span> the passenger adds a <span class="hljs-keyword">new</span> address
+    <span class="hljs-keyword">Then</span> the passenger has <span class="hljs-number">2</span> addresses
+
+  Scenario: <span class="hljs-keyword">Delete</span> an address
+    Given a passenger <span class="hljs-keyword">with</span> <span class="hljs-number">3</span> addresses
+    <span class="hljs-keyword">When</span> the passenger deletes an address
+    <span class="hljs-keyword">Then</span> the passenger has <span class="hljs-number">2</span> addresses
+</code></pre>
+<p>在有了 BDD 文档之后，下一步是如何把文档变成可执行的测试用例，这就需要用到 Cucumber 了。Cucumber 使用步骤定义把 Gherkin 语言中的结构与实际的代码关联起来。Gherkin 语言中的 Given、When 和 Then 等语句，都有与之对应的步骤定义代码。Cucumber 在运行 BDD 文档的场景时，会找到每个语句对应的步骤定义并执行，步骤定义中包含了进行验证的代码。</p>
+<p>下面代码中的 AddressStepdefs 类是上面 BDD 场景的步骤定义。AddressStepdefs 类上的注解与上面 PassengerControllerTest 类的注解是相似的，PassengerClient 类是 Swagger 客户端的一个封装，用来执行不同的操作。</p>
+<p>在步骤定义中，passengerWithAddresses 方法对应的是 Given 语句“a passenger with {int} addresses”。语句中的 {int} 用来提取语句中 int 类型的变量，作为参数 numberOfAddresses 的值。在对应的步骤中，调用 PassengerClient 类的 createPassenger 方法来创建一个包含指定数量地址的乘客对象，并把乘客 ID 保存在 passengerId 中。passengerAddsAddress 和 passengerDeletesAddress 方法分别对应两个 When 语句，分别执行添加和删除地址的动作；passengerHasAddresses 方法则与 Then 语句相对应，验证乘客的地址数量。</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-meta">@SpringBootTest</span>(webEnvironment = WebEnvironment.RANDOM_PORT)
+<span class="hljs-meta">@EnableAutoConfiguration</span>
+<span class="hljs-meta">@ContextConfiguration</span>(classes = {
+    BddTestApplication<span class="hljs-class">.<span class="hljs-keyword">class</span>,
+    <span class="hljs-title">PassengerServiceApplication</span>.<span class="hljs-title">class</span>
+})
+@<span class="hljs-title">ComponentScan</span>
+@<span class="hljs-title">Import</span>(<span class="hljs-title">EmbeddedPostgresConfiguration</span>.<span class="hljs-title">class</span>)
+@<span class="hljs-title">ImportAutoConfiguration</span>(<span class="hljs-title">classes</span> </span>= {
+    EmbeddedPostgreSQLDependenciesAutoConfiguration<span class="hljs-class">.<span class="hljs-keyword">class</span>,
+    <span class="hljs-title">EmbeddedPostgreSQLBootstrapConfiguration</span>.<span class="hljs-title">class</span>
+})
+@<span class="hljs-title">TestPropertySource</span>(<span class="hljs-title">properties</span> </span>= {
+    <span class="hljs-string">"embedded.postgresql.docker-image=postgres:12-alpine"</span>
+})
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">AddressStepdefs</span> </span>{
+
+  <span class="hljs-meta">@Autowired</span>
+  PassengerClient passengerClient;
+
+  <span class="hljs-keyword">private</span> String passengerId;
+
+  <span class="hljs-meta">@Given</span>(<span class="hljs-string">"a passenger with {int} addresses"</span>)
+  <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">passengerWithAddresses</span><span class="hljs-params">(<span class="hljs-keyword">int</span> numberOfAddresses)</span> </span>{
+    <span class="hljs-keyword">try</span> {
+      passengerId = passengerClient.createPassenger(numberOfAddresses);
+    } <span class="hljs-keyword">catch</span> (ApiException e) {
+      fail(e);
+    }
+  }
+
+  <span class="hljs-meta">@When</span>(<span class="hljs-string">"the passenger adds a new address"</span>)
+  <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">passengerAddsAddress</span><span class="hljs-params">()</span> </span>{
+    <span class="hljs-keyword">try</span> {
+      passengerClient.addAddress(passengerId);
+    } <span class="hljs-keyword">catch</span> (ApiException e) {
+      fail(e);
+    }
+  }
+
+  <span class="hljs-meta">@When</span>(<span class="hljs-string">"the passenger deletes an address"</span>)
+  <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">passengerDeletesAddress</span><span class="hljs-params">()</span> </span>{
+    <span class="hljs-keyword">try</span> {
+      passengerClient.removeAddress(passengerId);
+    } <span class="hljs-keyword">catch</span> (ApiException e) {
+      fail(e);
+    }
+  }
+
+  <span class="hljs-meta">@Then</span>(<span class="hljs-string">"the passenger has {int} addresses"</span>)
+  <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">passengerHasAddresses</span><span class="hljs-params">(<span class="hljs-keyword">int</span> numberOfAddresses)</span> </span>{
+    <span class="hljs-keyword">try</span> {
+      PassengerVO passenger = passengerClient.getPassenger(passengerId);
+      assertThat(passenger.getUserAddresses()).hasSize(numberOfAddresses);
+    } <span class="hljs-keyword">catch</span> (ApiException e) {
+      fail(e);
+    }
+  }
+
+}
+</code></pre>
+<p>实际的测试由 Cucumber 来运行，下面代码中的 PassengerIntegrationTest 类是由 Cucumber 运行的测试类。需要注意的是，Cucumber 只支持 JUnit 4，因此在 Spring Boot 应用中需要添加对 junit-vintage-engine 模块的依赖。</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-meta">@RunWith</span>(Cucumber<span class="hljs-class">.<span class="hljs-keyword">class</span>)
+@<span class="hljs-title">CucumberOptions</span>(<span class="hljs-title">strict</span> </span>= <span class="hljs-keyword">true</span>,
+    features = <span class="hljs-string">"src/test/resources/features"</span>,
+    plugin = {<span class="hljs-string">"pretty"</span>, <span class="hljs-string">"html:target/cucumber"</span>})
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">PassengerIntegrationTest</span> </span>{
+
+}
+</code></pre>
+<h4>数据准备</h4>
+<p>集成测试的一个特点是在运行测试之前，对应用的当前状态有一定的要求，而不是从零开始。比如，如果乘客管理服务的 API 支持对地址的分页、查询和过滤，那么在测试这些功能时，则需要被测试的乘客有足够数量的地址来测试不同的情况。这就要求进行一些数据准备工作。下面是 3 种不同的准备数据的做法。</p>
+<p>第一种做法是在测试中通过 JUnit 5 的 @BeforeEach 和 @BeforeAll 注解来标注进行数据准备的方法，数据准备通过测试代码中的 API 调用来完成。比如， 可以在每个测试方法执行之前创建一个包含 100 个地址的乘客对象。</p>
+<p>第二种做法是通过 SQL 脚本来初始化测试数据库，一个测试用例可以有与之相对应的 SQL 初始化脚本。在运行测试时，SQL 脚本会被执行来添加测试数据。如果测试人员更习惯编写 SQL 脚本，这种方式比第一种更好。Spring Boot 提供了初始化数据库的支持，会自动查找并执行 CLASSPATH 中的 schema.sql 和 data.sql 文件。</p>
+<p>第三种做法是使用专门的数据库 Docker 镜像。在之前的测试中，我们使用的是标准的 PostgreSQL 镜像，其中不包含任何数据，不过可以创建一个包含了完整数据的自定义 PostgreSQL 镜像，这样可以测试应用在更新时的行为。比如，新版本的代码中对数据库的模式进行了修改，一个很重要的测试用例就是已有数据的升级。通过使用包含当前版本数据的 PostgreSQL 镜像，可以很容易的测试数据库的升级。Docker 镜像的标签标识了每个镜像包含的数据集的含义，这些都是本地开发和编写测试用例时可以使用的资产。很多数据库的 Docker 镜像都提供了运行初始化脚本的能力。以 PostgreSQL 的 Docker 镜像为例，只需要把 *.sh 或 *.sql 文件添加到 /docker-entrypoint-initdb.d 目录，就可以初始化数据库。</p>
+<h4>总结</h4>
+<p>微服务的集成测试把微服务当成一个黑盒子，并使用其 REST API 来进行测试。本课时介绍了 3 种不同的 REST API 集成测试方式，包括手动发送 HTTP 请求并验证，使用 Swagger 客户端来发送请求，以及使用 BDD 来编写测试用例。</p></div>
+
+</body></html>

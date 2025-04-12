@@ -1,0 +1,803 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>15 | 池化技术：连接池和协程池为何能提升并发能力？</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>15 | 池化技术：连接池和协程池为何能提升并发能力？</h1><p data-nodeid="13561" class="">不知道你还记不记得，我曾在 13 讲介绍秒杀日志的时候提到过，可以提前分配大块内存作为日志缓冲区来优化内存分配性能？这其实就是一种“内存池”技术。还有在 14 讲，我介绍了一种“进程池”技术，即 Nginx 采用多进程模型处理高并发。</p>
+<p data-nodeid="13562">你有没有发现，“内存池”和“进程池”都带有“池”字？其实，这两种技术都属于“池化技术”。它通常是由系统预先分配一批资源并循环利用，达到资源“池化”的目的，以解决高并发下，由于大量分配资源，导致性能开销过大的问题。</p>
+<p data-nodeid="13563"><strong data-nodeid="13622">一句话，池化技术的核心是“预分配”和“循环使用”</strong>。这就像食堂在用餐高峰期安排餐具一样。食堂通常会在餐厅提前准备一批餐具，并在用餐过程中安排人专门清洗餐具，然后循环使用。食堂采用这种方法，节省了开支，原来只有 50 套的餐具就能保障 100 人有序就餐。池化技术也是类似的作用。</p>
+<p data-nodeid="13564">那么，除了前面提到的内存池和进程池外，都还有哪些池化技术呢？常用的池化技术还有<strong data-nodeid="13632">连接池</strong>和<strong data-nodeid="13633">协程池</strong>。它们解决什么具体问题呢？</p>
+<h3 data-nodeid="13565">连接池的作用</h3>
+<p data-nodeid="13566">连接池是指预先分配一批连接，并将它们放入一个缓冲区中循环使用，形成池化效应。以秒杀为例，秒杀接口服务并发非常高，如果不用连接池，会导致什么后果？</p>
+<p data-nodeid="13567">在介绍 KV 存储的时候，我提到过秒杀系统使用 Redis 缓存活动信息。假如秒杀接口服务与 Redis 只有一个连接，平均每次请求 Redis 耗时 10ms，一秒钟能请求多少次呢？没错，一个连接一秒钟最多只能处理 100 次请求。</p>
+<p data-nodeid="13568">在秒杀系统中，除了活动信息外，秒杀库存信息也缓存在 Redis 中，而且需要支持 1 万以上并发能力。活动信息加上库粗存信息，分摊到 50 个秒杀接口节点上，平均每个节点向 Redis 发起的请求可能超过 300 QPS，远超过单个连接的处理能力。</p>
+<p data-nodeid="13569">这就会出现第一个问题：<strong data-nodeid="13642">单连接无法承载高并发。</strong></p>
+<p data-nodeid="13570">可能你会说，既然复用单个连接无法承载高并发，那就每次请求都新建连接嘛！想法很好，但现实很残酷。建立连接的时候，TCP 需要经历三次握手，假如网络延迟是 5 ms，三次握手就耗费 15ms，这比一次请求来回的时间都长了。其次，如果每次请求都建立连接，还需要考虑关闭连接，以免连接数过多压垮 Redis。而关闭连接的过程涉及 TCP 四次挥手，这又是一笔时间开销。</p>
+<p data-nodeid="13571">所以，如果不用连接池就会出现第二个问题：<strong data-nodeid="13648">每次请求建立、关闭连接会导致请求延迟增加，还有可能把 Redis 压垮。</strong></p>
+<p data-nodeid="13572">另外，如果高并发下<strong data-nodeid="13653">频繁地建立、关闭连接，会导致操作系统耗费过多 CPU 用于分配、回收系统资源。</strong></p>
+<p data-nodeid="13573">那我们该如何设计连接池来解决这三个问题呢？</p>
+<p data-nodeid="13574">通常，连接池有几个参数：最小连接数、空闲连接数、最大连接数。为何这么设计呢？请看下图：</p>
+<p data-nodeid="13575"><img src="https://s0.lgstatic.com/i/image/M00/8C/45/Ciqc1F_qm2WAaWtWAAArBxVIZrk285.png" alt="Drawing 0.png" data-nodeid="13658"></p>
+<p data-nodeid="13576">最小连接数通常用于控制当前连接数的最小值，如果连接数小于最小值，遇到突发流量容易导致性能问题。</p>
+<p data-nodeid="13577">空闲连接数就是用于控制连接池中空闲连接的数量，如果超过这个值，意味着浪费资源，需要关闭多余连接；如果低于这个值，则可能无法应对突发流量，需要分配新的空闲连接。</p>
+<p data-nodeid="13578">有关空闲连接的分配，可以通过定时器来控制。设置时，要尽量保障秒杀服务向 Redis 发起请求的时候，有足够的空闲连接，这样可以减少建立连接的时间和资源开销。通常是由独立的线程定时检查空闲连接是否小于某个值，比如每隔 1 秒钟检查空闲连接数是否小于 2，是的话就新建一批空闲连接。</p>
+<p data-nodeid="13579">最大连接数通常用于控制系统中连接数不超过最大值，以免大量连接将 Redis 压垮。</p>
+<p data-nodeid="13580">秒杀服务在启动时，将按照配置文件中的参数初始化好连接数池，比如设置初始连接数为最小连接数。当秒杀服务需要发起一个 Redis 请求时，会先尝试从连接池中获取连接，如果获取不到，则会建立一个新的连接。</p>
+<p data-nodeid="13581">当连接数超过最大值时， 请求就会阻塞，等待其他请求归还连接。在请求完 Redis 后，秒杀服务需要将连接放回到连接池中。如果空闲连接超过参数指定的数，秒杀服务会直接关闭该连接。</p>
+<p data-nodeid="13582">另外，为了确保 Redis 集群中的多个实例负载均衡，<strong data-nodeid="13669">连接池中的连接也需要做负载均衡。</strong></p>
+<p data-nodeid="13583">如何从连接池中获取连接，用完后又如何将连接放回到连接池中呢？</p>
+<p data-nodeid="13584">通常可以采用<strong data-nodeid="13676">循环队列</strong>来保存空闲连接。使用的时候，可以从队列头部取出连接，用完后将空闲连接放到队列尾部。在 Go 语言中，还有另外一种方法，那就是利用带缓冲区的 channel 来充当队列。这个实现起来非常简单，在代码实战环节我会详细给你介绍。</p>
+<h3 data-nodeid="13585">协程池的作用</h3>
+<p data-nodeid="13586">协程池，简单来说就是由多个协程实现的池化技术。</p>
+<p data-nodeid="13587">如果你了解过 Linux 内核，应该知道 Linux 内核中是以进程为单元来调度资源的，线程也是轻量级进程。可以说，进程、线程都是由内核来创建并调度。而协程是由应用程序创建出来的任务执行单元，比如 Go 语言中的协程“goroutine”。<strong data-nodeid="13683">协程本身是运行在线程上，由应用程序自己调度，它是比线程更轻量的执行单元。</strong></p>
+<p data-nodeid="13588">相比进程、线程，协程有什么优点呢？那得从高并发下进程、线程的性能说起。</p>
+<p data-nodeid="13589">当应用程序需要创建一个进程或者线程时，它需要先调用系统函数向内核提交申请。接着它会从用户态切换到内核态，由内核创建进程和线程，然后再从内核态切换到用户态。</p>
+<p data-nodeid="13590">在用户态与内核态来回切换的过程中，操作系统需要保存大量的上下文信息。具体来说，从用户态切换到内核态时，内核需要将 CPU 各寄存器中的数据写入到栈内存；当程序从内核态恢复到用户态时，需要内核将前面保存的寄存器数据从栈内存加载到 CPU 中。</p>
+<p data-nodeid="13591">内核创建进程和线程的时候，需要分配 PCB （Processing Control Block，进程控制块），其作用是用于保存进程和线程的运行状态。也就是说，进程和线程在内核中是占用内存空间的。并且，在分配 PCB 的过程也会耗费额外的 CPU 资源。</p>
+<p data-nodeid="13592">特别是在父进程创建子进程的时候，子进程会继承父进程的内存状态。当子进程修改某块内存的数据时，会触发写时拷贝，系统会为子进程分配新的内存空间，这意味着运行时子进程有额外的 CPU 开销。另外，每个线程也有自己的栈空间，比如 Linux 下默认栈空间大小是 8MB，也就是说即使线程程什么事情都不做，也会白白浪费 8MB 内存。</p>
+<p data-nodeid="13593">还有，前面提到了创建进程和线程时会发生状态切换，主要是因为内核中的任务是以内核线程的方式来运行的。而且内核线程是可以动态创建的，可以超过 CPU 线程数。但是，一个 CPU 线程在同一时刻只能运行一个内核线程，这就涉及内核线程间上下文切换的问题了。</p>
+<p data-nodeid="13594">要知道，上下文切换是很耗费 CPU 资源的。首先，上下文切换时 CPU 需要耗费更多的时间保存或者加载数据，这会导致 CPU 有效使用率降低。其次，上下文切换后，需要加载新的数据，可能导致 CPU 中的 L1、L2 缓存中数据失效，性能打折扣。</p>
+<p data-nodeid="13595"><strong data-nodeid="13694">在高并发场景下，每创建、销毁一个线程，带来的 CPU 和内存开销都不小。为了解决这些问题，协程诞生了。</strong></p>
+<p data-nodeid="13596">在 Go 语言中，一个协程初始内存空间是 2KB，相比线程和进程来说要小很多。协程的创建和销毁完全是在用户态执行的，不涉及用户态和内核态的切换。另外，协程完全由应用程序在用户态下调用，不涉及内核态的上下文切换。<strong data-nodeid="13699">协程切换时由于不需要处理线程状态，需要保存的上下文也很少，速度很快。</strong></p>
+<p data-nodeid="13597">既然协程的创建、切换、销毁性能已经很高了，为何还要做协程池呢？</p>
+<p data-nodeid="13598">前面提到了，每个协程初始内存大小为 2K。假如每个请求都创建一个协程，当秒杀服务单机并发达到 10 万的时候，会带来近 200MB 的内存分配和占用，可能会带来 GC 回收内存的问题。</p>
+<p data-nodeid="13599">另外，虽然协程创建很快，但还是要耗费时间的，比如需要分配内存，需要初始化协程状态等。在秒杀这种高并发场景下，每个请求哪怕是增加 1 毫秒延迟，也会给服务带来不小的 CPU 开销。</p>
+<p data-nodeid="13600">那我们如何设计协程池呢？</p>
+<p data-nodeid="13601"><strong data-nodeid="13707">在 Go 语言中，协程池的实现方法有两种：抢占式和调度式。</strong></p>
+<p data-nodeid="13602">抢占式协程池中，所有任务存放到一个共享的 channel 中，由多个协程同时去消费 channel 中的任务，谁先拿到谁先执行。它的好处是下发任务的逻辑可以实现的很简单，拿到任务直接放到共享 channel 里即可。缺点是多个协程同时消费一个 channel 会涉及锁的争夺，当协程执行比较耗时的任务时，单个 channel 也容易带来容量问题。</p>
+<p data-nodeid="13603">调度式协程池中，每个协程都有自己的 channel，每个协程只消费自己的 channel。当下发任务的时候，可以采用负载均衡算法选择合适的协程来执行任务。比如选择排队中任务最少的协程，或者简单轮询。</p>
+<p data-nodeid="13604"><img src="https://s0.lgstatic.com/i/image/M00/8C/45/Ciqc1F_qm3KAOtHBAAUBDwqdyMY979.png" alt="Drawing 1.png" data-nodeid="13712"></p>
+<h3 data-nodeid="13605">小结</h3>
+<p data-nodeid="13606">在这一讲，我给你介绍了连接池和协程池解决的问题，以及它们的设计思路。你是否明白了池化技术的意义呢？</p>
+<p data-nodeid="13607">其实池化技术是种未雨绸缪的思想，这种思想遍布在软件系统中。比如后端服务采用多个节点部署，并预留一部分余量。比如针对每天有高峰时段的系统，提前准备一批备用机器用于高峰前扩容，高峰后缩容。这些其实也是池化技术思想的应用。</p>
+<p data-nodeid="13608">思考题：池化技术还可以用在哪些方面呢？</p>
+<p data-nodeid="13609">你可以将自己的想法写在留言区。期待你的回答哦！</p>
+<p data-nodeid="13610">这一讲就介绍到这里了，下一讲我将给你介绍“如何将并发流量过滤和串行化”。到时见！</p>
+<hr data-nodeid="13734">
+<p data-nodeid="13735"><a href="https://shenceyun.lagou.com/t/Mka" data-nodeid="13742"><img src="https://s0.lgstatic.com/i/image/M00/80/32/CgqCHl_QgX2AHJo_ACRP1TPc6yM423.png" alt="Drawing 15.png" data-nodeid="13741"></a></p>
+<p data-nodeid="13736"><strong data-nodeid="13746">《Java 工程师高薪训练营》</strong></p>
+<p data-nodeid="13737" class="te-preview-highlight">实战训练+面试模拟+大厂内推，想要提升技术能力，进大厂拿高薪，<a href="https://shenceyun.lagou.com/t/Mka" data-nodeid="13750">点击链接，提升自己</a>！</p></div>
+
+</body></html>

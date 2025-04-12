@@ -1,0 +1,791 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第12讲：为何MC能长期维持高性能读写？</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>第12讲：为何MC能长期维持高性能读写？</h1><p style="text-align: justify; line-height: 1.75em;"><span style="color: rgb(73, 73, 73); text-indent: 29.3333px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">你好，我是你的缓存课老师陈波，欢迎进入第&nbsp;12&nbsp;课时“Memcached&nbsp;内存管理 slab 机制”的学习。</span></p>
+<h6 style="text-indent: 0em; white-space: normal; text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 18px;">内存管理&nbsp;slab&nbsp;机制</span></h6>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">讲完淘汰策略，我们接下来学习内存管理 slab 机制。</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">&nbsp;</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">Mc&nbsp;内存分配采用&nbsp;slab&nbsp;机制，slab&nbsp;机制可以规避内存碎片，是&nbsp;Mc&nbsp;能持续高性能进行数据读写的关键。</span></p>
+<h2 style="white-space: normal;"></h2>
+<h6 style="text-indent: 0em; white-space: normal; text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">slabclass</span></h6>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">Mc&nbsp;的&nbsp;slab&nbsp;机制是通过&nbsp;slabclass&nbsp;来进行运作的，如下图所示。Mc&nbsp;在启动时，会构建长度为&nbsp;64&nbsp;的&nbsp;slabclass&nbsp;数组，其中&nbsp;0&nbsp;号&nbsp;slabclass 用于&nbsp;slab&nbsp;的重新分配，1~63&nbsp;号&nbsp;slabclass&nbsp;存储数据&nbsp;Item。存储数据的每个&nbsp;slabclass，都会记录本&nbsp;slabclass&nbsp;的&nbsp;chunk size，同时不同&nbsp;slabclass&nbsp;的&nbsp;chunk size&nbsp;会按递增因子增加，最后一个&nbsp;slabclass（即&nbsp;63&nbsp;号&nbsp;slabclass）的&nbsp;chunk size&nbsp;会直接设为最大的&nbsp;chunk size，默认是 0.5MB。每个&nbsp;slabclass&nbsp;在没有空闲的&nbsp;chunk&nbsp;时，Mc&nbsp;就会为其分配一个默认大小为&nbsp;1MB&nbsp;的&nbsp;slab，同时按照本&nbsp;slabclass&nbsp;的&nbsp;chunk size&nbsp;进行拆分，这些分拆出来的&nbsp;chunk&nbsp;会按&nbsp;Item&nbsp;结构体进行初始化，然后记录到&nbsp;slabclass&nbsp;的&nbsp;freelist&nbsp;链表中。当有&nbsp;key/value&nbsp;要存储在本&nbsp;slabclass&nbsp;时，就从&nbsp;freelist&nbsp;分配一个&nbsp;Item，供其使用。同时，如果&nbsp;Item&nbsp;过期了，或被&nbsp;flush_all&nbsp;失效了，或在内存不够时被强项剔除了，也会在适当时刻，重新被回收到&nbsp;freelist，以供后续分配使用。</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: center; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; text-indent: 0em; font-size: 16px;"><img src="http://s0.lgstatic.com/i/image2/M01/99/E4/CgotOV2lNbaAadotAADCA27LTFE147.png" style="text-align: justify;">&nbsp;</span></p>
+<h2 style="white-space: normal;"></h2>
+<h6 style="text-indent: 0em; white-space: normal; text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">存储 slab 分配</span></h6>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">如下图所示，Mc&nbsp;的存储空间分配是以&nbsp;slab&nbsp;为单位的，每个&nbsp;slab&nbsp;的默认大小时&nbsp;1MB。因此在存数据时，Mc&nbsp;的内存最小分配单位是&nbsp;1MB，分配了这个&nbsp;1MB&nbsp;的&nbsp;slab&nbsp;后，才会进一步按所在&nbsp;slabclass&nbsp;的chunk size&nbsp;进行细分，分拆出的相同&nbsp;size&nbsp;的&nbsp;chunk。这个&nbsp;chunk&nbsp;用来存放&nbsp;Item&nbsp;数据，Item&nbsp;数据包括&nbsp;Item&nbsp;结构体字段，以及&nbsp;key/value。</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;"><br></span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">一般来讲，Item&nbsp;结构体及&nbsp;key/value&nbsp;不会填满&nbsp;chunk，会存在少量字节的浪费，但这个浪费的字节很少，基本可以忽略。Mc&nbsp;中，slab&nbsp;一旦分配，就不会再被回收，但会根据运行状况，重新在不同&nbsp;slabclass&nbsp;之间进行分配。</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: center; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; text-indent: 0em;"><img src="http://s0.lgstatic.com/i/image2/M01/99/C5/CgoB5l2lNbaAW86tAAB5QW90gyU465.png" style="text-align: justify;">&nbsp; &nbsp; &nbsp;</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">当一个&nbsp;slabclass&nbsp;没有空闲&nbsp;chunk，而新数据插入时，就会对其尝试增加一个新的&nbsp;slab。slabclass&nbsp;增加新&nbsp;slab&nbsp;时，首先会从&nbsp;0&nbsp;号全局&nbsp;slabclass&nbsp;中复用一个之前分配的&nbsp;slab，如果&nbsp;0&nbsp;号&nbsp;slabclass&nbsp;没有&nbsp;slab，则会尝试从内存堆空间直接分配一个&nbsp;slab。如果&nbsp;0&nbsp;号全局&nbsp;slabclass&nbsp;没有空闲&nbsp;slab，而且&nbsp;Mc&nbsp;内存分配已经达到&nbsp;Mc&nbsp;设定的上限值，就说明此时没有可重新分配的&nbsp;slab，分配新&nbsp;slab&nbsp;失败，直接返回。</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;"><br></span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">当然，虽然&nbsp;slabclass&nbsp;分配&nbsp;slab&nbsp;失败，但并不意味着&nbsp;Item分配会失败，前面已经讲到，可以通过同步 LRU&nbsp;淘汰，回收之前分配出去的&nbsp;Item，供新的存储请求使用。</span></p>
+<h2 style="white-space: normal;"></h2>
+<h6 style="text-indent: 0em; white-space: normal; text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">Item</span></h6>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">Mc&nbsp;中，slabclass&nbsp;中的&nbsp;chunk&nbsp;会首先用&nbsp;Item&nbsp;结构体进行初始化，然后存到&nbsp;freelist&nbsp;链表中，待需要分配给数据存储时，再从&nbsp;freelist&nbsp;中取出，存入&nbsp;key/value，以及各种辅助属性，然后再存到&nbsp;LRU&nbsp;链表及&nbsp;Hashtable&nbsp;中，如下图所示。Item&nbsp;结构体，首先有两个&nbsp;prev、next&nbsp;指针，在分配给待存储数据之前，这两个指针用来串联&nbsp;freelist&nbsp;链表，在分配之后，则用来串联所在的&nbsp;LRU&nbsp;链表。接下来是一个&nbsp;h_next&nbsp;指针，用来在分配之后串联哈希表的桶单向链表。Item&nbsp;结构体还存储了过期时间、所属&nbsp;slabclass&nbsp;id，key&nbsp;长度、cas&nbsp;唯一&nbsp;id&nbsp;值等，最后在&nbsp;Item&nbsp;结构体尾部，存储了&nbsp;key、flag、value&nbsp;长度，以及&nbsp;value&nbsp;block&nbsp;数据。在&nbsp;value&nbsp;之后的&nbsp;chunk&nbsp;空间，就被浪费掉了。Item&nbsp;在空闲期间，即初始分配时以及被回收后，都被&nbsp;freelist&nbsp;管理。在存储期间，被哈希表、LRU&nbsp;管理。</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: center; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; text-indent: 0em;"><img src="http://s0.lgstatic.com/i/image2/M01/99/E4/CgotOV2lNbaAJAdTAADQDnmaLHo150.png" style="text-align: justify;">&nbsp; &nbsp; &nbsp;</span></p>
+<h2 style="white-space: normal;"></h2>
+<h6 style="text-indent: 0em; white-space: normal; text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">存储 Item 分配</span></h6>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">Mc&nbsp;采用&nbsp;slab&nbsp;机制管理分配内存，采用&nbsp;Item&nbsp;结构存储&nbsp;key/value，因此对存储&nbsp;key/value&nbsp;的内存分配，就转换为对&nbsp;Item&nbsp;的分配。分配&nbsp;Item&nbsp;空间时，会进行&nbsp;10&nbsp;次大循环，直到分配到&nbsp;Item&nbsp;&nbsp;空间才会提前返回。如果循环了&nbsp;10&nbsp;次，还没有分配到&nbsp;Item&nbsp;空间，则存储失败，返回一个&nbsp;SERVER_ERROR&nbsp;响应。</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">&nbsp;</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">在分配过程中，首先，如果&nbsp;slabclass&nbsp;的&nbsp;freelist&nbsp;有空间，则直接分配。否则，尝试分配一个新的&nbsp;slab，新&nbsp;slab&nbsp;依次尝试从全局&nbsp;slab&nbsp;池（即&nbsp;0&nbsp;号&nbsp;slabclass）中复用一个空闲&nbsp;slab，如果全局&nbsp;slab&nbsp;池没有&nbsp;slab，则尝试从内存直接分配。分配新&nbsp;slab&nbsp;成功后，会按照&nbsp;slabclass&nbsp;记录的&nbsp;chunk size&nbsp;对&nbsp;slab&nbsp;进行分拆，并将分拆出来的&nbsp;chunk&nbsp;按&nbsp;Item&nbsp;结构初始化后记录到&nbsp;freelist。如果全局&nbsp;slab&nbsp;池为空，且&nbsp;Mc&nbsp;内存分配已经达到设定的上限，则走新增&nbsp;slab&nbsp;的路径失败，转而进行&nbsp;5&nbsp;次小循环，尝试从&nbsp;COLD LRU&nbsp;回收过期&nbsp;key，如果没有过期则直接强制剔除队尾的一个正常&nbsp;key。如果该&nbsp;slabclass&nbsp;的&nbsp;COLD LRU&nbsp;没有&nbsp;Item，则对其&nbsp;HOT LRU&nbsp;进行处理，对&nbsp;HOT&nbsp;链表队尾&nbsp;Item&nbsp;进行回收或者迁移，以方便在下次循环中找到一个可用的&nbsp;Item&nbsp;空间。</span></p>
+<h1 style="white-space: normal;"><p style="text-align: justify; line-height: 1.75em; text-indent: 0em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">数据存储机理</span></p></h1>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">讲完&nbsp;Mc&nbsp;的哈希表定位、LRU&nbsp;淘汰、slab&nbsp;内存分配，接下来我们来看看&nbsp;Mc&nbsp;中&nbsp;key/value&nbsp;数据的存储机理，通过对数据存储以及维护过程的分析，来把&nbsp;Mc&nbsp;的核心模块进行打通和关联。</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">&nbsp;</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">首先来看&nbsp;Mc&nbsp;如何通过&nbsp;slab&nbsp;机制将数据写入预分配的存储空间。</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;"><br></span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">如下图所示，当需要存储&nbsp;key/value&nbsp;数据时，首先根据&nbsp;key/value size，以及&nbsp;Item&nbsp;结构体的&nbsp;size，计算出存储这个&nbsp;key/value&nbsp;需要的字节数，然后根据这个字节数选择一个能存储的&nbsp;chunk size&nbsp;最小的&nbsp;slabclass。再从这个&nbsp;slabclass&nbsp;的&nbsp;freelist&nbsp;分配一个空闲的&nbsp;chunk&nbsp;给这个&nbsp;key/value&nbsp;使用。如果&nbsp;freelist&nbsp;为空，首先尝试为该&nbsp;slabclass&nbsp;新分配一个&nbsp;slab，如果&nbsp;slab&nbsp;分配成功，则将&nbsp;slab&nbsp;按&nbsp;size&nbsp;分拆出一些&nbsp;chunk，通过&nbsp;Item&nbsp;结构初始化后填充到&nbsp;freelist。如果&nbsp;slab&nbsp;分配失败，则通过&nbsp;LRU&nbsp;淘汰失效的&nbsp;Item&nbsp;或强行剔除一个正常的&nbsp;Item，然后这些&nbsp;Item&nbsp;也会填充到&nbsp;freelist。当&nbsp;freelist&nbsp;有&nbsp;Item&nbsp;时，即可分配给&nbsp;key/value。这个过程会重试&nbsp;10&nbsp;次，直到分配到&nbsp;Item&nbsp;位置。一般情况下，Item&nbsp;分配总会成功，极小概率情况下也会分配失败，如果分配失败，则会回复一个&nbsp;SERVER_ERROR&nbsp;响应，通知&nbsp;client&nbsp;存储失败。分配到一个空闲的&nbsp;Item&nbsp;后，就会往这个&nbsp;Item&nbsp;空间写入过期时间、flag、slabclass&nbsp;id、key，以及&nbsp;value&nbsp;等。对于&nbsp;set&nbsp;指令，如果这个&nbsp;key&nbsp;还有一个旧值，在存入新&nbsp;value&nbsp;之前，还会先将这个旧值删除掉。</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: center; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; text-indent: 0em;"><img src="http://s0.lgstatic.com/i/image2/M01/99/C5/CgoB5l2lNbaAPBGDAAD9uoSXyug151.png" style="text-align: justify;"></span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; text-indent: 0em;">当对&nbsp;key/value&nbsp;分配&nbsp;Item&nbsp;成功，并写入数据后，接下来就会将这个&nbsp;Item&nbsp;存入哈希表。因为Mc&nbsp;哈希表存在迁移的情况，所以对于正常场景，直接存入主哈希表。在哈希表迁移期间，需要根据迁移位置，选择存入主哈希表还是旧哈希表。存入哈希表之后，这个&nbsp;key&nbsp;就可以快速定位了。然后这个&nbsp;Item&nbsp;还会被存入&nbsp;LRU，Mc&nbsp;会根据这个&nbsp;key&nbsp;的过期时间进行判断，如果过期时间小于&nbsp;61s，则存入&nbsp;TEMP LRU，否则存入&nbsp;HOT LRU。</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">&nbsp;</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">至此，这个&nbsp;key/value&nbsp;就被正确地存入&nbsp;Mc&nbsp;了，数据内容写入&nbsp;slabclass&nbsp;中某个&nbsp;slab&nbsp;的&nbsp;chunk&nbsp;位置，该&nbsp;chunk&nbsp;用&nbsp;Item&nbsp;结构填充，这个&nbsp;Item&nbsp;会被同时记录到&nbsp;Hashtable&nbsp;和&nbsp;LRU，如下图所示。通过&nbsp;Hashtable&nbsp;可以快速定位查到这个&nbsp;key，而&nbsp;LRU&nbsp;则用于&nbsp;Item&nbsp;生命周期的日常维护。</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: center; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;"><img src="http://s0.lgstatic.com/i/image2/M01/99/E5/CgotOV2lNbaAaiifAACi2sd0Il8906.png" style="text-align: justify;"></span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px;">Mc&nbsp;对&nbsp;Item&nbsp;生命周期的日常维护，包括异步维护和同步维护。异步维护是通过&nbsp;LRU&nbsp;维护线程来进行的，整个过程不影响&nbsp;client&nbsp;的正常请求，在&nbsp;LRU&nbsp;维护线程内，对过期、失效&nbsp;key&nbsp;进行回收，并对&nbsp;4&nbsp;个&nbsp;LRU&nbsp;进行链表内搬运和链表间迁移。这是&nbsp;Item&nbsp;生命周期管理的主要形式。同步维护，由工作线程在处理请求命令时进行。工作线程在处理&nbsp;delete&nbsp;指令时，会直接将&nbsp;key/value&nbsp;进行删除。在存储新&nbsp;key/value&nbsp;时，如果分配失败，会进行失效的&nbsp;key&nbsp;回收，或者强行剔除正常的&nbsp;Item。这些&nbsp;Item&nbsp;被回收后，会进入到&nbsp;slabclass&nbsp;的&nbsp;freelist&nbsp;进行重复使用。</span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; text-indent: 29.3333px;"><br></span></p>
+<p style="margin-top: 0pt; margin-bottom: 0pt; text-indent: 0em; white-space: normal; font-size: 11pt; color: rgb(73, 73, 73); text-align: justify; line-height: 1.75em;"><span style="font-family: 微软雅黑, &quot;Microsoft YaHei&quot;; font-size: 16px; text-indent: 29.3333px;">OK，这节课就讲到这里啦，下一课时我将分享“Memcached 协议分析”，记得按时来听课哈。好，下节课见，拜拜！</span></p>
+<p style="text-align: justify; line-height: 1.75em;"><span style="color: rgb(73, 73, 73); font-size: 14.6667px; text-indent: 29.3333px; font-family: 微软雅黑, &quot;Microsoft YaHei&quot;;"><br></span></p></div>
+
+</body></html>

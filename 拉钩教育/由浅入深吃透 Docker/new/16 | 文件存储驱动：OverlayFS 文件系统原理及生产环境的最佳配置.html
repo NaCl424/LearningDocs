@@ -1,0 +1,1337 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>16 | 文件存储驱动：OverlayFS 文件系统原理及生产环境的最佳配置</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>16 | 文件存储驱动：OverlayFS 文件系统原理及生产环境的最佳配置</h1><p data-nodeid="231181">前面课时我分别介绍了 Docker 常见的联合文件系统解决方案： AUFS 和 Devicemapper。今天我给你介绍一个性能更好的联合文件系统解决方案—— OverlayFS。</p>
+
+
+
+<p data-nodeid="230350">OverlayFS 的发展分为两个阶段。2014 年，OverlayFS 第一个版本被合并到 Linux 内核 3.18 版本中，此时的 OverlayFS 在 Docker 中被称为<code data-backticks="1" data-nodeid="230474">overlay</code>文件驱动。由于第一版的<code data-backticks="1" data-nodeid="230476">overlay</code>文件系统存在很多弊端（例如运行一段时间后Docker 会报 "too many links problem" 的错误）， Linux 内核在 4.0 版本对<code data-backticks="1" data-nodeid="230482">overlay</code>做了很多必要的改进，此时的 OverlayFS 被称之为<code data-backticks="1" data-nodeid="230484">overlay2</code>。</p>
+<p data-nodeid="230351">因此，在 Docker 中 OverlayFS 文件驱动被分为了两种，一种是早期的<code data-backticks="1" data-nodeid="230487">overlay</code>，不推荐在生产环境中使用，另一种是更新和更稳定的<code data-backticks="1" data-nodeid="230489">overlay2</code>，推荐在生产环境中使用。下面的内容我们主要围绕<code data-backticks="1" data-nodeid="230491">overlay2</code>展开。</p>
+<h3 data-nodeid="230352">使用 overlay2 的先决条件</h3>
+<p data-nodeid="230353"><code data-backticks="1" data-nodeid="230494">overlay2</code>虽然很好，但是它的使用是有一定条件限制的。</p>
+<ul data-nodeid="230354">
+<li data-nodeid="230355">
+<p data-nodeid="230356">要想使用<code data-backticks="1" data-nodeid="230497">overlay2</code>，Docker 版本必须高于 17.06.02。</p>
+</li>
+<li data-nodeid="230357">
+<p data-nodeid="230358">如果你的操作系统是 RHEL 或 CentOS，Linux 内核版本必须使用 3.10.0-514 或者更高版本，其他 Linux 发行版的内核版本必须高于 4.0（例如 Ubuntu 或 Debian），你可以使用<code data-backticks="1" data-nodeid="230500">uname -a</code>查看当前系统的内核版本。</p>
+</li>
+<li data-nodeid="230359">
+<p data-nodeid="230360"><code data-backticks="1" data-nodeid="230502">overlay2</code>最好搭配 xfs 文件系统使用，并且使用 xfs 作为底层文件系统时，d_type必须开启，可以使用以下命令验证 d_type 是否开启：</p>
+</li>
+</ul>
+<pre class="lang-java hljs" data-nodeid="230361"><code data-language="java">$ xfs_info /<span class="hljs-keyword">var</span>/lib/docker | grep ftype
+naming&nbsp; &nbsp;=version <span class="hljs-number">2</span>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; bsize=<span class="hljs-number">4096</span>&nbsp; &nbsp;ascii-ci=<span class="hljs-number">0</span> ftype=<span class="hljs-number">1</span>
+</code></pre>
+<p data-nodeid="230362">当输出结果中有 ftype=1 时，表示 d_type 已经开启。如果你的输出结果为 ftype=0，则需要重新格式化磁盘目录，命令如下：</p>
+<pre class="lang-java hljs" data-nodeid="230363"><code data-language="java">$ sudo mkfs.xfs -f -n ftype=<span class="hljs-number">1</span> /path/to/disk
+</code></pre>
+<p data-nodeid="230364">另外，在生产环境中，推荐挂载 /var/lib/docker 目录到单独的磁盘或者磁盘分区，这样可以避免该目录写满影响主机的文件写入，并且把挂载信息写入到 /etc/fstab，防止机器重启后挂载信息丢失。</p>
+<p data-nodeid="230365">挂载配置中推荐开启 pquota，这样可以防止某个容器写文件溢出导致整个容器目录空间被占满。写入到 /etc/fstab 中的内容如下：</p>
+<pre class="lang-java hljs" data-nodeid="230366"><code data-language="java">$UUID /<span class="hljs-keyword">var</span>/lib/docker xfs defaults,pquota <span class="hljs-number">0</span> <span class="hljs-number">0</span>
+</code></pre>
+<p data-nodeid="230367">其中 UUID 为 /var/lib/docker 所在磁盘或者分区的 UUID 或者磁盘路径。<br>
+如果你的操作系统无法满足上面的任何一个条件，那我推荐你使用 AUFS 或者 Devicemapper 作为你的 Docker 文件系统驱动。</p>
+<blockquote data-nodeid="230368">
+<p data-nodeid="230369">通常情况下， overlay2 会比 AUFS 和 Devicemapper 性能更好，而且更加稳定，因为 overlay2 在 inode 优化上更加高效。因此在生产环境中推荐使用 overlay2 作为 Docker 的文件驱动。</p>
+</blockquote>
+<p data-nodeid="230370">下面我通过实例来教你如何初始化  /var/lib/docker 目录，为后面配置 Docker 的<code data-backticks="1" data-nodeid="230518">overlay2</code>文件驱动做准备。</p>
+<h4 data-nodeid="230371">准备  /var/lib/docker 目录</h4>
+<p data-nodeid="233225" class="">1.使用 lsblk（Linux 查看磁盘和块设备信息命令）命令查看本机磁盘信息：</p>
+<pre class="lang-java hljs" data-nodeid="233226"><code data-language="java">$ lsblk
+NAME&nbsp; &nbsp;MAJ:MIN RM&nbsp; SIZE RO TYPE MOUNTPOINT
+vda&nbsp; &nbsp; <span class="hljs-number">253</span>:<span class="hljs-number">0</span>&nbsp; &nbsp; <span class="hljs-number">0</span>&nbsp; <span class="hljs-number">500</span>G&nbsp; <span class="hljs-number">0</span> disk
+\`-vda1 <span class="hljs-number">253</span>:<span class="hljs-number">1</span>&nbsp; &nbsp; <span class="hljs-number">0</span>&nbsp; <span class="hljs-number">500</span>G&nbsp; <span class="hljs-number">0</span> part /
+vdb&nbsp; &nbsp; <span class="hljs-number">253</span>:<span class="hljs-number">16</span>&nbsp; &nbsp;<span class="hljs-number">0</span>&nbsp; <span class="hljs-number">500</span>G&nbsp; <span class="hljs-number">0</span> disk
+\`-vdb1 <span class="hljs-number">253</span>:<span class="hljs-number">17</span>&nbsp; &nbsp;<span class="hljs-number">0</span>&nbsp; &nbsp; <span class="hljs-number">8</span>G&nbsp; <span class="hljs-number">0</span> part
+</code></pre>
+<p data-nodeid="235435">可以看到，我的机器有两块磁盘，一块是 vda，一块是 vdb。其中 vda 已经被用来挂载系统根目录，这里我想把  /var/lib/docker  挂载到 vdb1 分区上。</p>
+<p data-nodeid="235436">2.使用 mkfs 命令格式化磁盘 vdb1：</p>
+
+
+<pre class="lang-java hljs" data-nodeid="234703"><code data-language="java">$ sudo mkfs.xfs -f -n ftype=<span class="hljs-number">1</span> /dev/vdb1
+</code></pre>
+<p data-nodeid="235979" class="">3.将挂载信息写入到 /etc/fstab，保证机器重启挂载目录不丢失：</p>
+<pre class="lang-java hljs" data-nodeid="235980"><code data-language="java">$ sudo echo <span class="hljs-string">"/dev/vdb1 /var/lib/docker xfs defaults,pquota 0 0"</span> &gt;&gt; /etc/fstab
+</code></pre>
+<p data-nodeid="237418" class="">4.使用 mount 命令使得挂载目录生效：</p>
+<pre class="lang-java hljs" data-nodeid="237419"><code data-language="java">$ sudo mount -a
+</code></pre>
+<p data-nodeid="238845" class="">5.查看挂载信息：</p>
+<pre class="lang-java hljs" data-nodeid="238846"><code data-language="java">$ lsblk
+NAME&nbsp; &nbsp;MAJ:MIN RM&nbsp; SIZE RO TYPE MOUNTPOINT
+vda&nbsp; &nbsp; <span class="hljs-number">253</span>:<span class="hljs-number">0</span>&nbsp; &nbsp; <span class="hljs-number">0</span>&nbsp; <span class="hljs-number">500</span>G&nbsp; <span class="hljs-number">0</span> disk
+\`-vda1 <span class="hljs-number">253</span>:<span class="hljs-number">1</span>&nbsp; &nbsp; <span class="hljs-number">0</span>&nbsp; <span class="hljs-number">500</span>G&nbsp; <span class="hljs-number">0</span> part /
+vdb&nbsp; &nbsp; <span class="hljs-number">253</span>:<span class="hljs-number">16</span>&nbsp; &nbsp;<span class="hljs-number">0</span>&nbsp; <span class="hljs-number">500</span>G&nbsp; <span class="hljs-number">0</span> disk
+\`-vdb1 <span class="hljs-number">253</span>:<span class="hljs-number">17</span>&nbsp; &nbsp;<span class="hljs-number">0</span>&nbsp; &nbsp; <span class="hljs-number">8</span>G&nbsp; <span class="hljs-number">0</span> part /<span class="hljs-keyword">var</span>/lib/docker
+</code></pre>
+<p data-nodeid="238847">可以看到此时  /var/lib/docker 目录已经被挂载到了 vdb1 这个磁盘分区上。我们使用 xfs_info 命令验证下 d_type 是否已经成功开启：</p>
+<pre class="lang-java hljs" data-nodeid="238848"><code data-language="java">$ xfs_info /<span class="hljs-keyword">var</span>/lib/docker | grep ftype
+naming&nbsp; &nbsp;=version <span class="hljs-number">2</span>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; bsize=<span class="hljs-number">4096</span>&nbsp; &nbsp;ascii-ci=<span class="hljs-number">0</span> ftype=<span class="hljs-number">1</span>
+</code></pre>
+<p data-nodeid="239551">可以看到输出结果为  ftype=1，证明 d_type 已经被成功开启。</p>
+<p data-nodeid="239552">准备好  /var/lib/docker 目录后，我们就可以配置 Docker 的文件驱动为 overlay2，并且启动 Docker 了。</p>
+
+<h3 data-nodeid="238850">如何在 Docker 中配置 overlay2？</h3>
+<p data-nodeid="238851">当你的系统满足上面的条件后，就可以配置你的 Docker 存储驱动为 overlay2 了，具体配置步骤如下。</p>
+<p data-nodeid="240085" class="">1.停止已经运行的 Docker：</p>
+<pre class="lang-java hljs" data-nodeid="240086"><code data-language="java">$ sudo systemctl stop docker
+</code></pre>
+<p data-nodeid="240765" class="">2.备份 /var/lib/docker 目录：</p>
+<pre class="lang-java hljs" data-nodeid="240766"><code data-language="java">$ sudo cp -au /<span class="hljs-keyword">var</span>/lib/docker /<span class="hljs-keyword">var</span>/lib/docker.back
+</code></pre>
+<p data-nodeid="241436" class="">3.在 /etc/docker 目录下创建 daemon.json 文件，如果该文件已经存在，则修改配置为以下内容：</p>
+<pre class="lang-json hljs" data-nodeid="241437"><code data-language="json">{
+  <span class="hljs-attr">"storage-driver"</span>: <span class="hljs-string">"overlay2"</span>,
+  <span class="hljs-attr">"storage-opts"</span>: [
+    <span class="hljs-string">"overlay2.size=20G"</span>,
+    <span class="hljs-string">"overlay2.override_kernel_check=true"</span>
+  ]
+}
+</code></pre>
+<p data-nodeid="241438">其中 storage-driver 参数指定使用 overlay2 文件驱动，overlay2.size 参数表示限制每个容器根目录大小为 20G。限制每个容器的磁盘空间大小是通过 xfs 的 pquota 特性实现，overlay2.size 可以根据不同的生产环境来设置这个值的大小。我推荐你在生产环境中开启此参数，防止某个容器写入文件过大，导致整个 Docker 目录空间溢出。</p>
+<p data-nodeid="242749" class="">4.启动 Docker：</p>
+<pre class="lang-java hljs" data-nodeid="242750"><code data-language="java">$ sudo systemctl start docker
+</code></pre>
+<p data-nodeid="244048" class="">5.检查配置是否生效：</p>
+<pre class="lang-java hljs" data-nodeid="244049"><code data-language="java">$ docker info
+Client:
+&nbsp;Debug Mode: <span class="hljs-keyword">false</span>
+Server:
+&nbsp;Containers: <span class="hljs-number">1</span>
+&nbsp; Running: <span class="hljs-number">0</span>
+&nbsp; Paused: <span class="hljs-number">0</span>
+&nbsp; Stopped: <span class="hljs-number">1</span>
+&nbsp;Images: <span class="hljs-number">1</span>
+&nbsp;Server Version: <span class="hljs-number">19.03</span>.<span class="hljs-number">12</span>
+&nbsp;Storage Driver: overlay2
+&nbsp; Backing Filesystem: xfs
+&nbsp; Supports d_type: <span class="hljs-keyword">true</span>
+&nbsp; Native Overlay Diff: <span class="hljs-keyword">true</span>
+&nbsp;Logging Driver: json-file
+&nbsp;Cgroup Driver: cgroupfs
+&nbsp;... 省略部分无用输出
+</code></pre>
+<p data-nodeid="244050">可以看到 Storage Driver 已经变为 overlay2，并且 d_type 也是 true。至此，你的 Docker 已经配置完成。下面我们看下 overlay2 是如何工作的。</p>
+<h3 data-nodeid="244051">overlay2 工作原理</h3>
+<h4 data-nodeid="244052">overlay2 是如何存储文件的？</h4>
+<p data-nodeid="244053">overlay2 和 AUFS 类似，它将所有目录称之为层（layer），overlay2 的目录是镜像和容器分层的基础，而把这些层统一展现到同一的目录下的过程称为联合挂载（union mount）。overlay2 把目录的下一层叫作<code data-backticks="1" data-nodeid="244108">lowerdir</code>，上一层叫作<code data-backticks="1" data-nodeid="244110">upperdir</code>，联合挂载后的结果叫作<code data-backticks="1" data-nodeid="244112">merged</code>。</p>
+<blockquote data-nodeid="244054">
+<p data-nodeid="244055">overlay2 文件系统最多支持 128 个层数叠加，也就是说你的 Dockerfile 最多只能写 128 行，不过这在日常使用中足够了。</p>
+</blockquote>
+<p data-nodeid="244056">下面我们通过拉取一个 Ubuntu 操作系统的镜像来看下 overlay2 是如何存放镜像文件的。</p>
+<p data-nodeid="244057">首先，我们通过以下命令拉取 Ubuntu 镜像：</p>
+<pre class="lang-java hljs" data-nodeid="244058"><code data-language="java">$ docker pull ubuntu:<span class="hljs-number">16.04</span>
+<span class="hljs-number">16.04</span>: Pulling from library/ubuntu
+<span class="hljs-number">8e097</span>b52bfb8: Pull complete
+a613a9b4553c: Pull complete
+acc000f01536: Pull complete
+<span class="hljs-number">73</span>eef93b7466: Pull complete
+Digest: sha256:<span class="hljs-number">3d</span>d44f7ca10f07f86add9d0dc611998a1641f501833692a2651c96defe8db940
+Status: Downloaded newer image <span class="hljs-keyword">for</span> ubuntu:<span class="hljs-number">16.04</span>
+docker.io/library/ubuntu:<span class="hljs-number">16.04</span>
+</code></pre>
+<p data-nodeid="244059">可以看到镜像一共被分为四层拉取，拉取完镜像后我们查看一下 overlay2 的目录：</p>
+<pre class="lang-java hljs" data-nodeid="244060"><code data-language="java">$ sudo ls -l /<span class="hljs-keyword">var</span>/lib/docker/overlay2/
+total <span class="hljs-number">0</span>
+drwx------. <span class="hljs-number">3</span> root root&nbsp; &nbsp; &nbsp; <span class="hljs-number">47</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">16</span> <span class="hljs-number">01</span>946de89606800dac8530e3480b32be9d7c66b493a1cdf558df52d7a1476d4a
+drwx------. <span class="hljs-number">4</span> root root&nbsp; &nbsp; &nbsp; <span class="hljs-number">55</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">16</span> <span class="hljs-number">0849d</span>aa41598a333101f6a411755907d182a7fcef780c7f048f15d335b774deb
+drwx------. <span class="hljs-number">4</span> root root&nbsp; &nbsp; &nbsp; <span class="hljs-number">72</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">16</span> <span class="hljs-number">94222</span>a2fa3b2405cb00459285dd0d0ba7e6936d9b693ed18fbb0d08b93dc272f
+drwx------. <span class="hljs-number">4</span> root root&nbsp; &nbsp; &nbsp; <span class="hljs-number">72</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">16</span> <span class="hljs-number">9d</span>392cf38f245d37699bdd7672daaaa76a7d702083694fa8be380087bda5e396
+brw-------. <span class="hljs-number">1</span> root root <span class="hljs-number">253</span>, <span class="hljs-number">17</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">14</span> backingFsBlockDev
+drwx------. <span class="hljs-number">2</span> root root&nbsp; &nbsp; &nbsp;<span class="hljs-number">142</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">16</span> l
+</code></pre>
+<p data-nodeid="244061">可以看到 overlay2 目录下出现了四个镜像层目录和一个<code data-backticks="1" data-nodeid="244119">l</code>目录，我们首先来查看一下<code data-backticks="1" data-nodeid="244121">l</code>目录的内容：</p>
+<pre class="lang-java hljs" data-nodeid="244062"><code data-language="java">$ sudo ls -l /<span class="hljs-keyword">var</span>/lib/docker/overlay2/l
+total <span class="hljs-number">0</span>
+lrwxrwxrwx. <span class="hljs-number">1</span> root root <span class="hljs-number">72</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">16</span> FWGSYEA56RNMS53EUCKEQIKVLQ -&gt; ../<span class="hljs-number">9d</span>392cf38f245d37699bdd7672daaaa76a7d702083694fa8be380087bda5e396/diff
+lrwxrwxrwx. <span class="hljs-number">1</span> root root <span class="hljs-number">72</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">16</span> RNN2FM3YISKADNAZFRONVNWTIS -&gt; ../<span class="hljs-number">0849d</span>aa41598a333101f6a411755907d182a7fcef780c7f048f15d335b774deb/diff
+lrwxrwxrwx. <span class="hljs-number">1</span> root root <span class="hljs-number">72</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">16</span> SHAQ5GYA3UZLJJVEGXEZM34KEE -&gt; ../<span class="hljs-number">01</span>946de89606800dac8530e3480b32be9d7c66b493a1cdf558df52d7a1476d4a/diff
+lrwxrwxrwx. <span class="hljs-number">1</span> root root <span class="hljs-number">72</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">16</span> VQSNH735KNX4YK2TCMBAJRFTGT -&gt; ../<span class="hljs-number">94222</span>a2fa3b2405cb00459285dd0d0ba7e6936d9b693ed18fbb0d08b93dc272f/diff
+</code></pre>
+<p data-nodeid="244063">可以看到<code data-backticks="1" data-nodeid="244124">l</code>目录是一堆软连接，把一些较短的随机串软连到镜像层的 diff 文件夹下，这样做是为了避免达到<code data-backticks="1" data-nodeid="244126">mount</code>命令参数的长度限制。<br>
+下面我们查看任意一个镜像层下的文件内容：</p>
+<pre class="lang-java hljs" data-nodeid="244064"><code data-language="java">$ sudo ls -l /<span class="hljs-keyword">var</span>/lib/docker/overlay2/<span class="hljs-number">0849d</span>aa41598a333101f6a411755907d182a7fcef780c7f048f15d335b774deb/
+total <span class="hljs-number">8</span>
+drwxr-xr-x. <span class="hljs-number">3</span> root root <span class="hljs-number">17</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">16</span> diff
+-rw-r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">26</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">16</span> link
+-rw-r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">86</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">16</span> lower
+drwx------. <span class="hljs-number">2</span> root root&nbsp; <span class="hljs-number">6</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">16</span> work
+</code></pre>
+<p data-nodeid="244065"><strong data-nodeid="244137">镜像层的 link 文件内容为该镜像层的短 ID，diff 文件夹为该镜像层的改动内容，lower 文件为该层的所有父层镜像的短 ID。</strong><br>
+我们可以通过<code data-backticks="1" data-nodeid="244135">docker image inspect</code>命令来查看某个镜像的层级关系，例如我想查看刚刚下载的 Ubuntu 镜像之间的层级关系，可以使用以下命令：</p>
+<pre class="lang-java hljs" data-nodeid="244066"><code data-language="java">$ docker image inspect ubuntu:<span class="hljs-number">16.04</span>
+...省略部分输出
+<span class="hljs-string">"GraphDriver"</span>: {
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-string">"Data"</span>: {
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-string">"LowerDir"</span>: <span class="hljs-string">"/var/lib/docker/overlay2/9d392cf38f245d37699bdd7672daaaa76a7d702083694fa8be380087bda5e396/diff:/var/lib/docker/overlay2/94222a2fa3b2405cb00459285dd0d0ba7e6936d9b693ed18fbb0d08b93dc272f/diff:/var/lib/docker/overlay2/01946de89606800dac8530e3480b32be9d7c66b493a1cdf558df52d7a1476d4a/diff"</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-string">"MergedDir"</span>: <span class="hljs-string">"/var/lib/docker/overlay2/0849daa41598a333101f6a411755907d182a7fcef780c7f048f15d335b774deb/merged"</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-string">"UpperDir"</span>: <span class="hljs-string">"/var/lib/docker/overlay2/0849daa41598a333101f6a411755907d182a7fcef780c7f048f15d335b774deb/diff"</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-string">"WorkDir"</span>: <span class="hljs-string">"/var/lib/docker/overlay2/0849daa41598a333101f6a411755907d182a7fcef780c7f048f15d335b774deb/work"</span>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; },
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-string">"Name"</span>: <span class="hljs-string">"overlay2"</span>
+&nbsp; &nbsp; &nbsp; &nbsp; },
+...省略部分输出
+</code></pre>
+<p data-nodeid="244690">其中 MergedDir 代表当前镜像层在 overlay2 存储下的目录，LowerDir 代表当前镜像的父层关系，使用冒号分隔，冒号最后代表该镜像的最底层。</p>
+<p data-nodeid="244691">下面我们将镜像运行起来成为容器：</p>
+
+<pre class="lang-java hljs" data-nodeid="244068"><code data-language="java">$ docker run --name=ubuntu -d ubuntu:<span class="hljs-number">16.04</span> sleep <span class="hljs-number">3600</span>
+</code></pre>
+<p data-nodeid="244069">我们使用<code data-backticks="1" data-nodeid="244142">docker inspect</code>命令来查看一下容器的工作目录：</p>
+<pre class="lang-java hljs" data-nodeid="244070"><code data-language="java">$ docker inspect&nbsp;ubuntu
+...省略部分输出
+&nbsp;<span class="hljs-string">"GraphDriver"</span>: {
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-string">"Data"</span>: {
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-string">"LowerDir"</span>: <span class="hljs-string">"/var/lib/docker/overlay2/4753c2aa5bdb20c97cddd6978ee3b1d07ef149e3cc2bbdbd4d11da60685fe9b2-init/diff:/var/lib/docker/overlay2/0849daa41598a333101f6a411755907d182a7fcef780c7f048f15d335b774deb/diff:/var/lib/docker/overlay2/9d392cf38f245d37699bdd7672daaaa76a7d702083694fa8be380087bda5e396/diff:/var/lib/docker/overlay2/94222a2fa3b2405cb00459285dd0d0ba7e6936d9b693ed18fbb0d08b93dc272f/diff:/var/lib/docker/overlay2/01946de89606800dac8530e3480b32be9d7c66b493a1cdf558df52d7a1476d4a/diff"</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-string">"MergedDir"</span>: <span class="hljs-string">"/var/lib/docker/overlay2/4753c2aa5bdb20c97cddd6978ee3b1d07ef149e3cc2bbdbd4d11da60685fe9b2/merged"</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-string">"UpperDir"</span>: <span class="hljs-string">"/var/lib/docker/overlay2/4753c2aa5bdb20c97cddd6978ee3b1d07ef149e3cc2bbdbd4d11da60685fe9b2/diff"</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-string">"WorkDir"</span>: <span class="hljs-string">"/var/lib/docker/overlay2/4753c2aa5bdb20c97cddd6978ee3b1d07ef149e3cc2bbdbd4d11da60685fe9b2/work"</span>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; },
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-string">"Name"</span>: <span class="hljs-string">"overlay2"</span>
+&nbsp; &nbsp; &nbsp; &nbsp; },
+...省略部分输出
+</code></pre>
+<p data-nodeid="245202" class=""><strong data-nodeid="245236">MergedDir 后面的内容即为容器层的工作目录，LowerDir 为容器所依赖的镜像层目录。</strong> 然后我们查看下 overlay2 目录下的内容：</p>
+<pre class="lang-java hljs" data-nodeid="245203"><code data-language="java">$ sudo ls -l /<span class="hljs-keyword">var</span>/lib/docker/overlay2/
+total <span class="hljs-number">0</span>
+drwx------. <span class="hljs-number">3</span> root root&nbsp; &nbsp; &nbsp; <span class="hljs-number">47</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">16</span> <span class="hljs-number">01</span>946de89606800dac8530e3480b32be9d7c66b493a1cdf558df52d7a1476d4a
+drwx------. <span class="hljs-number">4</span> root root&nbsp; &nbsp; &nbsp; <span class="hljs-number">72</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">47</span> <span class="hljs-number">0849d</span>aa41598a333101f6a411755907d182a7fcef780c7f048f15d335b774deb
+drwx------. <span class="hljs-number">5</span> root root&nbsp; &nbsp; &nbsp; <span class="hljs-number">69</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">47</span> <span class="hljs-number">4753</span>c2aa5bdb20c97cddd6978ee3b1d07ef149e3cc2bbdbd4d11da60685fe9b2
+drwx------. <span class="hljs-number">4</span> root root&nbsp; &nbsp; &nbsp; <span class="hljs-number">72</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">47</span> <span class="hljs-number">4753</span>c2aa5bdb20c97cddd6978ee3b1d07ef149e3cc2bbdbd4d11da60685fe9b2-init
+drwx------. <span class="hljs-number">4</span> root root&nbsp; &nbsp; &nbsp; <span class="hljs-number">72</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">16</span> <span class="hljs-number">94222</span>a2fa3b2405cb00459285dd0d0ba7e6936d9b693ed18fbb0d08b93dc272f
+drwx------. <span class="hljs-number">4</span> root root&nbsp; &nbsp; &nbsp; <span class="hljs-number">72</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">16</span> <span class="hljs-number">9d</span>392cf38f245d37699bdd7672daaaa76a7d702083694fa8be380087bda5e396
+brw-------. <span class="hljs-number">1</span> root root <span class="hljs-number">253</span>, <span class="hljs-number">17</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">14</span> backingFsBlockDev
+drwx------. <span class="hljs-number">2</span> root root&nbsp; &nbsp; &nbsp;<span class="hljs-number">210</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">47</span> l
+</code></pre>
+<p data-nodeid="245204">可以看到 overlay2 目录下增加了容器层相关的目录，我们再来查看一下容器层下的内容：</p>
+<pre class="lang-java hljs" data-nodeid="245205"><code data-language="java">$ sudo ls -l /<span class="hljs-keyword">var</span>/lib/docker/overlay2/<span class="hljs-number">4753</span>c2aa5bdb20c97cddd6978ee3b1d07ef149e3cc2bbdbd4d11da60685fe9b2
+total <span class="hljs-number">8</span>
+drwxr-xr-x. <span class="hljs-number">2</span> root root&nbsp; &nbsp;<span class="hljs-number">6</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">47</span> diff
+-rw-r--r--. <span class="hljs-number">1</span> root root&nbsp; <span class="hljs-number">26</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">47</span> link
+-rw-r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">144</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">47</span> lower
+drwxr-xr-x. <span class="hljs-number">1</span> root root&nbsp; &nbsp;<span class="hljs-number">6</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">47</span> merged
+drwx------. <span class="hljs-number">3</span> root root&nbsp; <span class="hljs-number">18</span> Sep <span class="hljs-number">13</span> <span class="hljs-number">08</span>:<span class="hljs-number">47</span> work
+</code></pre>
+<p data-nodeid="245781">link 和 lower 文件与镜像层的功能一致，****link 文件内容为该容器层的短 ID，lower 文件为该层的所有父层镜像的短 ID 。<strong data-nodeid="245789">diff 目录为容器的读写层，容器内修改的文件都会在 diff 中出现，merged 目录为分层文件联合挂载后的结果，也是容器内的工作目录。</strong></p>
+<p data-nodeid="245782">总体来说，overlay2 是这样储存文件的：<code data-backticks="1" data-nodeid="245791">overlay2</code>将镜像层和容器层都放在单独的目录，并且有唯一 ID，每一层仅存储发生变化的文件，最终使用联合挂载技术将容器层和镜像层的所有文件统一挂载到容器中，使得容器中看到完整的系统文件。</p>
+
+<h4 data-nodeid="245207">overlay2 如何读取、修改文件？</h4>
+<p data-nodeid="245208">overlay2 的工作过程中对文件的操作分为读取文件和修改文件。</p>
+<p data-nodeid="245209"><strong data-nodeid="245254">读取文件</strong></p>
+<p data-nodeid="245210">容器内进程读取文件分为以下三种情况。</p>
+<ul data-nodeid="245211">
+<li data-nodeid="245212">
+<p data-nodeid="245213">文件在容器层中存在：当文件存在于容器层并且不存在于镜像层时，直接从容器层读取文件；</p>
+</li>
+<li data-nodeid="245214">
+<p data-nodeid="245215">当文件在容器层中不存在：当容器中的进程需要读取某个文件时，如果容器层中不存在该文件，则从镜像层查找该文件，然后读取文件内容；</p>
+</li>
+<li data-nodeid="245216">
+<p data-nodeid="245217">文件既存在于镜像层，又存在于容器层：当我们读取的文件既存在于镜像层，又存在于容器层时，将会从容器层读取该文件。</p>
+</li>
+</ul>
+<p data-nodeid="245218"><strong data-nodeid="245262">修改文件或目录</strong></p>
+<p data-nodeid="245219">overlay2 对文件的修改采用的是写时复制的工作机制，这种工作机制可以最大程度节省存储空间。具体的文件操作机制如下。</p>
+<ul data-nodeid="245220">
+<li data-nodeid="245221">
+<p data-nodeid="245222">第一次修改文件：当我们第一次在容器中修改某个文件时，overlay2 会触发写时复制操作，overlay2 首先从镜像层复制文件到容器层，然后在容器层执行对应的文件修改操作。</p>
+</li>
+</ul>
+<blockquote data-nodeid="245223">
+<p data-nodeid="245224">overlay2 写时复制的操作将会复制整个文件，如果文件过大，将会大大降低文件系统的性能，因此当我们有大量文件需要被修改时，overlay2 可能会出现明显的延迟。好在，写时复制操作只在第一次修改文件时触发，对日常使用没有太大影响。</p>
+</blockquote>
+<ul data-nodeid="245225">
+<li data-nodeid="245226">
+<p data-nodeid="245227">删除文件或目录：当文件或目录被删除时，overlay2 并不会真正从镜像中删除它，因为镜像层是只读的，overlay2 会创建一个特殊的文件或目录，这种特殊的文件或目录会阻止容器的访问。</p>
+</li>
+</ul>
+<h3 data-nodeid="245228">结语</h3>
+<p data-nodeid="245229">overlay2 目前已经是 Docker 官方推荐的文件系统了，也是目前安装 Docker 时默认的文件系统，因为 overlay2 在生产环境中不仅有着较高的性能，它的稳定性也极其突出。但是 overlay2 的使用还是有一些限制条件的，例如要求 Docker 版本必须高于 17.06.02，内核版本必须高于 4.0 等。因此，在生产环境中，如果你的环境满足使用 overlay2 的条件，请尽量使用 overlay2 作为 Docker 的联合文件系统。</p>
+<p data-nodeid="245230">那么你知道除了我介绍的这三种联合文件系统外，Docker 还可以使用哪些联合文件系统吗？ 思考后，可以把你的想法写在留言区。</p>
+<p data-nodeid="245231">下一课时，我将带你进入 Docker 原理实践，自己动手使用 Golang 开发 Docker。</p></div>
+
+</body></html>

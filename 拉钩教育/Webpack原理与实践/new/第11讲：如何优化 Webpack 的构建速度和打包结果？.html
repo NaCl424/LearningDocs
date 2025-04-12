@@ -1,0 +1,1432 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第11讲：如何优化 Webpack 的构建速度和打包结果？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>第11讲：如何优化 Webpack 的构建速度和打包结果？</h1><p data-nodeid="1181" class="">你好，我是汪磊，今天我们要一起探索的是 Webpack 在生产模式打包过程中的常用配置以及一些优化插件。</p>
+
+<p data-nodeid="946">在前面的课时中，我们了解到的一些用法和特性都是为了在开发阶段能够拥有更好的开发体验。而随着这些体验的提升，一个新的问题出现在我们面前：我们的打包结果会变得越来越臃肿。</p>
+<p data-nodeid="947">这是因为在这个过程中 Webpack 为了实现这些特性，会自动往打包结果中添加一些内容。例如我们之前用到的 Source Map 和 HMR，它们都会在输出结果中添加额外代码来实现各自的功能。</p>
+<p data-nodeid="948">但是这些额外的代码对生产环境来说是冗余的。因为生产环境和开发环境有很大的差异，在生产环境中我们强调的是以更少量、更高效的代码完成业务功能，也就是注重运行效率。而开发环境中我们注重的只是开发效率。</p>
+<p data-nodeid="949">那针对这个问题，Webpack 4 推出了 mode 的用法，为我们提供了不同模式下的一些预设配置，其中生产模式下就已经包括了很多优化配置。</p>
+<p data-nodeid="950">同时 Webpack 也建议我们为不同的工作环境创建不同的配置，以便于让我们的打包结果可以适用于不同的环境。</p>
+<p data-nodeid="951">接下来我们一起来探索一下生产环境中的一些优化方式和注意事项。</p>
+<h3 data-nodeid="952">不同环境下的配置</h3>
+<p data-nodeid="953">我们先为不同的工作环境创建不同的 Webpack 配置。创建不同环境配置的方式主要有两种：</p>
+<ul data-nodeid="2134">
+<li data-nodeid="2135">
+<p data-nodeid="2136" class="">在配置文件中添加相应的判断条件，根据环境不同导出不同配置；</p>
+</li>
+<li data-nodeid="2137">
+<p data-nodeid="2138">为不同环境单独添加一个配置文件，一个环境对应一个配置文件。</p>
+</li>
+</ul>
+
+
+<p data-nodeid="959">我们分别尝试一下通过这两种方式，为开发环境和生产环境创建不同配置。</p>
+<p data-nodeid="960">首先我们来看在配置文件中添加判断的方式。我们回到配置文件中，Webpack 配置文件还支持导出一个函数，然后在函数中返回所需要的配置对象。这个函数可以接收两个参数，第一个是 env，是我们通过 CLI 传递的环境名参数，第二个是 argv，是运行 CLI 过程中的所有参数。具体代码如下：</p>
+<pre class="lang-javascript hljs" data-nodeid="961"><code data-language="javascript"><span class="hljs-comment">// ./webpack.config.js</span>
+<span class="hljs-built_in">module</span>.exports = <span class="hljs-function">(<span class="hljs-params">env, argv</span>) =&gt;</span> {
+  <span class="hljs-keyword">return</span> {
+    <span class="hljs-comment">// ... webpack 配置</span>
+  }
+}
+</code></pre>
+<p data-nodeid="962">那我们就可以借助这个特点，为开发环境和生产环境创建不同配置。我先将不同模式下公共的配置定义为一个 config 对象，具体代码如下：</p>
+<pre class="lang-javascript hljs" data-nodeid="963"><code data-language="javascript"><span class="hljs-comment">// ./webpack.config.js</span>
+<span class="hljs-built_in">module</span>.exports = <span class="hljs-function">(<span class="hljs-params">env, argv</span>) =&gt;</span> {
+  <span class="hljs-keyword">const</span> config = {
+    <span class="hljs-comment">// ... 不同模式下的公共配置</span>
+  }
+  <span class="hljs-keyword">return</span> config
+}
+</code></pre>
+<p data-nodeid="964">然后通过判断，再为 config 对象添加不同环境下的特殊配置。具体如下：</p>
+<pre class="lang-javascript hljs" data-nodeid="965"><code data-language="javascript"><span class="hljs-comment">// ./webpack.config.js</span>
+<span class="hljs-built_in">module</span>.exports = <span class="hljs-function">(<span class="hljs-params">env, argv</span>) =&gt;</span> {
+  <span class="hljs-keyword">const</span> config = {
+    <span class="hljs-comment">// ... 不同模式下的公共配置</span>
+  }
+
+  <span class="hljs-keyword">if</span> (env === <span class="hljs-string">'development'</span>) {
+    <span class="hljs-comment">// 为 config 添加开发模式下的特殊配置</span>
+    config.mode = <span class="hljs-string">'development'</span>
+    config.devtool = <span class="hljs-string">'cheap-eval-module-source-map'</span>
+  } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (env === <span class="hljs-string">'production'</span>) {
+    <span class="hljs-comment">// 为 config 添加生产模式下的特殊配置</span>
+    config.mode = <span class="hljs-string">'production'</span>
+    config.devtool = <span class="hljs-string">'nosources-source-map'</span>
+  }
+
+  <span class="hljs-keyword">return</span> config
+}
+</code></pre>
+<p data-nodeid="966">例如这里，我们判断 env 等于 development（开发模式）的时候，我们将 mode 设置为 development，将 devtool 设置为 cheap-eval-module-source-map；而当 env 等于 production（生产模式）时，我们又将 mode 和 devtool 设置为生产模式下需要的值。</p>
+<p data-nodeid="967">当然，你还可以分别为不同模式设置其他不同的属性、插件，这也都是类似的。</p>
+<p data-nodeid="968">通过这种方式完成配置过后，我们打开命令行终端，这里我们再去执行 webpack 命令时就可以通过 --env 参数去指定具体的环境名称，从而实现在不同环境中使用不同的配置。</p>
+<p data-nodeid="969">那这就是通过在 Webpack 配置文件导出的函数中对环境进行判断，从而实现不同环境对应不同配置。这种方式是 Webpack 建议的方式。</p>
+<p data-nodeid="970">你也可以直接定义环境变量，然后在全局判断环境变量，根据环境变量的不同导出不同配置。这种方式也是类似的，这里我们就不做过多介绍了。</p>
+<h4 data-nodeid="971">不同环境的配置文件</h4>
+<p data-nodeid="972">通过判断环境名参数返回不同配置对象的方式只适用于中小型项目，因为一旦项目变得复杂，我们的配置也会一起变得复杂起来。所以对于大型的项目来说，还是建议使用不同环境对应不同配置文件的方式来实现。</p>
+<p data-nodeid="973">一般在这种方式下，项目中最少会有三个 webpack 的配置文件。其中两个用来分别适配开发环境和生产环境，另外一个则是公共配置。因为开发环境和生产环境的配置并不是完全不同的，所以需要一个公共文件来抽象两者相同的配置。具体配置文件结构如下：</p>
+<pre class="lang-java hljs" data-nodeid="974"><code data-language="java">.
+├── webpack.common.js ···························· 公共配置
+├── webpack.dev.js ······························· 开发模式配置
+└── webpack.prod.js ······························ 生产模式配置
+</code></pre>
+<p data-nodeid="975">首先我们在项目根目录下新建一个 webpack.common.js，在这个文件中导出不同模式下的公共配置；然后再来创建一个 webpack.dev.js 和一个 webpack.prod.js 分别定义开发和生产环境特殊的配置。</p>
+<p data-nodeid="976">在不同环境的具体配置中我们先导入公共配置对象，然后这里可以使用 Object.assign 方法把公共配置对象复制到具体环境的配置对象中，并且同时去覆盖其中的一些配置。具体如下：</p>
+<pre class="lang-javascript hljs" data-nodeid="977"><code data-language="javascript"><span class="hljs-comment">// ./webpack.common.js</span>
+<span class="hljs-built_in">module</span>.exports = {
+  <span class="hljs-comment">// ... 公共配置</span>
+}
+<span class="hljs-comment">// ./webpack.prod.js</span>
+<span class="hljs-keyword">const</span> common = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./webpack.common'</span>)
+<span class="hljs-built_in">module</span>.exports = <span class="hljs-built_in">Object</span>.assign(common, {
+  <span class="hljs-comment">// 生产模式配置</span>
+})
+<span class="hljs-comment">// ./webpack.dev.js</span>
+<span class="hljs-keyword">const</span> common = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./webpack.common'</span>)
+<span class="hljs-built_in">module</span>.exports = <span class="hljs-built_in">Object</span>.assign(common, {
+  <span class="hljs-comment">// 开发模式配置</span>
+})
+</code></pre>
+<p data-nodeid="978">如果你熟悉 Object.assign 方法，就应该知道，这个方法会完全覆盖掉前一个对象中的同名属性。这个特点对于普通值类型属性的覆盖都没有什么问题。但是像配置中的 plugins 这种数组，我们只是希望在原有公共配置的插件基础上添加一些插件，那 Object.assign 就做不到了。</p>
+<p data-nodeid="979">所以我们需要更合适的方法来合并这里的配置与公共的配置。你可以使用 <a href="http://lodash.com" data-nodeid="1081">Lodash</a> 提供的 merge 函数来实现，不过社区中提供了更为专业的模块 <a href="https://github.com/survivejs/webpack-merge" data-nodeid="1085">webpack-merge</a>，它专门用来满足我们这里合并 Webpack 配置的需求。</p>
+<p data-nodeid="980">我们可以先通过 npm 安装一下 webpack-merge 模块。具体命令如下：</p>
+<pre class="lang-shell hljs" data-nodeid="981"><code data-language="shell"><span class="hljs-meta">$</span><span class="bash"> npm i webpack-merge --save-dev </span>
+<span class="hljs-meta">#</span><span class="bash"> or yarn add webpack-merge --dev</span>
+</code></pre>
+<p data-nodeid="5917" class="">安装完成过后我们回到配置文件中，这里先载入这个模块。那这个模块导出的就是一个 merge 函数，我们使用这个函数来合并这里的配置与公共的配置。具体代码如下：</p>
+
+
+
+<pre class="lang-javascript hljs" data-nodeid="983"><code data-language="javascript"><span class="hljs-comment">// ./webpack.common.js</span>
+<span class="hljs-built_in">module</span>.exports = {
+  <span class="hljs-comment">// ... 公共配置</span>
+}
+<span class="hljs-comment">// ./webpack.prod.js</span>
+<span class="hljs-keyword">const</span> merge = <span class="hljs-built_in">require</span>(<span class="hljs-string">'webpack-merge'</span>)
+<span class="hljs-keyword">const</span> common = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./webpack.common'</span>)
+<span class="hljs-built_in">module</span>.exports = merge(common, {
+  <span class="hljs-comment">// 生产模式配置</span>
+})
+<span class="hljs-comment">// ./webpack.dev.jss</span>
+<span class="hljs-keyword">const</span> merge = <span class="hljs-built_in">require</span>(<span class="hljs-string">'webpack-merge'</span>)
+<span class="hljs-keyword">const</span> common = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./webpack.common'</span>)
+<span class="hljs-built_in">module</span>.exports = merge(common, {
+  <span class="hljs-comment">// 开发模式配置</span>
+})
+</code></pre>
+<p data-nodeid="984">使用 webpack-merge 过后，我们这里的配置对象就可以跟普通的 webpack 配置一样，需要什么就配置什么，merge 函数内部会自动处理合并的逻辑。</p>
+<p data-nodeid="985">分别配置完成过后，我们再次回到命令行终端，然后尝试运行 webpack 打包。不过因为这里已经没有默认的配置文件了，所以我们需要通过 --config 参数来指定我们所使用的配置文件路径。例如：</p>
+<pre class="lang-shell hljs" data-nodeid="986"><code data-language="shell"><span class="hljs-meta">$</span><span class="bash"> webpack --config webpack.prod.js</span>
+</code></pre>
+<p data-nodeid="3087" class="">当然，如果你觉得这样操作让我们的命令变得更复杂了，那你可以把这个构建命令定义到 npm scripts 中，方便使用。</p>
+
+
+<h3 data-nodeid="988">生产模式下的优化插件</h3>
+<p data-nodeid="989">在 Webpack 4 中新增的 production 模式下，内部就自动开启了很多通用的优化功能。对于使用者而言，开箱即用是非常方便的，但是对于学习者而言，这种开箱即用会导致我们忽略掉很多需要了解的东西。以至于出现问题无从下手。</p>
+<p data-nodeid="990"><br>
+如果你想要深入了解 Webpack 的使用，我建议你去单独研究每一个配置背后的作用。这里我们先一起学习 production 模式下几个主要的优化功能，顺便了解一下 Webpack 如何优化打包结果。</p>
+<h4 data-nodeid="991">Define Plugin</h4>
+<p data-nodeid="992">首先是 DefinePlugin，DefinePlugin 是用来为我们代码中注入全局成员的。在 production 模式下，默认通过这个插件往代码中注入了一个 process.env.NODE_ENV。很多第三方模块都是通过这个成员去判断运行环境，从而决定是否执行例如打印日志之类的操作。</p>
+<p data-nodeid="993">这里我们来单独使用一下这个插件。我们回到配置文件中，DefinePlugin 是一个内置的插件，所以我们先导入 webpack 模块，然后再到 plugins 中添加这个插件。这个插件的构造函数接收一个对象参数，对象中的成员都可以被注入到代码中。具体代码如下：</p>
+<pre class="lang-javascript hljs" data-nodeid="994"><code data-language="javascript">// ./webpack.config.js
+const webpack = require('webpack')
+module.exports = {
+/  // ... 其他配置
+  plugins: [
+    new webpack.DefinePlugin({
+      API_BASE_URL: 'https://api.example.com'
+    })
+  ]
+}
+</code></pre>
+<p data-nodeid="995">例如我们这里通过 DefinePlugin 定义一个 API_BASE_URL，用来为我们的代码注入 API 服务地址，它的值是一个字符串。</p>
+<p data-nodeid="996">然后我们回到代码中打印这个 API_BASE_URL。具体代码如下：</p>
+<pre class="lang-javascript hljs" data-nodeid="997"><code data-language="javascript"><span class="hljs-comment">// ./src/main.js</span>
+<span class="hljs-built_in">console</span>.log(API_BASE_URL)
+</code></pre>
+<p data-nodeid="998">完成以后我们打开控制台，然后运行 webpack 打包。打包完成过后我们找到打包的结果，然后找到 main.js 对应的模块。具体结果如下：</p>
+<p data-nodeid="999"><img src="https://s0.lgstatic.com/i/image/M00/10/E9/Ciqc1F7LaHWAV84JAADT7IV7CvE825.png" alt="image (3).png" data-nodeid="1115"></p>
+<p data-nodeid="1000">这里我们发现 DefinePlugin 其实就是把我们配置的字符串内容直接替换到了代码中，而目前这个字符串的内容为 https://api.example.com，字符串中并没有包含引号，所以替换进来语法自然有问题。</p>
+<p data-nodeid="1001">正确的做法是传入一个字符串字面量语句。具体实现如下：</p>
+<pre class="lang-javascript hljs" data-nodeid="1002"><code data-language="javascript"><span class="hljs-comment">// ./webpack.config.js</span>
+<span class="hljs-keyword">const</span> webpack = <span class="hljs-built_in">require</span>(<span class="hljs-string">'webpack'</span>)
+<span class="hljs-built_in">module</span>.exports = {
+  <span class="hljs-comment">// ... 其他配置</span>
+  <span class="hljs-attr">plugins</span>: [
+    <span class="hljs-keyword">new</span> webpack.DefinePlugin({
+      <span class="hljs-comment">// 值要求的是一个代码片段</span>
+      <span class="hljs-attr">API_BASE_URL</span>: <span class="hljs-string">'"https://api.example.com"'</span>
+    })
+  ]
+}
+</code></pre>
+<p data-nodeid="1003">这样代码内的 API_BASE_URL 就会被替换为 "https://api.example.com"。具体结果如下：</p>
+<p data-nodeid="1004"><img src="https://s0.lgstatic.com/i/image/M00/10/F5/CgqCHl7LaH-AMPKrAADQsK6wHzM717.png" alt="image (4).png" data-nodeid="1129"></p>
+<p data-nodeid="1005">另外，这里有一个非常常用的小技巧，如果我们需要注入的是一个值，就可以通过 JSON.stringify 的方式来得到表示这个值的字面量。这样就不容易出错了。具体实现如下：</p>
+<pre class="lang-javascript hljs" data-nodeid="1006"><code data-language="javascript"><span class="hljs-comment">// ./webpack.config.js</span>
+<span class="hljs-keyword">const</span> webpack = <span class="hljs-built_in">require</span>(<span class="hljs-string">'webpack'</span>)
+<span class="hljs-built_in">module</span>.exports = {
+  <span class="hljs-comment">// ... 其他配置</span>
+  <span class="hljs-attr">plugins</span>: [
+    <span class="hljs-keyword">new</span> webpack.DefinePlugin({
+      <span class="hljs-comment">// 值要求的是一个代码片段</span>
+      <span class="hljs-attr">API_BASE_URL</span>: <span class="hljs-built_in">JSON</span>.stringify(<span class="hljs-string">'https://api.example.com'</span>)
+    })
+  ]
+}
+</code></pre>
+<p data-nodeid="1007">DefinePlugin 的作用虽然简单，但是却非常有用，我们可以用它在代码中注入一些可能变化的值。</p>
+<h3 data-nodeid="1008">Mini CSS Extract Plugin</h3>
+<p data-nodeid="1009">对于 CSS 文件的打包，一般我们会使用 style-loader 进行处理，这种处理方式最终的打包结果就是 CSS 代码会内嵌到 JS 代码中。</p>
+<p data-nodeid="4507" class="">mini-css-extract-plugin 是一个可以将 CSS 代码从打包结果中提取出来的插件，它的使用非常简单，同样也需要先通过 npm 安装一下这个插件。具体命令如下：</p>
+
+
+
+
+<pre class="lang-shell hljs" data-nodeid="1012"><code data-language="shell"><span class="hljs-meta">$</span><span class="bash"> npm i mini-css-extract-plugin --save-dev</span>
+</code></pre>
+<p data-nodeid="1013">安装完成过后，我们回到 Webpack 的配置文件。具体配置如下：</p>
+<pre class="lang-javascript hljs" data-nodeid="1014"><code data-language="javascript"><span class="hljs-comment">// ./webpack.config.js</span>
+<span class="hljs-keyword">const</span> MiniCssExtractPlugin = <span class="hljs-built_in">require</span>(<span class="hljs-string">'mini-css-extract-plugin'</span>)
+<span class="hljs-built_in">module</span>.exports = {
+  <span class="hljs-attr">mode</span>: <span class="hljs-string">'none'</span>,
+  <span class="hljs-attr">entry</span>: {
+    <span class="hljs-attr">main</span>: <span class="hljs-string">'./src/index.js'</span>
+  },
+  <span class="hljs-attr">output</span>: {
+    <span class="hljs-attr">filename</span>: <span class="hljs-string">'[name].bundle.js'</span>
+  },
+  <span class="hljs-attr">module</span>: {
+    <span class="hljs-attr">rules</span>: [
+      {
+        <span class="hljs-attr">test</span>: <span class="hljs-regexp">/\.css$/</span>,
+        use: [
+          <span class="hljs-comment">// 'style-loader', // 将样式通过 style 标签注入</span>
+          MiniCssExtractPlugin.loader,
+          <span class="hljs-string">'css-loader'</span>
+        ]
+      }
+    ]
+  },
+  <span class="hljs-attr">plugins</span>: [
+    <span class="hljs-keyword">new</span> MiniCssExtractPlugin()
+  ]
+}
+</code></pre>
+<p data-nodeid="1015">我们这里先导入这个插件模块，导入过后我们就可以将这个插件添加到配置对象的 plugins 数组中了。这样 Mini CSS Extract Plugin 在工作时就会自动提取代码中的 CSS 了。</p>
+<p data-nodeid="1016">除此以外，Mini CSS Extract Plugin 还需要我们使用 MiniCssExtractPlugin 中提供的 loader 去替换掉 style-loader，以此来捕获到所有的样式。</p>
+<p data-nodeid="1017">这样的话，打包过后，样式就会存放在独立的文件中，直接通过 link 标签引入页面。</p>
+<p data-nodeid="1018" class="">不过这里需要注意的是，如果你的 CSS 体积不是很大的话，提取到单个文件中，效果可能适得其反，因为单独的文件就需要单独请求一次。个人经验是如果 CSS 超过 200KB 才需要考虑是否提取出来，作为单独的文件。</p>
+<h4 data-nodeid="1019">Optimize CSS Assets Webpack Plugin</h4>
+<p data-nodeid="1020">使用了 Mini CSS Extract Plugin 过后，样式就被提取到单独的 CSS 文件中了。但是这里同样有一个小问题。</p>
+<p data-nodeid="1021">我们回到命令行，这里我们以生产模式运行打包。那按照之前的了解，生产模式下会自动压缩输出的结果，我们可以打开打包生成的 JS 文件。具体结果如下：</p>
+<p data-nodeid="1022"><img src="https://s0.lgstatic.com/i/image/M00/10/E9/Ciqc1F7LaIqATAzSAAQyyz8qCXE919.png" alt="image (5).png" data-nodeid="1146"></p>
+<p data-nodeid="1023">然后我们再打开输出的样式文件。具体结果如下：</p>
+<p data-nodeid="1024"><img src="https://s0.lgstatic.com/i/image/M00/10/E9/Ciqc1F7LaJGAKXO2AAEBLBn8-rQ140.png" alt="image (6).png" data-nodeid="1150"></p>
+<p data-nodeid="1025">这里我们发现 JavaScript 文件正常被压缩了，而样式文件并没有被压缩。</p>
+<p data-nodeid="1026">这是因为，Webpack 内置的压缩插件仅仅是针对 JS 文件的压缩，其他资源文件的压缩都需要额外的插件。</p>
+<p data-nodeid="1027">Webpack 官方推荐了一个 <a href="https://www.npmjs.com/package/optimize-css-assets-webpack-plugin" data-nodeid="1156">Optimize CSS Assets Webpack Plugin</a> 插件。我们可以使用这个插件来压缩我们的样式文件。</p>
+<p data-nodeid="1028">我们回到命令行，先来安装这个插件，具体命令如下：</p>
+<pre class="lang-shell hljs" data-nodeid="1029"><code data-language="shell"><span class="hljs-meta">$</span><span class="bash"> npm i optimize-css-assets-webpack-plugin --save-dev</span>
+</code></pre>
+<p data-nodeid="1030">安装完成过后，我们回到配置文件中，添加对应的配置。具体代码如下：</p>
+<pre class="lang-javascript hljs" data-nodeid="1031"><code data-language="javascript"><span class="hljs-comment">// ./webpack.config.js</span>
+<span class="hljs-keyword">const</span> MiniCssExtractPlugin = <span class="hljs-built_in">require</span>(<span class="hljs-string">'mini-css-extract-plugin'</span>)
+<span class="hljs-keyword">const</span> OptimizeCssAssetsWebpackPlugin = <span class="hljs-built_in">require</span>(<span class="hljs-string">'optimize-css-assets-webpack-plugin'</span>)
+<span class="hljs-built_in">module</span>.exports = {
+  <span class="hljs-attr">mode</span>: <span class="hljs-string">'none'</span>,
+  <span class="hljs-attr">entry</span>: {
+    <span class="hljs-attr">main</span>: <span class="hljs-string">'./src/index.js'</span>
+  },
+  <span class="hljs-attr">output</span>: {
+    <span class="hljs-attr">filename</span>: <span class="hljs-string">'[name].bundle.js'</span>
+  },
+  <span class="hljs-attr">module</span>: {
+    <span class="hljs-attr">rules</span>: [
+      {
+        <span class="hljs-attr">test</span>: <span class="hljs-regexp">/\.css$/</span>,
+        use: [
+          MiniCssExtractPlugin.loader,
+          <span class="hljs-string">'css-loader'</span>
+        ]
+      }
+    ]
+  },
+  <span class="hljs-attr">plugins</span>: [
+    <span class="hljs-keyword">new</span> MiniCssExtractPlugin(),
+    <span class="hljs-keyword">new</span> OptimizeCssAssetsWebpackPlugin()
+  ]
+}
+</code></pre>
+<p data-nodeid="1032">这里同样先导入这个插件，导入完成以后我们把这个插件添加到 plugins 数组中。</p>
+<p data-nodeid="1033">那此时我们再次回到命令行运行打包。</p>
+<p data-nodeid="1034">打包完成过后，我们的样式文件就会以压缩格式输出了。具体结果如下：</p>
+<p data-nodeid="1035"><img src="https://s0.lgstatic.com/i/image/M00/10/E9/Ciqc1F7LaJqAAsfEAAJeBFjqfT8020.png" alt="image (7).png" data-nodeid="1165"></p>
+<p data-nodeid="1036">不过这里还有个额外的小点，可能你会在这个插件的官方文档中发现，文档中的这个插件并不是配置在 plugins 数组中的，而是添加到了 optimization 对象中的 minimizer 属性中。具体如下：</p>
+<pre class="lang-javascript hljs" data-nodeid="1037"><code data-language="javascript"><span class="hljs-comment">// ./webpack.config.js</span>
+<span class="hljs-keyword">const</span> MiniCssExtractPlugin = <span class="hljs-built_in">require</span>(<span class="hljs-string">'mini-css-extract-plugin'</span>)
+<span class="hljs-keyword">const</span> OptimizeCssAssetsWebpackPlugin = <span class="hljs-built_in">require</span>(<span class="hljs-string">'optimize-css-assets-webpack-plugin'</span>)
+<span class="hljs-built_in">module</span>.exports = {
+  <span class="hljs-attr">mode</span>: <span class="hljs-string">'none'</span>,
+  <span class="hljs-attr">entry</span>: {
+    <span class="hljs-attr">main</span>: <span class="hljs-string">'./src/index.js'</span>
+  },
+  <span class="hljs-attr">output</span>: {
+    <span class="hljs-attr">filename</span>: <span class="hljs-string">'[name].bundle.js'</span>
+  },
+  <span class="hljs-attr">optimization</span>: {
+    <span class="hljs-attr">minimizer</span>: [
+      <span class="hljs-keyword">new</span> OptimizeCssAssetsWebpackPlugin()
+    ]
+  },
+  <span class="hljs-attr">module</span>: {
+    <span class="hljs-attr">rules</span>: [
+      {
+        <span class="hljs-attr">test</span>: <span class="hljs-regexp">/\.css$/</span>,
+        use: [
+          MiniCssExtractPlugin.loader,
+          <span class="hljs-string">'css-loader'</span>
+        ]
+      }
+    ]
+  },
+  <span class="hljs-attr">plugins</span>: [
+    <span class="hljs-keyword">new</span> MiniCssExtractPlugin()
+  ]
+}
+</code></pre>
+<p data-nodeid="1038">那这是为什么呢？</p>
+<p data-nodeid="1039">其实也很简单，如果我们配置到 plugins 属性中，那么这个插件在任何情况下都会工作。而配置到 minimizer 中，就只会在 minimize 特性开启时才工作。</p>
+<p data-nodeid="1040">所以 Webpack 建议像这种压缩插件，应该我们配置到 minimizer 中，便于 minimize 选项的统一控制。</p>
+<p data-nodeid="1041">但是这么配置也有个缺点，此时我们再次运行生产模式打包，打包完成后再来看一眼输出的 JS 文件，此时你会发现，原本可以自动压缩的 JS，现在却不能压缩了。具体 JS 的输出结果如下：</p>
+<p data-nodeid="1042"><img src="https://s0.lgstatic.com/i/image/M00/10/F5/CgqCHl7LaKeAOdc4AAJbN7rhhA8880.png" alt="image (8).png" data-nodeid="1173"></p>
+<p data-nodeid="1043">那这是因为我们设置了 minimizer，Webpack 认为我们需要使用自定义压缩器插件，那内部的 JS 压缩器就会被覆盖掉。我们必须手动再添加回来。</p>
+<p data-nodeid="1044">内置的 JS 压缩插件叫作 terser-webpack-plugin，我们回到命令行手动安装一下这个模块。</p>
+<pre class="lang-shell hljs" data-nodeid="1045"><code data-language="shell"><span class="hljs-meta">$</span><span class="bash"> npm i terser-webpack-plugin --save-dev</span>
+</code></pre>
+<p data-nodeid="1046">安装完成过后，这里我们再手动添加这个模块到 minimizer 配置当中。具体代码如下：</p>
+<pre class="lang-javascript hljs" data-nodeid="1047"><code data-language="javascript"><span class="hljs-comment">// ./webpack.config.js</span>
+<span class="hljs-keyword">const</span> MiniCssExtractPlugin = <span class="hljs-built_in">require</span>(<span class="hljs-string">'mini-css-extract-plugin'</span>)
+<span class="hljs-keyword">const</span> OptimizeCssAssetsWebpackPlugin = <span class="hljs-built_in">require</span>(<span class="hljs-string">'optimize-css-assets-webpack-plugin'</span>)
+<span class="hljs-keyword">const</span> TerserWebpackPlugin = <span class="hljs-built_in">require</span>(<span class="hljs-string">'terser-webpack-plugin'</span>)
+<span class="hljs-built_in">module</span>.exports = {
+  <span class="hljs-attr">mode</span>: <span class="hljs-string">'none'</span>,
+  <span class="hljs-attr">entry</span>: {
+    <span class="hljs-attr">main</span>: <span class="hljs-string">'./src/index.js'</span>
+  },
+  <span class="hljs-attr">output</span>: {
+    <span class="hljs-attr">filename</span>: <span class="hljs-string">'[name].bundle.js'</span>
+  },
+  <span class="hljs-attr">optimization</span>: {
+    <span class="hljs-attr">minimizer</span>: [
+      <span class="hljs-keyword">new</span> TerserWebpackPlugin(),
+      <span class="hljs-keyword">new</span> OptimizeCssAssetsWebpackPlugin()
+    ]
+  },
+  <span class="hljs-attr">module</span>: {
+    <span class="hljs-attr">rules</span>: [
+      {
+        <span class="hljs-attr">test</span>: <span class="hljs-regexp">/\.css$/</span>,
+        use: [
+          MiniCssExtractPlugin.loader,
+          <span class="hljs-string">'css-loader'</span>
+        ]
+      }
+    ]
+  },
+  <span class="hljs-attr">plugins</span>: [
+    <span class="hljs-keyword">new</span> MiniCssExtractPlugin()
+  ]
+}
+</code></pre>
+<p data-nodeid="1048">那这样的话，我们再次以生产模式运行打包，JS 文件和 CSS 文件就都可以正常压缩了。</p>
+<h3 data-nodeid="1049">写在最后</h3>
+<p data-nodeid="1050">最后再来简单总结一下，本课时我们介绍了如何为 Webpack 添加不同环境下的不同配置，以及在生产模式打包时我们经常用到的几个插件。</p>
+<p data-nodeid="1051" class="">这当中需要你理解的地方并没有太多，更多的是了解这些插件的具体作用和使用方法。除此之外，你也需要更多地了解社区当中其他的常用插件。</p></div>
+
+</body></html>

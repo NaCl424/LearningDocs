@@ -1,0 +1,1397 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>08 | RPC 消息：Dubbo 与 Nacos 体系如何协同作业</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>08 | RPC 消息：Dubbo 与 Nacos 体系如何协同作业</h1><p data-nodeid="1141" class="te-preview-highlight">上一节我介绍了什么是 OpenFeign 通信组件，讲解了如何基于 OpenFeign 实现微服务间的高可用通信。本文我们将继续探讨微服务通信话题，了解阿里巴巴自家的 RPC 框架 Dubbo 是如何与 Spring Cloud Alibaba 协同作业的。在本文我们将介绍以下三方面内容：</p>
+<ul data-nodeid="1413">
+<li data-nodeid="1414">
+<p data-nodeid="1415">对比 RESTful 与 RPC；</p>
+</li>
+<li data-nodeid="1416">
+<p data-nodeid="1417" class="">介绍 Dubbo 的特点；</p>
+</li>
+<li data-nodeid="1418">
+<p data-nodeid="1419">讲解 Dubbo 与 Spring Cloud Alibaba 的整合过程。</p>
+</li>
+</ul>
+
+<h3 data-nodeid="1149">RESTful 与 RPC 的区别</h3>
+<p data-nodeid="1150">在微服务定义中提道，每个小服务运行在自己的进程中，并以<strong data-nodeid="1273">轻量级的机制</strong>进行通信。这里并没有明确给出具体的通信方式，只是要求以轻量级的机制进行通信，虽然作者推荐使用 RESTful 作为首选方案，但微服务间通信本身还有另一个轻量级的选择：以 Dubbo 为代表的 RPC通信方式。</p>
+<p data-nodeid="1151">那什么是 RPC 呢？RPC 是远程过程调用（Remote Procedure Call）的缩写形式，RPC 与 RESTful 最大的不同是，RPC 采用<strong data-nodeid="1279">客户端（Client) - 服务端（Server）</strong> 的架构方式实现跨进程通信，实现的通信协议也没有统一的标准，具体实现依托于研发厂商的设计。</p>
+<p data-nodeid="1152"><img src="https://s0.lgstatic.com/i/image6/M01/1F/21/Cgp9HWBRmtGAJrWGAAS5A1X6ztc358.png" alt="图片1.png" data-nodeid="1282"></p>
+<div data-nodeid="1153"><p style="text-align:center">RPC 基于 C/S 架构实现跨进程通信</p></div>
+<p data-nodeid="1154">目前开源市场上 RPC 框架有很多，例如 GoogleRPC、Alibaba Dubbo、Facebook&nbsp;Thrift，每一种产品都有自己的设计与实现方案。</p>
+<p data-nodeid="1155">那 RESTful 与 RPC 孰优孰劣呢？我们通过一个表格进行说明：</p>
+<p data-nodeid="1156"><img src="https://s0.lgstatic.com/i/image6/M01/1F/22/Cgp9HWBRmt2APWu8AAH9-fU6l5c006.png" alt="图片2.png" data-nodeid="1287"></p>
+<p data-nodeid="1157">可以发现，RESTful 通信更适合调用延时不敏感、短连接的场景。而 RPC 则拥有更好的性能，适用于长连接、低延时系统。两者本质是互补的，并不存在孰优孰劣。在微服务架构场景下，因为大多数服务都是轻量级的，同时 90%的任务通过短连接就能实现，因此马丁福勒更推荐使用 RESTful 通信。这只是因为应用场景所决定的，并不代表 RPC 比 RESTful 落后。</p>
+<p data-nodeid="1158">在了解 RPC 方式后，我们来聊一聊 RPC领域最具代表性的国产开源框架 Apache Dubbo。</p>
+<h3 data-nodeid="1159">Apache Dubbo</h3>
+<p data-nodeid="1160">Dubbo 是阿里巴巴开源的高性能、轻量级的开源 Java 框架，目前被 Apache收录，官网是：</p>
+<pre class="lang-java hljs" data-nodeid="1161"><code data-language="java">http:<span class="hljs-comment">//dubbo.apache.org/</span>
+</code></pre>
+<p data-nodeid="1162"><img src="https://s0.lgstatic.com/i/image6/M01/1F/22/Cgp9HWBRmuqAa3CBAAIAHzTPLj0715.png" alt="图片22.png" data-nodeid="1294"></p>
+<div data-nodeid="1163"><p style="text-align:center">Dubbo的官方介绍</p></div>
+<p data-nodeid="1164">Dubbo 是典型的 RPC 框架的代表，通过客户端/服务端结构实现跨进程应用的高效二进制通信。</p>
+<p data-nodeid="1165">Apache Dubbo 提供了六大核心能力：</p>
+<ul data-nodeid="1166">
+<li data-nodeid="1167">
+<p data-nodeid="1168">面向接口代理的高性能 RPC 调用；</p>
+</li>
+<li data-nodeid="1169">
+<p data-nodeid="1170">智能容错和负载均衡；</p>
+</li>
+<li data-nodeid="1171">
+<p data-nodeid="1172">服务自动注册和发现；</p>
+</li>
+<li data-nodeid="1173">
+<p data-nodeid="1174">高度可扩展能力；</p>
+</li>
+<li data-nodeid="1175">
+<p data-nodeid="1176">运行期流量调度；</p>
+</li>
+<li data-nodeid="1177">
+<p data-nodeid="1178">可视化的服务治理与运维。</p>
+</li>
+</ul>
+<p data-nodeid="1179"><img src="https://s0.lgstatic.com/i/image6/M01/1F/1E/CioPOWBRmvaAKTm2AAPyFp0dSf8331.png" alt="图片3.png" data-nodeid="1305"></p>
+<div data-nodeid="1180"><p style="text-align:center">Dubbo主要特性</p></div>
+<p data-nodeid="1181">下图我们引用 Dubbo 的官方架构图，讲解 ApacheDubbo 的组成。</p>
+<p data-nodeid="1182"><img src="https://s0.lgstatic.com/i/image6/M00/1F/1F/CioPOWBRmxWANqxoAAIXlEgpEbQ890.png" alt="图片4.png" data-nodeid="1309"></p>
+<div data-nodeid="1183"><p style="text-align:center">Dubbo架构图</p></div>
+<p data-nodeid="1184">Dubbo 架构中，包含 5 种角色。</p>
+<ol data-nodeid="1185">
+<li data-nodeid="1186">
+<p data-nodeid="1187"><strong data-nodeid="1315">Provider</strong>：RPC服务提供者，Provider 是消息的最终处理者。</p>
+</li>
+<li data-nodeid="1188">
+<p data-nodeid="1189"><strong data-nodeid="1320">Container</strong>：容器，用于启动、停止 Provider 服务。这里的容器并非 Tomcat、Jetty 等 Web 容器，Dubbo 也并不强制要求 Provider 必须具备 Web 能力。Dubbo 的容器是指对象容器，例如 Dubbo 内置的 SpringContainer 容器就提供了利用 Spring IOC 容器管理 Provider 对象的职能。</p>
+</li>
+<li data-nodeid="1190">
+<p data-nodeid="1191"><strong data-nodeid="1325">Consumer</strong>：消费者，调用的发起者。Consumer 需要在客户端持有 Provider 的通信接口才能完成通信过程。</p>
+</li>
+<li data-nodeid="1192">
+<p data-nodeid="1193"><strong data-nodeid="1330">Registry</strong>：注册中心，Dubbo 架构中注册中心与微服务架构中的注册中心职责类似，提供了 Dubbo Provider 的注册与发现职能，Consumer通过 Registry 可以获取Provider 可用的节点实例的 IP、端口等，并产生直接通信。需要注意的是，前面我们讲解的 Alibaba Nacos 除了可以作为微服务架构中的注册中心外，同样对自家的 Dubbo 提供了 RPC 调用注册发现的职责，这是其他 Spring Cloud 注册中心所不具备的功能。</p>
+</li>
+<li data-nodeid="1194">
+<p data-nodeid="1195"><strong data-nodeid="1335">Monitor</strong>：监控器，监控器提供了Dubbo的监控职责。在 Dubbo 产生通信时，Monitor 进行收集、统计，并通过可视化 UI 界面帮助运维人员了解系统进程间的通信状况。Dubbo Monitor 主流产品有 Dubbo Admin、Dubbo Ops 等。</p>
+</li>
+</ol>
+<p data-nodeid="1196">下面我们通过实例讲解 Dubbo 与 Nacos 如何协同作业实现服务间调用</p>
+<h3 data-nodeid="1197">Dubbo与 Nacos 协同作业</h3>
+<p data-nodeid="1198">为了方便理解，我们仍然采用 07 讲“订单与库存服务”案例，改由 RPC 方式实现通信。</p>
+<p data-nodeid="1199"><img src="https://s0.lgstatic.com/i/image6/M01/1F/22/Cgp9HWBRmyOAQauOAAGVp6w3uG4991.png" alt="图片5.png" data-nodeid="1341"></p>
+<div data-nodeid="1200"><p style="text-align:center">订单与仓储服务的业务流程</p></div>
+<h4 data-nodeid="1201">开发 Provider仓储服务</h4>
+<p data-nodeid="1202">第一步，创建工程引入依赖。</p>
+<p data-nodeid="1203">利用 Spring Initializr 向导创建 warehouse-service 工程，确保 pom.xml 引入以下依赖。</p>
+<pre class="lang-xml hljs" data-nodeid="1204"><code data-language="xml"><span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-starter-web<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>com.alibaba.cloud<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-cloud-starter-alibaba-nacos-discovery<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.apache.dubbo<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>dubbo-spring-boot-starter<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>2.7.8<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-starter-actuator<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+</code></pre>
+<p data-nodeid="1205">相比标准微服务，需要额外依赖 dubbo-spring-boot-starter 与 spring-boot-starter-actuator。其中 dubbo-spring-boot-starter 是 Dubbo 与 Spring Boot 整合最关键的组件，为 Spring Boot 提供了 Dubbo 的默认支持。而 spring-boot-starter-actuator则为微服务提供了监控指标接口，便于监控系统从应用收集各项运行指标。</p>
+<p data-nodeid="1206">第二步，设置微服务、Dubbo 与 Nacos 通信选项。</p>
+<p data-nodeid="1207">打开 application.yml 文件，配置 Nacos 地址与 Dubbo通信选项。</p>
+<pre class="lang-yaml hljs" data-nodeid="1208"><code data-language="yaml"><span class="hljs-attr">server:</span>
+  <span class="hljs-attr">port:</span> <span class="hljs-number">8000</span> <span class="hljs-comment">#服务端口</span>
+<span class="hljs-attr">spring:</span>
+  <span class="hljs-attr">application:</span>
+    <span class="hljs-attr">name:</span> <span class="hljs-string">warehouse-service</span> <span class="hljs-comment">#微服务id</span>
+  <span class="hljs-attr">cloud:</span>
+    <span class="hljs-attr">nacos:</span> <span class="hljs-comment">#nacos注册地址</span>
+      <span class="hljs-attr">discovery:</span>
+        <span class="hljs-attr">server-addr:</span> <span class="hljs-number">192.168</span><span class="hljs-number">.31</span><span class="hljs-number">.101</span><span class="hljs-string">:8848</span>
+        <span class="hljs-attr">username:</span> <span class="hljs-string">nacos</span>
+        <span class="hljs-attr">password:</span> <span class="hljs-string">nacos</span>
+<span class="hljs-attr">dubbo:</span> <span class="hljs-comment">#dubbo与nacos的通信配置</span>
+  <span class="hljs-attr">application:</span>
+    <span class="hljs-attr">name:</span> <span class="hljs-string">warehouse-dubbo</span> <span class="hljs-comment">#provider在Nacos中的应用id</span>
+  <span class="hljs-attr">registry:</span> <span class="hljs-comment">#Provider与Nacos通信地址，与spring.cloud.nacos地址一致</span>
+    <span class="hljs-attr">address:</span> <span class="hljs-string">nacos://192.168.31.101:8848</span>
+  <span class="hljs-attr">protocol:</span> 
+    <span class="hljs-attr">name:</span> <span class="hljs-string">dubbo</span> <span class="hljs-comment">#通信协议名</span>
+    <span class="hljs-attr">port:</span> <span class="hljs-number">20880</span> <span class="hljs-comment">#配置通信端口，默认为20880</span>
+  <span class="hljs-attr">scan:</span> 
+    <span class="hljs-attr">base-packages:</span> <span class="hljs-string">com.lagou.warehouseservice.dubbo</span>
+</code></pre>
+<p data-nodeid="1209">很多人不明白，为什么上面配置了 spring.cloud.nacos.discovery.server-addr 还要在下面配置 dubbo.registry.address 呢？前面介绍架构时介绍了，Dubbo 需要依托 Container（容器）对外暴露服务，而这个容器配置与微服务配置是分开的，需要额外占用一个网络端口20880提供服务。</p>
+<p data-nodeid="1210"><img src="https://s0.lgstatic.com/i/image6/M00/1F/22/Cgp9HWBRmziAAd_LAAE40sLBEjo538.png" alt="图片6.png" data-nodeid="1351"></p>
+<div data-nodeid="1211"><p style="text-align:center">Dubbo Provider 端启动时向 Nacos 注册两次</p></div>
+<p data-nodeid="1212">这里还有一个配置点需要特别注意：dubbo.scan.base-packages 代表在 Dubbo 容器启动时自动扫描 com.lagou.warehouseservice.dubbo 包下的接口与实现类，并将这些接口信息在Nacos 进行登记，因此 Dubbo 对外暴露的接口必须放在该包下。</p>
+<p data-nodeid="1213">第三步，开发接口与实现类。</p>
+<p data-nodeid="1214"><strong data-nodeid="1358">1</strong>. 开发 Stock 库存商品对象。</p>
+<pre class="lang-java hljs" data-nodeid="1215"><code data-language="java"><span class="hljs-keyword">package</span> com.lagou.warehouseservice.dto;
+<span class="hljs-keyword">import</span> java.io.Serializable;
+<span class="hljs-comment">//库存商品对象</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">Stock</span> <span class="hljs-keyword">implements</span> <span class="hljs-title">Serializable</span> </span>{
+    <span class="hljs-keyword">private</span> Long skuId; <span class="hljs-comment">//商品品类编号</span>
+    <span class="hljs-keyword">private</span> String title; <span class="hljs-comment">//商品与品类名称</span>
+    <span class="hljs-keyword">private</span> Integer quantity; <span class="hljs-comment">//库存数量</span>
+    <span class="hljs-keyword">private</span> String unit; <span class="hljs-comment">//单位</span>
+    <span class="hljs-keyword">private</span> String description; <span class="hljs-comment">//描述信息</span>
+    <span class="hljs-comment">//带参构造函数</span>
+    <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-title">Stock</span><span class="hljs-params">(Long skuId, String title, Integer quantity, String unit)</span> </span>{
+        <span class="hljs-keyword">this</span>.skuId = skuId;
+        <span class="hljs-keyword">this</span>.title = title;
+        <span class="hljs-keyword">this</span>.quantity = quantity;
+        <span class="hljs-keyword">this</span>.unit = unit;
+    }
+    <span class="hljs-comment">//getter 与 setter...</span>
+}
+</code></pre>
+<p data-nodeid="1216">注意：Dubbo 在对象传输过程中使用了 JDK 序列化，对象必须实现 Serializable 接口。</p>
+<p data-nodeid="1217"><strong data-nodeid="1364">2</strong>. 在 com.lagou.warehouseservice.dubbo包下创建 WarehouseService 接口并声明方法。包名要与 dubbo.scan.base-packages 保持一致。</p>
+<pre class="lang-java hljs" data-nodeid="1218"><code data-language="java"><span class="hljs-keyword">package</span> com.lagou.warehouseservice.dubbo;
+<span class="hljs-keyword">import</span> com.lagou.warehouseservice.dto.Stock;
+<span class="hljs-comment">//Provider接口</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">interface</span> <span class="hljs-title">WarehouseService</span> </span>{
+    <span class="hljs-comment">//查询库存</span>
+    <span class="hljs-function"><span class="hljs-keyword">public</span> Stock <span class="hljs-title">getStock</span><span class="hljs-params">(Long skuId)</span></span>;
+}
+</code></pre>
+<p data-nodeid="1219"><strong data-nodeid="1369">3</strong>. 在 com.lagou.warehouseservice.dubbo.impl 包下创建实现类 WarehouseServiceImpl。</p>
+<pre class="lang-java hljs" data-nodeid="1220"><code data-language="java"><span class="hljs-keyword">package</span> com.lagou.warehouseservice.dubbo.impl;
+<span class="hljs-keyword">import</span> com.lagou.warehouseservice.dto.Stock;
+<span class="hljs-keyword">import</span> com.lagou.warehouseservice.dubbo.WarehouseService;
+<span class="hljs-keyword">import</span> org.apache.dubbo.config.annotation.DubboService;
+<span class="hljs-keyword">import</span> org.springframework.stereotype.Service;
+<span class="hljs-keyword">import</span> java.util.HashMap;
+<span class="hljs-keyword">import</span> java.util.Map;
+<span class="hljs-meta">@DubboService</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">WarehouseServiceImpl</span> <span class="hljs-keyword">implements</span> <span class="hljs-title">WarehouseService</span> </span>{
+    <span class="hljs-function"><span class="hljs-keyword">public</span> Stock <span class="hljs-title">getStock</span><span class="hljs-params">(Long skuId)</span></span>{
+        Map result = <span class="hljs-keyword">new</span> HashMap();
+        Stock stock = <span class="hljs-keyword">null</span>;
+        <span class="hljs-keyword">if</span>(skuId == <span class="hljs-number">1101l</span>){
+            <span class="hljs-comment">//模拟有库存商品</span>
+            stock = <span class="hljs-keyword">new</span> Stock(<span class="hljs-number">1101l</span>, <span class="hljs-string">"Apple iPhone 11 128GB 紫色"</span>, <span class="hljs-number">32</span>, <span class="hljs-string">"台"</span>);
+            stock.setDescription(<span class="hljs-string">"Apple 11 紫色版对应商品描述"</span>);
+        }<span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(skuId == <span class="hljs-number">1102l</span>){
+            <span class="hljs-comment">//模拟无库存商品</span>
+            stock = <span class="hljs-keyword">new</span> Stock(<span class="hljs-number">1102l</span>, <span class="hljs-string">"Apple iPhone 11 256GB 白色"</span>, <span class="hljs-number">0</span>, <span class="hljs-string">"台"</span>);
+            stock.setDescription(<span class="hljs-string">"Apple 11 白色版对应商品描述"</span>);
+        }<span class="hljs-keyword">else</span>{
+            <span class="hljs-comment">//演示案例，暂不考虑无对应skuId的情况</span>
+        }
+        <span class="hljs-keyword">return</span> stock;
+    }
+}
+</code></pre>
+<p data-nodeid="1221">实现逻辑非常简单，不做赘述，重点是在实现类上需要额外增加 @DubboService注解。@DubboService 是 Provider 注解，说明该类所有方法都是服务提供者，加入该注解会自动将类与方法的信息在 Nacos中注册为 Provider。</p>
+<p data-nodeid="1222">第四步，启动微服务，验证 Nacos 注册信息。</p>
+<p data-nodeid="1223">启动 WarehouseServiceApplication.main()，之后打开下面网址访问 Nacos 服务列表。</p>
+<pre class="lang-java hljs" data-nodeid="1224"><code data-language="java">http:<span class="hljs-comment">//192.168.31.101:8848/nacos/#/serviceManagement?dataId=&amp;group=&amp;appName=&amp;namespace=</span>
+</code></pre>
+<p data-nodeid="1225"><img src="https://s0.lgstatic.com/i/image6/M01/1F/1F/CioPOWBRm0mAKUgNAALNIHodMII419.png" alt="图片7.png" data-nodeid="1375"></p>
+<div data-nodeid="1226"><p style="text-align:center">验证Nacos注册信息</p></div>
+<p data-nodeid="1227">此时在服务列表中出现了 2 条数据，warehouse-service 是仓储微服务的注册信息，providers 开头的是 Dubbo 在 Nacos 的注册 Provider 信息，这也验证了前面介绍 Dubbo 的注册过程。</p>
+<p data-nodeid="1228">而查看 Provider详情后，你会得到更多信息，其中包含 Provider 的 IP、端口、接口、方法、pid、版本的明细，方便开发、运维人员对应用进行管理。</p>
+<p data-nodeid="1229"><img src="https://s0.lgstatic.com/i/image6/M01/1F/1F/CioPOWBRm1SAKLjbAAGK7S9aIpY685.png" alt="图片8.png" data-nodeid="1380"></p>
+<div data-nodeid="1230"><p style="text-align:center">Provider详情</p></div>
+<p data-nodeid="1231">到这里，仓储服务与 Dubbo Provider 的开发已完成。下面咱们开发Consumer消费者。</p>
+<h4 data-nodeid="1232"><strong data-nodeid="1385">开发 Consumer 订单服务</strong></h4>
+<p data-nodeid="1233">第一步，创建工程引入依赖。</p>
+<p data-nodeid="1234">利用 Spring Initializr 向导创建 order-service 工程，确保 pom.xml 引入以下依赖，依赖部分与 warehouse-service 保持一致。</p>
+<pre class="lang-xml hljs" data-nodeid="1235"><code data-language="xml"><span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-starter-web<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>com.alibaba.cloud<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-cloud-starter-alibaba-nacos-discovery<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.apache.dubbo<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>dubbo-spring-boot-starter<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>2.7.8<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-starter-actuator<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+</code></pre>
+<p data-nodeid="1236">第二步，设置微服务、Dubbo 与 Nacos通信选项。<br>
+打开 application.yml文件，配置 Nacos 与 Dubbo 通信选项，因为 order-service 是消费者，因此不需要专门配置端口与 base-packages选项。</p>
+<pre class="lang-yaml hljs" data-nodeid="1237"><code data-language="yaml"><span class="hljs-attr">spring:</span>
+  <span class="hljs-attr">application:</span>
+    <span class="hljs-attr">name:</span> <span class="hljs-string">order-service</span>
+  <span class="hljs-attr">cloud:</span>
+    <span class="hljs-attr">nacos:</span>
+      <span class="hljs-attr">discovery:</span>
+        <span class="hljs-attr">server-addr:</span> <span class="hljs-number">192.168</span><span class="hljs-number">.31</span><span class="hljs-number">.101</span><span class="hljs-string">:8848</span>
+        <span class="hljs-attr">username:</span> <span class="hljs-string">nacos</span>
+        <span class="hljs-attr">password:</span> <span class="hljs-string">nacos</span>
+<span class="hljs-attr">server:</span>
+  <span class="hljs-attr">port:</span> <span class="hljs-number">9000</span>
+<span class="hljs-attr">dubbo:</span>
+  <span class="hljs-attr">application:</span>
+    <span class="hljs-attr">name:</span> <span class="hljs-string">order-service-dubbo</span>
+  <span class="hljs-attr">registry:</span>
+    <span class="hljs-attr">address:</span> <span class="hljs-string">nacos://192.168.31.101:8848</span>
+</code></pre>
+<p data-nodeid="1238">第三步，将 Provider 端接口 WarehouseService 以及依赖的 Stock类复制到 order-service 工程，注意要求包名、类名及代码保持完全一致。当然我这种做法比较原始，在项目环境通常是将接口与依赖的类发布到 Maven 仓库，由 Consumer 直接依赖即可。</p>
+<p data-nodeid="1239"><img src="https://s0.lgstatic.com/i/image6/M01/1F/20/CioPOWBRm2KAIpCRAAJoR7cA3Hw642.png" alt="图片9.png" data-nodeid="1394"></p>
+<div data-nodeid="1240"><p style="text-align:center">必须保证 Provider 与 Consumer 接口一致</p></div>
+<p data-nodeid="1241">第四步，Consumer 调用接口实现业务逻辑。</p>
+<p data-nodeid="1242">这一步最为关键，先给出代码再进行分析。</p>
+<pre class="lang-java hljs" data-nodeid="1243"><code data-language="java"><span class="hljs-meta">@RestController</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">OrderController</span> </span>{
+    <span class="hljs-meta">@DubboReference</span>
+    <span class="hljs-keyword">private</span> WarehouseService warehouseService;
+    <span class="hljs-comment">/**
+     * 创建订单业务逻辑
+     * <span class="hljs-doctag">@param</span> skuId 商品类别编号
+     * <span class="hljs-doctag">@param</span> salesQuantity 销售数量
+     * <span class="hljs-doctag">@return</span>
+     */</span>
+    <span class="hljs-meta">@GetMapping("/create_order")</span>
+    <span class="hljs-function"><span class="hljs-keyword">public</span> Map <span class="hljs-title">createOrder</span><span class="hljs-params">(Long skuId , Long salesQuantity)</span></span>{
+        Map result = <span class="hljs-keyword">new</span> LinkedHashMap();
+        <span class="hljs-comment">//查询商品库存，像调用本地方法一样完成业务逻辑。</span>
+        Stock stock = warehouseService.getStock(skuId);
+        System.out.println(stock);
+        <span class="hljs-keyword">if</span>(salesQuantity &lt;= stock.getQuantity()){
+            <span class="hljs-comment">//创建订单相关代码，此处省略</span>
+            <span class="hljs-comment">//CODE=SUCCESS代表订单创建成功</span>
+            result.put(<span class="hljs-string">"code"</span> , <span class="hljs-string">"SUCCESS"</span>);
+            result.put(<span class="hljs-string">"skuId"</span>, skuId);
+            result.put(<span class="hljs-string">"message"</span>, <span class="hljs-string">"订单创建成功"</span>);
+        }<span class="hljs-keyword">else</span>{
+            <span class="hljs-comment">//code=NOT_ENOUGN_STOCK代表库存不足</span>
+            result.put(<span class="hljs-string">"code"</span>, <span class="hljs-string">"NOT_ENOUGH_STOCK"</span>);
+            result.put(<span class="hljs-string">"skuId"</span>, skuId);
+            result.put(<span class="hljs-string">"message"</span>, <span class="hljs-string">"商品库存数量不足"</span>);
+        }
+        <span class="hljs-keyword">return</span> result;
+    }
+}
+</code></pre>
+<p data-nodeid="1244">业务逻辑非常简单，前文讲过不再赘述，关键点是第三行 @DubboReference 注解。该注解用在 Consumer 端，说明 WarehouseService 是 Dubbo Consumer 接口，Spring 会自动生成 WarehouseService 接口的代理实现类，并隐藏远程通信细节，处理流程如下图所示：</p>
+<p data-nodeid="1245"><img src="https://s0.lgstatic.com/i/image6/M00/1F/21/CioPOWBRm8WAUi4pAAFRuMBBSJc896.png" alt="图片10 (2).png" data-nodeid="1400"></p>
+<div data-nodeid="1246"><p style="text-align:center">Dubbo Consumer 处理流程</p></div>
+<p data-nodeid="1247">第五步，启动微服务，验证 Nacos 注册信息。</p>
+<p data-nodeid="1248">启动 OrderServiceApplication.main()，之后打开下面网址访问 Nacos 服务列表。</p>
+<pre class="lang-java hljs" data-nodeid="1249"><code data-language="java">http:<span class="hljs-comment">//192.168.31.101:8848/nacos/#/serviceManagement?dataId=&amp;group=&amp;appName=&amp;namespace=</span>
+</code></pre>
+<p data-nodeid="1250"><img src="https://s0.lgstatic.com/i/image6/M01/1F/20/CioPOWBRm3uAW-qFAAJ0jHj71gk377.png" alt="图片11.png" data-nodeid="1405"></p>
+<div data-nodeid="1251"><p style="text-align:center">DubboConsumer 注册成功</p></div>
+<p data-nodeid="1252">此时 Consumer 已在服务列表中出现，说明消费者已注册成功。</p>
+<p data-nodeid="1253">最后，打开浏览器访问下面网址验证结果。</p>
+<pre class="lang-javascript hljs" data-nodeid="1254"><code data-language="javascript">http:<span class="hljs-comment">//192.168.31.106:9000/create_order?skuId=1101&amp;salesQuantity=10</span>
+{
+<span class="hljs-attr">code</span>:&nbsp;<span class="hljs-string">"SUCCESS"</span>,
+<span class="hljs-attr">skuId</span>:&nbsp;<span class="hljs-number">1101</span>,
+<span class="hljs-attr">message</span>:&nbsp;<span class="hljs-string">"订单创建成功"</span>
+}
+</code></pre>
+<div data-nodeid="1255"><p style="text-align:center">订单创建成功</p></div>
+<pre class="lang-javascript hljs" data-nodeid="1256"><code data-language="javascript">http:<span class="hljs-comment">//192.168.31.106:9000/create_order?skuId=1102&amp;salesQuantity=1</span>
+{
+<span class="hljs-attr">code</span>:&nbsp;<span class="hljs-string">"NOT_ENOUGH_STOCK"</span>,
+<span class="hljs-attr">skuId</span>:&nbsp;<span class="hljs-number">1102</span>,
+<span class="hljs-attr">message</span>:&nbsp;<span class="hljs-string">"商品库存数量不足"</span>
+}
+</code></pre>
+<div data-nodeid="1257"><p style="text-align:center">订单创建失败</p></div>
+<p data-nodeid="1258">至此，Dubbo 与 Nacos 完整的接入流程与开发技巧我们通过案例方式进行了讲解，最后咱们来总结一下。</p>
+<h3 data-nodeid="1259">小结与预告</h3>
+<p data-nodeid="1260">本节主要学习了三方面知识，首先介绍 RPC 与 RESTful 的区别，之后对 Dubbo 架构进行了介绍，最后通过案例详细讲解了 Dubbo 与 Nacos的协同作业过程。</p>
+<p data-nodeid="1261">在这里我为你准备了一道思考题：目前以微信、QQ 为代表的即时通信类软件，为保证低延时，通信方式使用 RESTful 还是 RPC 呢？请你把思考后的原因和结果写在评论中，与其他同学们一起交流。</p>
+<p data-nodeid="1262" class="">课程预告，下一节咱们将学习微服务的门户：API 网关。理解通过网关如何对用户屏蔽微服务架构的实现细节。</p></div>
+
+</body></html>

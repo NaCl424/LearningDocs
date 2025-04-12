@@ -1,0 +1,949 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>18 | 如何基于 etcd 实现分布式锁？</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>18 | 如何基于 etcd 实现分布式锁？</h1><p data-nodeid="363776">从这一模块开始我将会通过几个etcd常见的实践场景，帮助你进一步加深对 etcd的理解，熟悉 etcd 在日常开发环境中的应用。这一讲我们先来介绍基于 etcd 实现分布式锁的案例。</p>
+<h3 data-nodeid="363777">为什么需要分布式锁？</h3>
+<p data-nodeid="363778">在分布式环境下，<strong data-nodeid="363857">数据一致性问题</strong>一直是个难点。相比于单进程，分布式环境的情况更加复杂。分布式与单机环境最大的不同在于它不是多线程而是<strong data-nodeid="363858">多进程</strong>。由于多线程可以共享堆内存，因此可以简单地采取内存作为标记存储位置。而多进程可能都不在同一台物理机上，就需要将标记存储在一个所有进程都能看到的地方。</p>
+<p data-nodeid="363779">例如秒杀场景就是一个常见的多进程场景。订单服务部署了多个服务实例，如秒杀商品有 4 个，第一个用户购买 3 个，第二个用户购买 2 个，理想状态下第一个用户能购买成功，第二个用户提示购买失败，反之亦可。而实际可能出现的情况是，两个用户都得到库存为 4，第一个用户买到了 3 个，更新库存之前，第二个用户下了 2 个商品的订单，更新库存为 2，导致业务逻辑出错。</p>
+<p data-nodeid="363780">在上面的场景中，商品的库存是共享变量，面对高并发情况，需要保证对资源的<strong data-nodeid="363865">访问互斥</strong>。在单机环境中，比如 Java 语言中其实提供了很多并发处理相关的API，但是这些 API在分布式场景中就无能为力了。由于分布式系统具备多线程和多进程的特点，且分布在不同机器中，synchronized 和 lock 关键字将失去原有锁的效果，仅依赖这些语言自身提供的 API 并不能实现分布式锁的功能，因此需要我们找到其他方法实现分布式锁。</p>
+<p data-nodeid="363781">常见的锁方案如下：</p>
+<ul data-nodeid="363782">
+<li data-nodeid="363783">
+<p data-nodeid="363784">基于数据库实现分布式锁；</p>
+</li>
+<li data-nodeid="363785">
+<p data-nodeid="363786">基于 ZooKeeper 实现分布式锁；</p>
+</li>
+<li data-nodeid="363787">
+<p data-nodeid="363788">基于缓存实现分布式锁，如 redis、etcd等。</p>
+</li>
+</ul>
+<p data-nodeid="363789">下面我们简单介绍一下这几种锁的实现，其中重点介绍 etcd 实现锁的方法。</p>
+<h3 data-nodeid="363790">基于数据库实现分布式锁</h3>
+<p data-nodeid="363791">基于数据库实现分布式锁有两种方式，一种是基于数据库表，另一种是基于数据库的排他锁。</p>
+<h4 data-nodeid="363792">基于数据库表的增删</h4>
+<p data-nodeid="363793">基于数据库表的增删是最简单的实现方式，首先创建一张锁的表，主要包含方法名、时间戳等字段。</p>
+<p data-nodeid="363794">具体使用的方法为：当需要锁住某个方法时，往该表中插入一条相关的记录。需要注意的是，<strong data-nodeid="363880">方法名有唯一性约束</strong>。如果有多个请求同时提交到数据库，数据库会保证只有一个操作可以成功，那么我们就可以认为操作成功的那个线程获得了该方法的锁，可以执行业务逻辑。执行完毕，需要删除该记录。</p>
+<p data-nodeid="363795">对于上述方案我们可以进行优化，如应用<strong data-nodeid="363890">主从数据库</strong>，数据之间双向同步。一旦主库挂掉，将应用服务快速切换到从库上。除此之外还可以记录当前获得锁的机器的<strong data-nodeid="363891">主机信息和线程信息</strong>，下次再获取锁的时候先查询数据库，如果当前机器的主机信息和线程信息在数据库可以查到，直接把锁分配给该线程，实现可重入锁。</p>
+<h4 data-nodeid="363796">基于数据库排他锁</h4>
+<p data-nodeid="363797">我们还可以通过数据库的排他锁来实现分布式锁。基于 MySQL 的 InnoDB 引擎，可以使用以下方法来实现加锁操作：</p>
+<pre class="lang-java" data-nodeid="370918"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">lock</span><span class="hljs-params">()</span></span>{
+    connection.setAutoCommit(<span class="hljs-keyword">false</span>)
+    <span class="hljs-keyword">int</span> count = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">while</span>(count &lt; <span class="hljs-number">4</span>){
+        <span class="hljs-keyword">try</span>{
+            select * from lock where lock_name=xxx <span class="hljs-keyword">for</span> update;
+            <span class="hljs-keyword">if</span>(结果不为空){
+                <span class="hljs-comment">// 代表获取到锁</span>
+                <span class="hljs-keyword">return</span>;
+            }
+        }<span class="hljs-keyword">catch</span>(Exception e){
+
+        }
+        <span class="hljs-comment">// 为空或者抛异常都表示没有获取到锁</span>
+        sleep(<span class="hljs-number">1000</span>);
+        count++;
+    }
+    <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> LockException();
+}
+</code></pre>
+
+<p data-nodeid="363799">在查询语句后面增加<code data-backticks="1" data-nodeid="363895">f\`\`o\`\`r\`\`\`\`update</code>，数据库会在查询过程中给数据库表增加排他锁。当某条记录被加上排他锁之后，其他线程就无法再在该行记录上增加排他锁。其他没有获取到锁的线程就会阻塞在上述 select 语句上，可能出现两种结果：在超时之前获取到了锁，在超时之前仍未获取到锁。</p>
+<p data-nodeid="363800">获得排他锁的线程即可获得分布式锁，获取到锁之后，可以执行业务逻辑，执行业务后释放锁即可。</p>
+<h4 data-nodeid="363801">基于数据库锁的总结</h4>
+<p data-nodeid="363802">上面两种方式的实现都是依赖数据库的一张表，一种是通过表中记录的存在情况确定当前是否有锁存在，另外一种是通过数据库的排他锁来实现分布式锁。优点是直接借助现有的关系型数据库，简单且容易理解；缺点是操作数据库需要一定的开销，性能问题以及 SQL 执行超时的异常需要考虑。</p>
+<h3 data-nodeid="365242" class="">基于 ZooKeeper 实现分布式锁</h3>
+
+<p data-nodeid="364821" class="">基于 ZooKeeper 的<strong data-nodeid="364827">临时节点和顺序特性</strong>可以实现分布式锁。</p>
+
+<p data-nodeid="363805">申请对某个方法加锁时，在 ZooKeeper 上与该方法对应的指定节点的目录下，生成一个<strong data-nodeid="363912">唯一的临时有序节点</strong>。当需要获取锁时，只需要判断有序节点中该节点是否为序号最小的一个。业务逻辑执行完成释放锁，只需将这个临时节点删除。这种方式也可以避免由于服务宕机导致的锁无法释放，产生的死锁问题。</p>
+<p data-nodeid="365658" class="">Netflix 开源了一套 ZooKeeper 客户端框架 <a href="https://curator.apache.org/?fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="365662">Curator</a>，Curator 提供的 InterProcessMutex 是分布式锁的一种实现。acquire方法获取锁，release方法释放锁。另外，锁释放、阻塞锁、可重入锁等问题都可以有效解决。</p>
+
+<p data-nodeid="363807">关于阻塞锁的实现，客户端可以通过在 ZooKeeper 中创建顺序节点，并且在节点上绑定监听器 Watch。一旦节点发生变化，ZooKeeper 会通知客户端，客户端可以检查自己创建的节点是否是当前所有节点中序号最小的，如果是就获取到锁，执行业务逻辑。</p>
+<p data-nodeid="363808">ZooKeeper 实现的分布式锁也存在一些缺陷，比如在性能上可能不如基于缓存实现的分布式锁。因为每次创建锁和释放锁的过程中，都要<strong data-nodeid="363933">动态创建、销毁瞬时节点</strong>，实现锁功能。</p>
+<p data-nodeid="363809">此外，ZooKeeper 中创建和删除节点<strong data-nodeid="363943">只能通过 Leader 节点</strong>来执行，然后将数据同步到集群中的其他节点。分布式环境中难免存在网络抖动，导致客户端和 ZooKeeper 集群之间的session 连接中断，此时 ZooKeeper 服务端以为客户端挂了，就会删除临时节点。这时其他客户端就可以获取到分布式锁了，会出现多个请求获取到了同一把锁的问题，导致<strong data-nodeid="363944">业务数据不一致</strong>。</p>
+<h3 data-nodeid="363810">基于缓存实现分布式锁</h3>
+<p data-nodeid="363811">相对于基于数据库实现分布式锁的方案来说，基于缓存来实现在性能方面会表现得更好一点，存取速度会快很多，而且很多缓存是可以集群部署的，可以解决单点问题。基于缓存的锁有如下几种： memcached、redis、etcd。下面我们主要讲解基于 etcd 实现的分布式锁。</p>
+<h4 data-nodeid="363812">通过 etcd txn 实现分布式锁</h4>
+<p data-nodeid="363813">通过 etcd 实现分布式锁，同样需要满足一致性、互斥性和可靠性等要求。etcd 中的事务 txn、lease 租约以及 watch 监听特性，能够实现上述要求的分布式锁。</p>
+<h4 data-nodeid="363814">思路分析</h4>
+<p data-nodeid="369324" class="">通过 etcd 的事务特性可以帮助我们实现一致性和互斥性。etcd 的事务特性，使用 <code data-backticks="1" data-nodeid="369326">IF-Then-Else</code> 语句，IF 语言判断 etcd 服务端是否存在指定的key，通过该 key 创建的版本号 create_revision 是否为 0 来检查 key 是否已存在，如果该 key 存在，版本号不为 0。满足 IF 条件的情况下则使用 Then 执行 put 操作，否则 Else 语句将返回抢锁失败的结果。</p>
+
+
+
+
+
+
+
+
+
+<p data-nodeid="363816">当然，除了使用 key 是否创建成功作为 IF 的判断依据，还可以创建前缀相同的 key，通过比较这些 key 的 revision 来判断分布式锁应该属于哪个请求。</p>
+<p data-nodeid="363817">客户端请求在获取到分布式锁后，如果发生异常，需要及时将锁释放掉，因此需要租约。我们申请分布式锁时也需要指定租约时间，超过 lease 租期时间将会自动释放锁，保证业务的可用性。</p>
+<p data-nodeid="363818">但是在执行业务逻辑时，如果客户端发起的是一个耗时的操作，在操作未完成的情况下，租约时间过期，就会导致其他请求获取到分布式锁，造成不一致。这种情况下就需要<strong data-nodeid="363962">续租</strong>，即刷新租约，使得客户端和 etcd 服务端持续保持心跳。</p>
+<h4 data-nodeid="363819">具体实现</h4>
+<p data-nodeid="363820">我们基于上述分析思路，绘制出实现 etcd 分布式锁的流程图，如下所示：</p>
+<p data-nodeid="370121" class=""><img src="https://s0.lgstatic.com/i/image6/M00/26/8C/CioPOWBbEnyAfk67AABZkPIb5so774.png" alt="Drawing 0.png" data-nodeid="370125"></p>
+<div data-nodeid="370122" class=""><p style="text-align:center">实现 etcd 分布式锁的流程图</p></div>
+
+
+
+<p data-nodeid="363823" class="">基于 Go 语言实现的 etcd 分布式锁，测试代码如下所示：</p>
+<pre class="lang-go" data-nodeid="372100"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">TestLock</span><span class="hljs-params">(t *testing.T)</span></span> {
+	<span class="hljs-comment">// 客户端配置</span>
+	config = clientv3.Config{
+		Endpoints:   []<span class="hljs-keyword">string</span>{<span class="hljs-string">"localhost:2379"</span>},
+		DialTimeout: <span class="hljs-number">5</span> * time.Second,
+	}
+	<span class="hljs-comment">// 建立连接</span>
+	<span class="hljs-keyword">if</span> client, err = clientv3.New(config); err != <span class="hljs-literal">nil</span> {
+		fmt.Println(err)
+		<span class="hljs-keyword">return</span>
+	}
+
+	<span class="hljs-comment">//上锁并创建租约</span>
+	lease = clientv3.NewLease(client)
+
+	<span class="hljs-keyword">if</span> leaseGrantResp, err = lease.Grant(context.TODO(), <span class="hljs-number">5</span>); err != <span class="hljs-literal">nil</span> {
+		<span class="hljs-built_in">panic</span>(err)
+	}
+	leaseId = leaseGrantResp.ID
+	<span class="hljs-comment">// 创建一个可取消的租约，主要是为了退出的时候能够释放</span>
+	ctx, cancelFunc = context.WithCancel(context.TODO())
+
+	<span class="hljs-comment">// 释放租约</span>
+	<span class="hljs-keyword">defer</span> cancelFunc()
+	<span class="hljs-keyword">defer</span> lease.Revoke(context.TODO(), leaseId)
+
+	<span class="hljs-keyword">if</span> keepRespChan, err = lease.KeepAlive(ctx, leaseId); err != <span class="hljs-literal">nil</span> {
+		<span class="hljs-built_in">panic</span>(err)
+	}
+	<span class="hljs-comment">// 续约应答</span>
+	<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> {
+		<span class="hljs-keyword">for</span> {
+			<span class="hljs-keyword">select</span> {
+			<span class="hljs-keyword">case</span> keepResp = &lt;-keepRespChan:
+				<span class="hljs-keyword">if</span> keepRespChan == <span class="hljs-literal">nil</span> {
+					fmt.Println(<span class="hljs-string">"租约已经失效了"</span>)
+					<span class="hljs-keyword">goto</span> END
+				} <span class="hljs-keyword">else</span> { <span class="hljs-comment">// 每秒会续租一次, 所以就会收到一次应答</span>
+					fmt.Println(<span class="hljs-string">"收到自动续租应答:"</span>, keepResp.ID)
+				}
+			}
+		}
+	END:
+	}()
+
+	<span class="hljs-comment">// 在租约时间内去抢锁（etcd 里面的锁就是一个 key）</span>
+	kv = clientv3.NewKV(client)
+
+	<span class="hljs-comment">// 创建事务</span>
+	txn = kv.Txn(context.TODO())
+
+	<span class="hljs-comment">// If 不存在 key，Then 设置它，Else 抢锁失败</span>
+	txn.If(clientv3.Compare(clientv3.CreateRevision(<span class="hljs-string">"lock"</span>), <span class="hljs-string">"="</span>, <span class="hljs-number">0</span>)).
+		Then(clientv3.OpPut(<span class="hljs-string">"lock"</span>, <span class="hljs-string">"g"</span>, clientv3.WithLease(leaseId))).
+		Else(clientv3.OpGet(<span class="hljs-string">"lock"</span>))
+
+	<span class="hljs-comment">// 提交事务</span>
+	<span class="hljs-keyword">if</span> txnResp, err = txn.Commit(); err != <span class="hljs-literal">nil</span> {
+		<span class="hljs-built_in">panic</span>(err)
+	}
+
+	<span class="hljs-keyword">if</span> !txnResp.Succeeded {
+		fmt.Println(<span class="hljs-string">"锁被占用:"</span>, <span class="hljs-keyword">string</span>(txnResp.Responses[<span class="hljs-number">0</span>].GetResponseRange().Kvs[<span class="hljs-number">0</span>].Value))
+		<span class="hljs-keyword">return</span>
+	}
+
+	<span class="hljs-comment">// 抢到锁后执行业务逻辑，没有抢到则退出</span>
+	fmt.Println(<span class="hljs-string">"处理任务"</span>)
+	time.Sleep(<span class="hljs-number">5</span> * time.Second)
+
+}
+</code></pre>
+
+<p data-nodeid="371703">预期的执行结果如下所示：</p>
+<pre class="lang-java te-preview-highlight" data-nodeid="373680"><code data-language="java">=== RUN   TestLock
+处理任务
+收到自动续租应答: <span class="hljs-number">7587848943239472601</span>
+收到自动续租应答: <span class="hljs-number">7587848943239472601</span>
+收到自动续租应答: <span class="hljs-number">7587848943239472601</span>
+--- PASS: TestLock (<span class="hljs-number">5.10</span>s)
+PASS
+</code></pre>
+
+
+
+
+
+
+
+
+<p data-nodeid="363827" class="">总的来说，上述关于 etcd 分布式锁的实现过程分为四个步骤：</p>
+<ul data-nodeid="363828">
+<li data-nodeid="363829">
+<p data-nodeid="363830" class="">客户端初始化与 etcd 服务端建立连接；</p>
+</li>
+<li data-nodeid="363831">
+<p data-nodeid="363832" class="">创建租约，自动续租；</p>
+</li>
+<li data-nodeid="363833">
+<p data-nodeid="363834">创建事务，获取锁；</p>
+</li>
+<li data-nodeid="363835">
+<p data-nodeid="363836">执行业务逻辑，最后释放锁。</p>
+</li>
+</ul>
+<p data-nodeid="363837">创建租约的时候，需要创建一个可取消的租约，主要是为了退出的时候能够释放。释放锁对应的步骤，在上面的 defer 语句中。当 defer 租约关掉的时候，分布式锁对应的key 也会被释放掉。</p>
+<h3 data-nodeid="363838">小结</h3>
+<p data-nodeid="363839">这一讲我们主要介绍了基于 etcd 实现分布式锁的原理。首先介绍了分布式锁产生的背景以及必要性。分布式架构不同于单体架构，涉及多服务之间多个实例的调用，在跨进程的情况下使用编程语言自带的并发原语没有办法实现数据的一致性，因此分布式锁出现，用来解决分布式环境中的资源互斥问题。</p>
+<p data-nodeid="363840">接着介绍了基于数据库实现分布式锁的两种方式：数据表增删和数据库的排他锁。基于 ZooKeeper 的临时节点和顺序特性也可以实现分布式锁，但是这两种方式或多或少存在性能和稳定性方面的缺陷。</p>
+<p data-nodeid="363841">最后我们重点介绍了基于 etcd 实现分布式锁的方案，根据etcd的特点，利用事务txn、lease 租约以及 watch 监测实现分布式锁，这部分内容需要你加强记忆。</p>
+<p data-nodeid="370520" class=""><img src="https://s0.lgstatic.com/i/image6/M00/26/8D/CioPOWBbEoaANh17AAG9OKrK4kc419.png" alt="Drawing 1.png" data-nodeid="370523"></p>
+
+<p data-nodeid="363843">在我们上面的案例中，一旦抢锁失败，客户端就直接返回了。那么当该锁被释放之后，或者持有锁的客户端出现故障退出了，其他客户端如何快速获取锁呢？上述代码可以基于 watch 监测特性进行改进。关于改进的地方，你有什么好的想法吗？欢迎在留言区和我分享。下一讲，我们将介绍如何基于 etcd 实现微服务的注册与发现。</p></div>
+
+</body></html>

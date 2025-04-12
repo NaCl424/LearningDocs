@@ -1,0 +1,1297 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>21 | 场景案例：如何用 Flink SQL CDC 实现实时数据同步？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>21 | 场景案例：如何用 Flink SQL CDC 实现实时数据同步？</h1><p data-nodeid="3">今天我们来看第二个案例，也就是用 Flink SQL CDC 实现实时数据同步。</p>
+<p data-nodeid="4">那究竟什么是 Flink SQL CDC 呢？毕竟这是个相对还比较新的技术，可能很多人都还没听说过这个技术，所以我们先从它诞生的业务场景说起。</p>
+<h3 data-nodeid="5">业务场景</h3>
+<p data-nodeid="6">如果你是一名后端开发的话，相信十有八九遇到过这样的问题，有时候一种数据库满足不了业务的需求，我们需要将相同的数据，存入多种不同的数据库。</p>
+<p data-nodeid="7">比如，最开始的时候业务比较简单，数据量也很小，数据只需要保存到 MySQL 中，作为主数据库即可。之后，随着业务的发展，数据量变得越来越大，为了提升查询效率，需要将数据写一份到 Redis 缓存。同时，业务查询也变得越来越复杂，为了提供更加灵活和高效的查询分析方式，需要将数据再写一份到 Elasticsearch 里。</p>
+<p data-nodeid="8">面对以上这种情况，你会怎么做呢？一般情况下，我们首先想到的可能就是，改代码！改成类似于下面图 1 这样的方案。</p>
+<p data-nodeid="1553" class=""><img src="https://s0.lgstatic.com/i/image6/M00/2D/90/Cgp9HWBmt66ACLVqAABVxuvt-SA692.png" alt="Drawing 1.png" data-nodeid="1556"></p>
+
+
+
+<p data-nodeid="12">在上面的图 1 中，我们直接在业务代码中，将数据写入了几种不同的数据库里，包括 MySQL、Redis 和 Elasticsearch。</p>
+<p data-nodeid="13">这种方案看着简单，也很容易实现。但这种做法<strong data-nodeid="129">非常不好</strong>，原因是这样的：</p>
+<ol data-nodeid="14">
+<li data-nodeid="15">
+<p data-nodeid="16">代码严重耦合，每次需要修改业务代码后重新测试和上线才行；</p>
+</li>
+<li data-nodeid="17">
+<p data-nodeid="18">在业务系统中需要多次将数据写入不同数据库，严重影响业务代码性能；</p>
+</li>
+<li data-nodeid="19">
+<p data-nodeid="20">增量同步前，需要先由人工（至少你要写脚本和执行脚本吧）做一次全量同步。</p>
+</li>
+</ol>
+<p data-nodeid="21">一种好的改进方法，则是<strong data-nodeid="138">使用消息中间件</strong>，就像下面的图 2 这样。</p>
+<p data-nodeid="2161" class=""><img src="https://s0.lgstatic.com/i/image6/M00/2D/98/CioPOWBmt7aAP2UtAACBbUI0Ab4887.png" alt="Drawing 3.png" data-nodeid="2164"></p>
+
+
+
+<p data-nodeid="25">在上面的图 2 中，首先由业务系统将数据写入 Kafka，然后由 Flink 从 Kafka 将消息读取出来，最后再写入不同的数据库。</p>
+<p data-nodeid="26">这种做法最大的优点在于<strong data-nodeid="152">将业务系统和写入数据库的逻辑隔离开，降低了代码的耦合度</strong>，并且在业务中只需要写一次数据到 Kafka 即可，提升了业务系统的性能。</p>
+<p data-nodeid="27">但它还是有几个缺点：</p>
+<ol data-nodeid="28">
+<li data-nodeid="29">
+<p data-nodeid="30">还是需要修改代码，比如在写数据的地方埋点写入 Kafka；</p>
+</li>
+<li data-nodeid="31">
+<p data-nodeid="32">增加了系统的复杂性，因为需要维护 Kafka，并且要开发写入数据库的代码。当需要写入的数据库和表比较多时，这种复杂性就更加严重了；</p>
+</li>
+<li data-nodeid="33">
+<p data-nodeid="34">增量同步前，同样需要先由人工做一次全量同步。</p>
+</li>
+</ol>
+<p data-nodeid="35">虽然有以上这些缺点，但不管怎样，这种方法在思路上都是值得遵循的。因为它可以解耦，并且性能会更好。特别是当我们有了 Flink 这种神器后，可以直接通过 Flink 从 Kafka 里读取出数据，然后高效地使用流计算技术写入各种数据库。</p>
+<p data-nodeid="36">面对以上图 2 方案的缺点，咱们的 Flink 神器当然没有熟视无睹。所以，它基于 CDC 技术的思路，推出了 Flink CDC 实现。</p>
+<p data-nodeid="37">CDC（Change Data Capture，变化数据捕获）正如其名，是一种捕获数据变化的技术。比如在 MySQL 做同步时，我们设置 MySQL<strong data-nodeid="168">从数据库</strong>（secondary database）来跟随<strong data-nodeid="169">主数据库</strong>（primary database）的 binlog 日志，从而将主数据库的所有数据变化同步到从数据库中，这其实就是一个 CDC 的使用场景。</p>
+<p data-nodeid="38">而 Flink CDC 就是一种使用 Flink 流计算框架，来实现 CDC 功能的技术。比如，我们可以通过 Flink CDC 技术，先将主数据库的全量数据同步到另外的数据库中，然后再跟随主数据库的 binlog 日志，将所有增量的数据也实时同步到从数据库中。</p>
+<p data-nodeid="39">由于 Flink CDC 将全量同步和增量同步的操作封装到了一起，并且因为 Flink 还支持 SQL 语句，所以最终我们只需要写几行简单的 SQL，就能轻松解决将同一份数据写入多种不同数据库的问题。</p>
+<p data-nodeid="40">下面的图 3 就展示了使用 Flink CDC 进行数据同步的方案。</p>
+<p data-nodeid="2757" class=""><img src="https://s0.lgstatic.com/i/image6/M00/2D/98/CioPOWBmt8CACcZ1AAB-UuW3dDg051.png" alt="Drawing 5.png" data-nodeid="2760"></p>
+
+
+
+<p data-nodeid="44">从上面的图 3 可以看出，相比前面图 2 的方案，这里不需要再引入单独的 Kafka，也不需要我们修改业务系统的代码，只需要引入一个 Flink SQL CDC 工具，就能够同时实现数据的全量同步和增量同步。并且，由于 Flink SQL CDC 封装得很好，我们只需要写一些 SQL 就可以了。</p>
+<p data-nodeid="45">Flink CDC 如此神奇，那它究竟是怎样实现的呢？接下来，我们就来看下 Flink CDC 的实现原理。</p>
+<h3 data-nodeid="46">实现原理</h3>
+<p data-nodeid="47">我们以使用 Flink CDC 从 MySQL 中同步数据的情景，来讲解下 Flink CDC 的工作原理。</p>
+<p data-nodeid="48">一般来说，Flink CDC 同步数据需要两个步骤。</p>
+<ul data-nodeid="49">
+<li data-nodeid="50">
+<p data-nodeid="51"><strong data-nodeid="188">第一步是将源数据库的数据全量同步到目标数据库；</strong></p>
+</li>
+<li data-nodeid="52">
+<p data-nodeid="53"><strong data-nodeid="192">第二步是跟随源数据库的 binlog 日志，将源数据库的所有变动，以增量数据的方式同步到目标数据库。</strong></p>
+</li>
+</ul>
+<p data-nodeid="54">我们先来看将源数据库的数据<strong data-nodeid="198">全量同步</strong>到目标数据库的过程。Flink CDC 将这个过程称之为“快照”（sanpshot），具体步骤是这样的。</p>
+<ol data-nodeid="55">
+<li data-nodeid="56">
+<p data-nodeid="57">Flink CDC 会获取一个全局读锁（global read lock），从而阻塞其他客户端往数据库写入数据。不用担心这个锁定时间会很长，因为它马上就会在第 5 步中被释放掉。</p>
+</li>
+<li data-nodeid="58">
+<p data-nodeid="59">启动一个可重复读语义（repeatable read semantics）的事务，从而确保后续在该事务内的所有“读”操作都是在“一致的快照”（consistent snapshot）中进行。这一步中“可重复读语义”以及后续步骤只涉及“读”操作是非常关键的。因为只有在“可重复读语义”且不存在“写”操作的情况下， MySQL 的“可重复读语义”级别事务才不会存在“幻读”现象（<a href="https://stackoverflow.com/questions/47041215/innodb-mysql-select-query-locking?fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="203">具体原因可以参考这个问题的两个回答</a>），这样才能保证后续做“扫描”和读取 binlog 位置时，它们的数据和时间点是对得上的。这就是“一致的快照”的含义，它保证了同步到目标数据库中的数据是完整的，并且和源数据库中的数据是完全相同的，既不会多一条，也不会少一条。</p>
+</li>
+<li data-nodeid="60">
+<p data-nodeid="61">读取当前 binlog 的位置。</p>
+</li>
+<li data-nodeid="62">
+<p data-nodeid="63">读取 Flink CDC 配置指定的数据库和表定义(schema)。</p>
+</li>
+<li data-nodeid="64">
+<p data-nodeid="65">释放步骤 1 中的全局读锁。这个时候其他的客户端就可以继续往数据库中写入数据了。从步骤 1 到步骤 5，Flink CDC 并没有做非常耗时的任务，所以全局锁定的时间很短，这样对业务运行的影响可以尽量降至最小。</p>
+</li>
+<li data-nodeid="66">
+<p data-nodeid="67">将步骤 4 读取的数据库和表定义，作用到目标数据库上。</p>
+</li>
+<li data-nodeid="68">
+<p data-nodeid="69">对数据库里的表进行全表扫描，将读取出的每条记录，都发送到目标数据库。</p>
+</li>
+<li data-nodeid="70">
+<p data-nodeid="71">完成全表扫描后，提交（commit）步骤 2 时启动的可重复读语义事务。</p>
+</li>
+<li data-nodeid="72">
+<p data-nodeid="73">将步骤 3 读取的 binlog 位置记录下来，表明本次数据全量同步过程（也就是“快照”）成功完成。后续做增量同步时，如果发现没有这个 binlog 位置记录，就意味着数据全量同步过程是失败的，可以重新再做一次步骤 1 到步骤 9，直到全量同步成功为止。</p>
+</li>
+</ol>
+<p data-nodeid="74">可以看出，数据全量同步的过程还是比较复杂的，但好在 Flink CDC 的<a href="https://github.com/ververica/flink-cdc-connectors/wiki/MySQL-CDC-Connector?fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="215">flink-connector-mysql-cdc 连接器插件</a>已经为我们实现了这个过程，所以我们直接使用它就好了。</p>
+<p data-nodeid="75">完成数据全量同步后，后面的<strong data-nodeid="226">增量同步</strong>过程就相对简单了，直接跟随源数据库的 binlog 日志，然后将每次的数据变更同步到目标数据库即可。增量同步过程中，Flink 自己会<strong data-nodeid="227">周期性地执行 checkpoint 操作</strong>，从而记录下当时增量同步到的 binlog 位置。</p>
+<p data-nodeid="76">这样，如果 Flink CDC 作业（job）因为发生故障而重启的话，也能够从最近一次 checkpoint 处，<strong data-nodeid="233">恢复出故障发生前的状态</strong>，从而继续执行之前的过程。</p>
+<p data-nodeid="77">最后，再配合<strong data-nodeid="243">写入目标数据库时是幂等性的操作</strong>。这样，就保证了 Flink CDC 的整个数据同步过程，<strong data-nodeid="244">能够达到 exactly once 级别的数据处理可靠性</strong>。是不是非常惊艳！</p>
+<p data-nodeid="78">以上就是 Flink CDC 的工作原理。接下来，我们就具体展示下，如何使用 Flink CDC 技术，进行实时数据同步。</p>
+<h3 data-nodeid="79">具体实现</h3>
+<p data-nodeid="80">我们这里以将 MySQL 里的数据实时同步到 Elasticsearch 为例。Flink CDC 的具体实现方式有两种，一种是基于 DataStream（<a href="https://ci.apache.org/projects/flink/flink-docs-release-1.12/dev/connectors/elasticsearch.html?fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="250">参见链接</a>）的方式，另一种是基于 Table &amp; SQL（<a href="https://ci.apache.org/projects/flink/flink-docs-release-1.12/dev/table/connectors/elasticsearch.html?fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="256">参见链接</a>）的方式。我们说的 Flink SQL CDC 就是指基于 Table &amp; SQL 方式的 Flink CDC 实现。</p>
+<p data-nodeid="81">由于 Flink SQL 在经过解析之后，最终也会转化为基于 DataStream 的底层代码。所以我先演示直接使用 DataStream 的方式，然后再演示使用 SQL 的方式，这样更加有助于理解。</p>
+<h4 data-nodeid="82">基于 DataStream 的方式</h4>
+<p data-nodeid="83">我们先来看基于 DataStream 的方式。具体代码如下（<a href="https://github.com/alain898/realtime_stream_computing_course/tree/main/course21?fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="265">完整代码和操作说明参看这里</a>）。</p>
+<pre class="lang-java hljs" data-nodeid="84"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">FlinkCdcDemo</span> </span>{
+&nbsp; &nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">main</span><span class="hljs-params">(String[] args)</span> <span class="hljs-keyword">throws</span> Exception </span>{
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-comment">// 源数据库，下面是以 MySQL 作为源数据库的配置</span>
+&nbsp; &nbsp; &nbsp; &nbsp; SourceFunction&lt;String&gt; sourceFunction = MySQLSource.&lt;String&gt;builder()
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .hostname(<span class="hljs-string">"127.0.0.1"</span>)
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .port(<span class="hljs-number">3306</span>)
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .databaseList(<span class="hljs-string">"db001"</span>)
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .username(<span class="hljs-string">"root"</span>)&nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-comment">// 测试用，生产不要用root账号！</span>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .password(<span class="hljs-string">"123456"</span>)&nbsp; &nbsp; &nbsp;<span class="hljs-comment">// 测试用，生产不要用这种简单密码！</span>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .deserializer(<span class="hljs-keyword">new</span> StringDebeziumDeserializationSchema())
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .build();
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-comment">// 目标数据库，下面是以 Elasticsearch 作为目标数据库的配置</span>
+&nbsp; &nbsp; &nbsp; &nbsp; List&lt;HttpHost&gt; httpHosts = <span class="hljs-keyword">new</span> ArrayList&lt;&gt;();
+&nbsp; &nbsp; &nbsp; &nbsp; httpHosts.add(<span class="hljs-keyword">new</span> HttpHost(<span class="hljs-string">"127.0.0.1"</span>, <span class="hljs-number">9200</span>, <span class="hljs-string">"http"</span>));
+&nbsp; &nbsp; &nbsp; &nbsp; ElasticsearchSink.Builder&lt;String&gt; esSinkBuilder = <span class="hljs-keyword">new</span> ElasticsearchSink.Builder&lt;&gt;(
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; httpHosts,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">new</span> ElasticsearchSinkFunction&lt;String&gt;() {
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-function"><span class="hljs-keyword">private</span> IndexRequest <span class="hljs-title">createIndexRequest</span><span class="hljs-params">(String element)</span> </span>{
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; Map&lt;String, String&gt; json = <span class="hljs-keyword">new</span> HashMap&lt;&gt;();
+                        <span class="hljs-comment">// 这里直接将数据 element 表示为字符串</span>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; json.put(<span class="hljs-string">"data"</span>, element);
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">return</span> Requests.indexRequest()
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .index(<span class="hljs-string">"table001"</span>)
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .source(json);
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; }
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-meta">@Override</span>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">process</span><span class="hljs-params">(String element, RuntimeContext ctx, RequestIndexer indexer)</span> </span>{
+                        <span class="hljs-comment">// 这里就是将数据同步到目标数据库 Elasticsearch</span>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; indexer.add(createIndexRequest(element));
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; }
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; }
+&nbsp; &nbsp; &nbsp; &nbsp; );
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-comment">// 实验时配置逐条插入，生产为了提升性能的话，可以改为批量插入</span>
+&nbsp; &nbsp; &nbsp; &nbsp; esSinkBuilder.setBulkFlushMaxActions(<span class="hljs-number">1</span>);
+&nbsp; &nbsp; &nbsp; &nbsp; StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+&nbsp; &nbsp; &nbsp; &nbsp; env
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .addSource(sourceFunction)&nbsp; <span class="hljs-comment">// 设置源数据库</span>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .addSink(esSinkBuilder.build())&nbsp; <span class="hljs-comment">// 设置目标数据库</span>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .setParallelism(<span class="hljs-number">1</span>); <span class="hljs-comment">// 设置并行度为1，以保持消息顺序</span>
+&nbsp; &nbsp; &nbsp; &nbsp; env.execute(<span class="hljs-string">"FlinkCdcDemo"</span>);
+&nbsp; &nbsp; }
+}
+</code></pre>
+<p data-nodeid="3341">在上面的代码中，我们首先使用 MySQLSource 类配置了一个 MySQL 源数据库。然后，我们再使用 ElasticsearchSink 类配置了一个 Elasticsearch 目标数据库。最后，我们使用 addSource 和 addSink 函数，将源数据库和目标数据库之间的数据同步链路打通。这样，我们就实现了基于 DataStream 的 Flink CDC 实时数据同步功能。</p>
+<p data-nodeid="3342">可以看到，上面的代码还是非常简单的。主要的原因在于 MySQLSource 这个 CDC Connector 为我们封装了所有的复杂操作，这些复杂操作就包括我们在实现原理部分讲到的“全量同步”和“增量同步”的实现细节。</p>
+
+<p data-nodeid="86">不过，上面的代码并不完美，它主要有两个问题：</p>
+<ol data-nodeid="87">
+<li data-nodeid="88">
+<p data-nodeid="89">一是，同步数据时，写入 Elasticsearch 的数据是字符串，而不是经过解析的各个独立字段。这样就会导致很多没有用的字段也保存到了 Elasticsearch ，并且后续查询的效率会非常低。</p>
+</li>
+<li data-nodeid="90">
+<p data-nodeid="91">二是，还是需要写一些代码。虽然上面的代码并不复杂，但是毕竟还是没有 SQL 方便。</p>
+</li>
+</ol>
+<p data-nodeid="92">为了解决以上两个问题，接下来我们就使用 Table &amp; SQL&nbsp;的方式来实现 Flink CDC 功能，这就是 Flink SQL CDC。你会发现，我们真的就只需要写几行 SQL 语句，就能轻松解决上面两个问题。</p>
+<h4 data-nodeid="93">基于 Table &amp; SQL&nbsp;方式</h4>
+<p data-nodeid="94">下面就是基于 Table &amp; SQL&nbsp;方式实现 Flink CDC 功能的代码（<a href="https://github.com/alain898/realtime_stream_computing_course/tree/main/course21?fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="284">完整代码和操作说明参看这里</a>）。</p>
+<pre class="lang-sql hljs" data-nodeid="95"><code data-language="sql"><span class="hljs-comment">-- 在 Flink SQL Client 里执行以下 SQL。</span>
+<span class="hljs-comment">-- 创建源数据库</span>
+<span class="hljs-keyword">CREATE</span> <span class="hljs-keyword">TABLE</span> sourceTable (
+&nbsp; <span class="hljs-keyword">id</span> <span class="hljs-built_in">INT</span>,
+&nbsp; <span class="hljs-keyword">name</span> <span class="hljs-keyword">STRING</span>,
+&nbsp; counts <span class="hljs-built_in">INT</span>,
+&nbsp; description <span class="hljs-keyword">STRING</span>
+) <span class="hljs-keyword">WITH</span> (
+&nbsp;<span class="hljs-string">'connector'</span> = <span class="hljs-string">'mysql-cdc'</span>,
+&nbsp;<span class="hljs-string">'hostname'</span> = <span class="hljs-string">'192.168.1.7'</span>,
+&nbsp;<span class="hljs-string">'port'</span> = <span class="hljs-string">'3306'</span>,
+&nbsp;<span class="hljs-string">'username'</span> = <span class="hljs-string">'root'</span>,
+&nbsp;<span class="hljs-string">'password'</span> = <span class="hljs-string">'123456'</span>,
+&nbsp;<span class="hljs-string">'database-name'</span> = <span class="hljs-string">'db001'</span>,
+&nbsp;<span class="hljs-string">'table-name'</span> = <span class="hljs-string">'table001'</span>
+);
+<span class="hljs-comment">-- 创建目标数据库</span>
+<span class="hljs-keyword">CREATE</span> <span class="hljs-keyword">TABLE</span> sinkTable (
+&nbsp; <span class="hljs-keyword">id</span> <span class="hljs-built_in">INT</span>,
+&nbsp; <span class="hljs-keyword">name</span> <span class="hljs-keyword">STRING</span>,
+&nbsp; counts <span class="hljs-built_in">INT</span>
+) <span class="hljs-keyword">WITH</span> (
+&nbsp; <span class="hljs-string">'connector'</span> = <span class="hljs-string">'elasticsearch-7'</span>,
+&nbsp; <span class="hljs-string">'hosts'</span> = <span class="hljs-string">'http://192.168.1.7:9200'</span>,
+&nbsp; <span class="hljs-string">'index'</span> = <span class="hljs-string">'table001'</span>
+);
+<span class="hljs-comment">-- 启动 Flink SQL CDC 作业</span>
+<span class="hljs-keyword">insert</span> <span class="hljs-keyword">into</span> sinkTable <span class="hljs-keyword">select</span> <span class="hljs-keyword">id</span>, <span class="hljs-keyword">name</span>, counts <span class="hljs-keyword">from</span> sourceTable;
+</code></pre>
+<p data-nodeid="3925">看到没！只需要简简单单三个 SQL 语句，就实现了 Flink CDC 的功能。</p>
+<p data-nodeid="3926">其中，CREATE TABLE sourceTable 是在配置一个 MySQL 源数据库，CREATE TABLE sinkTable 是在配置一个 Elasticsearch 目标数据库。而 insert into select from 则是指定了需要从源数据库向目标数据库<strong data-nodeid="3933">同步哪些字段</strong>，并且它会触发启动这个 Flink CDC 作业。</p>
+
+<p data-nodeid="97">当启动 Flink CDC 作业后，如果我们向 MySQL 写入数据，你就可以看到数据从 MySQL 同步到 Elasticsearch 的效果了。</p>
+<p data-nodeid="98">下面的图 4 就是 Flink CDC 数据同步的效果图。</p>
+<p data-nodeid="5100"><img src="https://s0.lgstatic.com/i/image6/M01/2D/90/Cgp9HWBmt-WAB1cbABNhEi6mLVE369.png" alt="Drawing 6.png" data-nodeid="5104"></p>
+<div data-nodeid="5101" class=""><p style="text-align:center">图 4 使用 Flink CDC 实时同步数据的效果图</p></div>
+
+
+
+<p data-nodeid="101">从上面的图 4 可以看出，左边源数据库 MySQL 里的数据和右边目标数据库 Elasticsearch 里的数据是完全对应的。并且，同步到 Elasticsearch 里数据的字段，也是和我们在 insert into select from 语句里指定的字段是完全一致的。你看，Flink SQL CDC 实现实时数据同步的效果是不是很不错！</p>
+<p data-nodeid="102">最后还需要说明下的是，这里我为了专注于讲解 Flink CDC 的工作原理本身，就使用了相对简单的 SQL 语句。其实，Flink SQL CDC 是可以使用一些更加复杂的 SQL 语句，来实现更加丰富的数据同步功能的。比如，使用 GROUP BY 分组和使用 Window 进行窗口计算等。对于这些更完整和更复杂的 Flink SQL 语句说明，你可以参考<a href="https://ci.apache.org/projects/flink/flink-docs-release-1.12/dev/table/sql/?fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="304">这里的官方文档</a>。</p>
+<h3 data-nodeid="103">小结</h3>
+<p data-nodeid="104">总的来说，相比 DataStream 的方式，Flink SQL CDC 使用起来会更加方便些。但这两种方式我们都需要掌握，因为目前 Flink SQL CDC 还不算非常成熟，一些 Flink SQL 暂时不支持的功能和插件，还是需要我们自己基于 DataStream 在底层实现。</p>
+<p data-nodeid="105">你的工作中有没有可以使用到 Flink CDC，或者用 Flink CDC 进行改造的场景呢？可以将你的想法或问题写在留言区。</p>
+<p data-nodeid="106">下面是本课时的知识脑图。</p>
+<p data-nodeid="5683" class="te-preview-highlight"><img src="https://s0.lgstatic.com/i/image6/M01/2D/90/Cgp9HWBmt_uANir5AAfXEAo3ILg905.png" alt="Drawing 7.png" data-nodeid="5686"></p></div>
+
+</body></html>

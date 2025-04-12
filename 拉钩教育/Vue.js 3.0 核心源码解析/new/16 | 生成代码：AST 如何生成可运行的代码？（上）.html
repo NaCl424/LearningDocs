@@ -1,0 +1,1665 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>16 | 生成代码：AST 如何生成可运行的代码？（上）</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>16 | 生成代码：AST 如何生成可运行的代码？（上）</h1><p data-nodeid="3">上一节课我们分析了 AST 节点转换的过程，也知道了 AST 节点转换的作用是通过语法分析，创建了语义和信息更加丰富的代码生成节点 codegenNode，便于后续生成代码。</p>
+<p data-nodeid="4">那么这一节课，我们就来分析整个编译的过程的最后一步——代码生成的实现原理。</p>
+<p data-nodeid="5">同样的，代码生成阶段由于要处理的场景很多，所以代码也非常多而复杂。为了方便你理解它的核心流程，我们还是通过这个示例来演示整个代码生成的过程：</p>
+<pre class="lang-js hljs" data-nodeid="3405"><code data-language="js">&lt;div <span class="hljs-class"><span class="hljs-keyword">class</span></span>=<span class="hljs-string">"app"</span>&gt;
+  <span class="xml"><span class="hljs-tag">&lt;<span class="hljs-name">hello</span> <span class="hljs-attr">v-if</span>=<span class="hljs-string">"flag"</span>&gt;</span><span class="hljs-tag">&lt;/<span class="hljs-name">hello</span>&gt;</span></span>
+  <span class="xml"><span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">v-else</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">p</span>&gt;</span>hello {{ msg + test }}<span class="hljs-tag">&lt;/<span class="hljs-name">p</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">p</span>&gt;</span>static<span class="hljs-tag">&lt;/<span class="hljs-name">p</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">p</span>&gt;</span>static<span class="hljs-tag">&lt;/<span class="hljs-name">p</span>&gt;</span>
+  <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span></span>
+&lt;/div&gt;
+</code></pre>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<p data-nodeid="7">代码生成的结果是和编译配置相关的，你可以打开官方提供的<a href="https://vue-next-template-explorer.netlify.app/" data-nodeid="89">模板导出工具平台</a>，点击右上角的 Options 修改编译配置。为了让你理解核心的流程，这里我只分析一种配置方案，当然当你理解整个编译核心流程后，也可以修改这些配置分析其他的分支逻辑。</p>
+<p data-nodeid="8">我们分析的编译配置是：mode 为 module，prefixIdentifiers 开启，hoistStatic 开启，其他配置均不开启。</p>
+<p data-nodeid="9">为了让你有个大致印象，我们先来看一下上述例子生成代码的结果：</p>
+<pre class="lang-js hljs" data-nodeid="4027"><code data-language="js"><span class="hljs-keyword">import</span> { resolveComponent <span class="hljs-keyword">as</span> _resolveComponent, createVNode <span class="hljs-keyword">as</span> _createVNode, createCommentVNode <span class="hljs-keyword">as</span> _createCommentVNode, toDisplayString <span class="hljs-keyword">as</span> _toDisplayString, openBlock <span class="hljs-keyword">as</span> _openBlock, createBlock <span class="hljs-keyword">as</span> _createBlock } <span class="hljs-keyword">from</span> <span class="hljs-string">"vue"</span>
+<span class="hljs-keyword">const</span> _hoisted_1 = { <span class="hljs-attr">class</span>: <span class="hljs-string">"app"</span> }
+<span class="hljs-keyword">const</span> _hoisted_2 = { <span class="hljs-attr">key</span>: <span class="hljs-number">1</span> }
+<span class="hljs-keyword">const</span> _hoisted_3 = <span class="hljs-comment">/*#__PURE__*/</span>_createVNode(<span class="hljs-string">"p"</span>, <span class="hljs-literal">null</span>, <span class="hljs-string">"static"</span>, <span class="hljs-number">-1</span> <span class="hljs-comment">/* HOISTED */</span>)
+<span class="hljs-keyword">const</span> _hoisted_4 = <span class="hljs-comment">/*#__PURE__*/</span>_createVNode(<span class="hljs-string">"p"</span>, <span class="hljs-literal">null</span>, <span class="hljs-string">"static"</span>, <span class="hljs-number">-1</span> <span class="hljs-comment">/* HOISTED */</span>)
+<span class="hljs-keyword">export</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">render</span>(<span class="hljs-params">_ctx, _cache</span>) </span>{
+  <span class="hljs-keyword">const</span> _component_hello = _resolveComponent(<span class="hljs-string">"hello"</span>)
+  <span class="hljs-keyword">return</span> (_openBlock(), _createBlock(<span class="hljs-string">"div"</span>, _hoisted_1, [
+    (_ctx.flag)
+      ? _createVNode(_component_hello, { <span class="hljs-attr">key</span>: <span class="hljs-number">0</span> })
+      : (_openBlock(), _createBlock(<span class="hljs-string">"div"</span>, _hoisted_2, [
+          _createVNode(<span class="hljs-string">"p"</span>, <span class="hljs-literal">null</span>, <span class="hljs-string">"hello "</span> + _toDisplayString(_ctx.msg + _ctx.test), <span class="hljs-number">1</span> <span class="hljs-comment">/* TEXT */</span>),
+          _hoisted_3,
+          _hoisted_4
+        ]))
+  ]))
+}
+</code></pre>
+
+
+<p data-nodeid="11">示例的模板是如何转换生成这样的代码的？在 AST 转换后，会执行 generate 函数生成代码：</p>
+<pre class="lang-java hljs" data-nodeid="4338"><code data-language="java"><span class="hljs-keyword">return</span> generate(ast, extend({}, options, {
+  prefixIdentifiers
+}))
+</code></pre>
+
+<p data-nodeid="13">generate 函数的输入就是转换后的 AST 根节点，我们看一下它的实现：</p>
+<pre class="lang-java hljs" data-nodeid="4649"><code data-language="java"><span class="hljs-function">function <span class="hljs-title">generate</span><span class="hljs-params">(ast, options = {})</span> </span>{
+  <span class="hljs-comment">// 创建代码生成上下文</span>
+  <span class="hljs-keyword">const</span> context = createCodegenContext(ast, options);
+  <span class="hljs-keyword">const</span> { mode, push, prefixIdentifiers, indent, deindent, newline, scopeId, ssr } = context;
+  <span class="hljs-keyword">const</span> hasHelpers = ast.helpers.length &gt; <span class="hljs-number">0</span>;
+  <span class="hljs-keyword">const</span> useWithBlock = !prefixIdentifiers &amp;&amp; mode !== <span class="hljs-string">'module'</span>;
+  <span class="hljs-keyword">const</span> genScopeId = scopeId != <span class="hljs-keyword">null</span> &amp;&amp; mode === <span class="hljs-string">'module'</span>;
+  <span class="hljs-comment">// 生成预设代码</span>
+  <span class="hljs-keyword">if</span> ( mode === <span class="hljs-string">'module'</span>) {
+    genModulePreamble(ast, context, genScopeId);
+  }
+  <span class="hljs-keyword">else</span> {
+    genFunctionPreamble(ast, context);
+  }
+  <span class="hljs-keyword">if</span> (!ssr) {
+    push(\`<span class="hljs-function">function <span class="hljs-title">render</span><span class="hljs-params">(_ctx, _cache)</span> </span>{\`);
+  }
+  <span class="hljs-keyword">else</span> {
+    push(\`<span class="hljs-function">function <span class="hljs-title">ssrRender</span><span class="hljs-params">(_ctx, _push, _parent, _attrs)</span> </span>{\`);
+  }
+  indent();
+  <span class="hljs-keyword">if</span> (useWithBlock) {
+    <span class="hljs-comment">// 处理带 with 的情况，Web 端运行时编译</span>
+    push(\`with (_ctx) {\`);
+    indent();
+    <span class="hljs-keyword">if</span> (hasHelpers) {
+      push(\`<span class="hljs-keyword">const</span> { \${ast.helpers
+        .map(s =&gt; \`\${helperNameMap[s]}: _\${helperNameMap[s]}\`)
+        .join(<span class="hljs-string">', '</span>)} } = _Vue\`);
+      push(\`\n\`);
+      newline();
+    }
+  }
+  <span class="hljs-comment">// 生成自定义组件声明代码</span>
+  <span class="hljs-keyword">if</span> (ast.components.length) {
+    genAssets(ast.components, <span class="hljs-string">'component'</span>, context);
+    <span class="hljs-keyword">if</span> (ast.directives.length || ast.temps &gt; <span class="hljs-number">0</span>) {
+      newline();
+    }
+  }
+  <span class="hljs-comment">// 生成自定义指令声明代码</span>
+  <span class="hljs-keyword">if</span> (ast.directives.length) {
+    genAssets(ast.directives, <span class="hljs-string">'directive'</span>, context);
+    <span class="hljs-keyword">if</span> (ast.temps &gt; <span class="hljs-number">0</span>) {
+      newline();
+    }
+  }
+  <span class="hljs-comment">// 生成临时变量代码</span>
+  <span class="hljs-keyword">if</span> (ast.temps &gt; <span class="hljs-number">0</span>) {
+    push(\`let \`);
+    <span class="hljs-keyword">for</span> (let i = <span class="hljs-number">0</span>; i &lt; ast.temps; i++) {
+      push(\`\${i &gt; <span class="hljs-number">0</span> ? \`, \` : \`\`}_temp\${i}\`);
+    }
+  }
+  <span class="hljs-keyword">if</span> (ast.components.length || ast.directives.length || ast.temps) {
+    push(\`\n\`);
+    newline();
+  }
+  <span class="hljs-keyword">if</span> (!ssr) {
+    push(\`<span class="hljs-keyword">return</span> \`);
+  }
+  <span class="hljs-comment">// 生成创建 VNode 树的表达式</span>
+  <span class="hljs-keyword">if</span> (ast.codegenNode) {
+    genNode(ast.codegenNode, context);
+  }
+  <span class="hljs-keyword">else</span> {
+    push(\`<span class="hljs-keyword">null</span>\`);
+  }
+  <span class="hljs-keyword">if</span> (useWithBlock) {
+    deindent();
+    push(\`}\`);
+  }
+  deindent();
+  push(\`}\`);
+  <span class="hljs-keyword">return</span> {
+    ast,
+    code: context.code,
+    map: context.map ? context.map.toJSON() : undefined
+  };
+}
+</code></pre>
+
+<p data-nodeid="15">generate 主要做五件事情：创建代码生成上下文，生成预设代码，生成渲染函数，生成资源声明代码，以及生成创建 VNode 树的表达式。接下来，我们就依次详细分析这几个流程。</p>
+<h3 data-nodeid="16">创建代码生成上下文</h3>
+<p data-nodeid="17">首先，是通过执行 createCodegenContext 创建代码生成上下文，我们来看它的实现：</p>
+<pre class="lang-java hljs" data-nodeid="4960"><code data-language="java"><span class="hljs-function">function <span class="hljs-title">createCodegenContext</span><span class="hljs-params">(ast, { mode = <span class="hljs-string">'function'</span>, prefixIdentifiers = mode === <span class="hljs-string">'module'</span>, sourceMap = <span class="hljs-keyword">false</span>, filename = \`template.vue.html\`, scopeId = <span class="hljs-keyword">null</span>, optimizeBindings = <span class="hljs-keyword">false</span>, runtimeGlobalName = \`Vue\`, runtimeModuleName = \`vue\`, ssr = <span class="hljs-keyword">false</span> })</span> </span>{
+  <span class="hljs-keyword">const</span> context = {
+    mode,
+    prefixIdentifiers,
+    sourceMap,
+    filename,
+    scopeId,
+    optimizeBindings,
+    runtimeGlobalName,
+    runtimeModuleName,
+    ssr,
+    source: ast.loc.source,
+    code: \`\`,
+    column: <span class="hljs-number">1</span>,
+    line: <span class="hljs-number">1</span>,
+    offset: <span class="hljs-number">0</span>,
+    indentLevel: <span class="hljs-number">0</span>,
+    pure: <span class="hljs-keyword">false</span>,
+    map: undefined,
+    helper(key) {
+      <span class="hljs-keyword">return</span> \`_\${helperNameMap[key]}\`
+    },
+    push(code) {
+      context.code += code
+    },
+    indent() {
+      newline(++context.indentLevel)
+    },
+    deindent(withoutNewLine = <span class="hljs-keyword">false</span>) {
+      <span class="hljs-keyword">if</span> (withoutNewLine) {
+        --context.indentLevel
+      }
+      <span class="hljs-keyword">else</span> {
+        newline(--context.indentLevel)
+      }
+    },
+    newline() {
+      newline(context.indentLevel)
+    }
+  }
+  <span class="hljs-function">function <span class="hljs-title">newline</span><span class="hljs-params">(n)</span> </span>{
+    context.push(<span class="hljs-string">'\n'</span> + \`  \`.repeat(n))
+  }
+  <span class="hljs-keyword">return</span> context
+}
+</code></pre>
+
+<p data-nodeid="19">这个上下文对象 context 维护了 generate 过程的一些配置，比如 mode、prefixIdentifiers；也维护了 generate 过程的一些状态数据，比如当前生成的代码 code，当前生成代码的缩进 indentLevel 等。</p>
+<p data-nodeid="20">此外，context 还包含了在 generate 过程中可能会调用的一些辅助函数，接下来我会介绍几个常用的方法，它们会在整个代码生成节点过程中经常被用到。</p>
+<ul data-nodeid="21">
+<li data-nodeid="22">
+<p data-nodeid="23"><code data-backticks="1" data-nodeid="100">push(code)</code>，就是在当前的代码 context.code 后追加 code 来更新它的值。</p>
+</li>
+<li data-nodeid="24">
+<p data-nodeid="25"><code data-backticks="1" data-nodeid="102">indent()</code>，它的作用就是增加代码的缩进，它会让上下文维护的代码缩进 context.indentLevel 加 1，内部会执行 newline 方法，添加一个换行符，以及两倍indentLevel 对应的空格来表示缩进的长度。</p>
+</li>
+<li data-nodeid="26">
+<p data-nodeid="27"><code data-backticks="1" data-nodeid="104">deindent()</code>，和 indent 相反，它会减少代码的缩进，让上下文维护的代码缩进 context.indentLevel 减 1，在内部会执行 newline 方法去添加一个换行符，并减少两倍indentLevel 对应的空格的缩进长度。</p>
+</li>
+</ul>
+<p data-nodeid="28">上下文创建完毕后，接下来就到了真正的代码生成阶段，在分析的过程中我会结合示例讲解，让你更直观地理解整个代码的生成过程，我们先来看生成预设代码。</p>
+<h3 data-nodeid="29">生成预设代码</h3>
+<p data-nodeid="30">因为 mode 是 module，所以会执行 genModulePreamble 生成预设代码，我们来看它的实现：</p>
+<pre class="lang-java hljs" data-nodeid="5271"><code data-language="java"><span class="hljs-function">function <span class="hljs-title">genModulePreamble</span><span class="hljs-params">(ast, context, genScopeId)</span> </span>{
+  <span class="hljs-keyword">const</span> { push, newline, optimizeBindings, runtimeModuleName } = context
+  
+  <span class="hljs-comment">// 处理 scopeId</span>
+  
+  <span class="hljs-keyword">if</span> (ast.helpers.length) {
+     <span class="hljs-comment">// 生成 import 声明代码</span>
+    <span class="hljs-keyword">if</span> (optimizeBindings) {
+      push(\`<span class="hljs-keyword">import</span> { \${ast.helpers
+        .map(s =&gt; helperNameMap[s])
+        .join(<span class="hljs-string">', '</span>)} } from \${JSON.stringify(runtimeModuleName)}\n\`)
+      push(\`\n<span class="hljs-comment">// Binding optimization for webpack code-split\nconst \${ast.helpers</span>
+        .map(s =&gt; \`_\${helperNameMap[s]} = \${helperNameMap[s]}\`)
+        .join(<span class="hljs-string">', '</span>)}\n\`)
+    }
+    <span class="hljs-keyword">else</span> {
+      push(\`<span class="hljs-keyword">import</span> { \${ast.helpers
+        .map(s =&gt; \`\${helperNameMap[s]} as _\${helperNameMap[s]}\`)
+        .join(<span class="hljs-string">', '</span>)} } from \${JSON.stringify(runtimeModuleName)}\n\`)
+    }
+  }
+  <span class="hljs-comment">// 处理 ssrHelpers</span>
+  
+  <span class="hljs-comment">// 处理 imports</span>
+  
+  <span class="hljs-comment">// 处理 scopeId</span>
+  
+  genHoists(ast.hoists, context)
+  newline()
+  push(\`export \`)
+}
+</code></pre>
+
+<p data-nodeid="32">下面我们结合前面的示例来分析这个过程，此时 genScopeId 为 false，所以相关逻辑我们可以不看。ast.helpers 是在 transform 阶段通过 context.helper 方法添加的，它的值如下：</p>
+<pre class="lang-js hljs" data-nodeid="5893"><code data-language="js">[
+  <span class="hljs-built_in">Symbol</span>(resolveComponent),
+  <span class="hljs-built_in">Symbol</span>(createVNode),
+  <span class="hljs-built_in">Symbol</span>(createCommentVNode),
+  <span class="hljs-built_in">Symbol</span>(toDisplayString),
+  <span class="hljs-built_in">Symbol</span>(openBlock),
+  <span class="hljs-built_in">Symbol</span>(createBlock)
+]
+</code></pre>
+
+
+<p data-nodeid="34">ast.helpers 存储了 Symbol 对象的数组，我们可以从 helperNameMap 中找到每个 Symbol 对象对应的字符串，helperNameMap 的定义如下：</p>
+<pre class="lang-js hljs" data-nodeid="6515"><code data-language="js"><span class="hljs-keyword">const</span> helperNameMap = {
+  [FRAGMENT]: <span class="hljs-string">\`Fragment\`</span>,
+  [TELEPORT]: <span class="hljs-string">\`Teleport\`</span>,
+  [SUSPENSE]: <span class="hljs-string">\`Suspense\`</span>,
+  [KEEP_ALIVE]: <span class="hljs-string">\`KeepAlive\`</span>,
+  [BASE_TRANSITION]: <span class="hljs-string">\`BaseTransition\`</span>,
+  [OPEN_BLOCK]: <span class="hljs-string">\`openBlock\`</span>,
+  [CREATE_BLOCK]: <span class="hljs-string">\`createBlock\`</span>,
+  [CREATE_VNODE]: <span class="hljs-string">\`createVNode\`</span>,
+  [CREATE_COMMENT]: <span class="hljs-string">\`createCommentVNode\`</span>,
+  [CREATE_TEXT]: <span class="hljs-string">\`createTextVNode\`</span>,
+  [CREATE_STATIC]: <span class="hljs-string">\`createStaticVNode\`</span>,
+  [RESOLVE_COMPONENT]: <span class="hljs-string">\`resolveComponent\`</span>,
+  [RESOLVE_DYNAMIC_COMPONENT]: <span class="hljs-string">\`resolveDynamicComponent\`</span>,
+  [RESOLVE_DIRECTIVE]: <span class="hljs-string">\`resolveDirective\`</span>,
+  [WITH_DIRECTIVES]: <span class="hljs-string">\`withDirectives\`</span>,
+  [RENDER_LIST]: <span class="hljs-string">\`renderList\`</span>,
+  [RENDER_SLOT]: <span class="hljs-string">\`renderSlot\`</span>,
+  [CREATE_SLOTS]: <span class="hljs-string">\`createSlots\`</span>,
+  [TO_DISPLAY_STRING]: <span class="hljs-string">\`toDisplayString\`</span>,
+  [MERGE_PROPS]: <span class="hljs-string">\`mergeProps\`</span>,
+  [TO_HANDLERS]: <span class="hljs-string">\`toHandlers\`</span>,
+  [CAMELIZE]: <span class="hljs-string">\`camelize\`</span>,
+  [SET_BLOCK_TRACKING]: <span class="hljs-string">\`setBlockTracking\`</span>,
+  [PUSH_SCOPE_ID]: <span class="hljs-string">\`pushScopeId\`</span>,
+  [POP_SCOPE_ID]: <span class="hljs-string">\`popScopeId\`</span>,
+  [WITH_SCOPE_ID]: <span class="hljs-string">\`withScopeId\`</span>,
+  [WITH_CTX]: <span class="hljs-string">\`withCtx\`</span>
+}
+</code></pre>
+
+
+<p data-nodeid="36">由于 optimizeBindings 是 false，所以会执行如下代码：</p>
+<pre class="lang-java hljs" data-nodeid="6826"><code data-language="java">push(\`<span class="hljs-keyword">import</span> { \${ast.helpers
+  .map(s =&gt; \`\${helperNameMap[s]} as _\${helperNameMap[s]}\`)
+  .join(<span class="hljs-string">', '</span>)} } from \${JSON.stringify(runtimeModuleName)}\n\`)
+}
+</code></pre>
+
+<p data-nodeid="38">最终会生成这些代码，并更新到 context.code 中：</p>
+<pre class="lang-java hljs" data-nodeid="7137"><code data-language="java"><span class="hljs-keyword">import</span> { resolveComponent as _resolveComponent, createVNode as _createVNode, createCommentVNode as _createCommentVNode, toDisplayString as _toDisplayString, openBlock as _openBlock, createBlock as _createBlock } from <span class="hljs-string">"vue"</span>
+</code></pre>
+
+<p data-nodeid="40">通过生成的代码，我们可以直观地感受到，这里就是从 Vue 中引入了一些辅助方法，那么为什么需要引入这些辅助方法呢，这就和 Vue.js 3.0 的设计有关了。</p>
+<p data-nodeid="41">在 Vue.js 2.x 中，创建 VNode 的方法比如 $createElement、_c 这些都是挂载在组件的实例上，在生成渲染函数的时候，直接从组件实例 vm 中访问这些方法即可。</p>
+<p data-nodeid="42">而到了 Vue.js 3.0，创建 VNode 的方法 createVNode 是直接通过模块的方式导出，其它方法比如 resolveComponent、openBlock ，都是类似的，所以我们首先需要生成这些 import 声明的预设代码。</p>
+<p data-nodeid="43">我们接着往下看，ssrHelpers 是 undefined，imports 的数组长度为空，genScopeId 为 false，所以这些内部逻辑都不会执行，接着执行 genHoists 生成静态提升的相关代码，我们来看它的实现：</p>
+<pre class="lang-java hljs" data-nodeid="7448"><code data-language="java"><span class="hljs-function">function <span class="hljs-title">genHoists</span><span class="hljs-params">(hoists, context)</span> </span>{
+  <span class="hljs-keyword">if</span> (!hoists.length) {
+    <span class="hljs-keyword">return</span>
+  }
+  context.pure = <span class="hljs-keyword">true</span>
+  <span class="hljs-keyword">const</span> { push, newline } = <span class="hljs-function">context
+  
+  <span class="hljs-title">newline</span><span class="hljs-params">()</span>
+  hoists.<span class="hljs-title">forEach</span><span class="hljs-params">((exp, i)</span> </span>=&gt; {
+    <span class="hljs-keyword">if</span> (exp) {
+      push(\`<span class="hljs-keyword">const</span> _hoisted_\${i + <span class="hljs-number">1</span>} = \`)
+      genNode(exp, context)
+      newline()
+    }
+  })
+  
+  context.pure = <span class="hljs-keyword">false</span>
+}
+</code></pre>
+
+<p data-nodeid="45">首先通过执行 newline 生成一个空行，然后遍历 hoists 数组，生成静态提升变量定义的方法。此时 hoists 的值是这样的：</p>
+<pre class="lang-java hljs" data-nodeid="7759"><code data-language="java">[
+  {
+    <span class="hljs-string">"type"</span>: <span class="hljs-number">15</span>, <span class="hljs-comment">/* JS_OBJECT_EXPRESSION */</span>
+    <span class="hljs-string">"properties"</span>: [
+      {
+        <span class="hljs-string">"type"</span>: <span class="hljs-number">16</span>, <span class="hljs-comment">/* JS_PROPERTY */</span>
+        <span class="hljs-string">"key"</span>: {
+          <span class="hljs-string">"type"</span>: <span class="hljs-number">4</span>, <span class="hljs-comment">/* SIMPLE_EXPRESSION */</span>
+          <span class="hljs-string">"isConstant"</span>: <span class="hljs-keyword">false</span>,
+          <span class="hljs-string">"content"</span>: <span class="hljs-string">"class"</span>,
+          <span class="hljs-string">"isStatic"</span>: <span class="hljs-keyword">true</span>
+        },
+        <span class="hljs-string">"value"</span>: {
+          <span class="hljs-string">"type"</span>: <span class="hljs-number">4</span>, <span class="hljs-comment">/* SIMPLE_EXPRESSION */</span>
+          <span class="hljs-string">"isConstant"</span>: <span class="hljs-keyword">false</span>,
+          <span class="hljs-string">"content"</span>: <span class="hljs-string">"app"</span>,
+          <span class="hljs-string">"isStatic"</span>: <span class="hljs-keyword">true</span>
+        }
+      }
+    ]
+  },
+  {
+    <span class="hljs-string">"type"</span>: <span class="hljs-number">15</span>, <span class="hljs-comment">/* JS_OBJECT_EXPRESSION */</span>
+    <span class="hljs-string">"properties"</span>: [
+      {
+        <span class="hljs-string">"type"</span>: <span class="hljs-number">16</span>, <span class="hljs-comment">/* JS_PROPERTY */</span>
+        <span class="hljs-string">"key"</span>: {
+          <span class="hljs-string">"type"</span>: <span class="hljs-number">4</span>, <span class="hljs-comment">/* SIMPLE_EXPRESSION */</span>
+          <span class="hljs-string">"isConstant"</span>: <span class="hljs-keyword">false</span>,
+          <span class="hljs-string">"content"</span>: <span class="hljs-string">"key"</span>,
+          <span class="hljs-string">"isStatic"</span>: <span class="hljs-keyword">true</span>
+        },
+        <span class="hljs-string">"value"</span>: {
+          <span class="hljs-string">"type"</span>: <span class="hljs-number">4</span>, <span class="hljs-comment">/* SIMPLE_EXPRESSION */</span>
+          <span class="hljs-string">"isConstant"</span>: <span class="hljs-keyword">false</span>,
+          <span class="hljs-string">"content"</span>: <span class="hljs-string">"1"</span>,
+          <span class="hljs-string">"isStatic"</span>: <span class="hljs-keyword">false</span>
+        }
+      }
+    ]
+  },
+  {
+    <span class="hljs-string">"type"</span>: <span class="hljs-number">13</span>, <span class="hljs-comment">/* VNODE_CALL */</span>
+    <span class="hljs-string">"tag"</span>: <span class="hljs-string">"\"p\""</span>,
+    <span class="hljs-string">"children"</span>: {
+      <span class="hljs-string">"type"</span>: <span class="hljs-number">2</span>, <span class="hljs-comment">/* ELEMENT */</span>
+      <span class="hljs-string">"content"</span>: <span class="hljs-string">"static"</span>
+    },                                                  
+    <span class="hljs-string">"patchFlag"</span>: <span class="hljs-string">"-1 /* HOISTED */"</span>,
+    <span class="hljs-string">"isBlock"</span>: <span class="hljs-keyword">false</span>,
+    <span class="hljs-string">"disableTracking"</span>: <span class="hljs-keyword">false</span>
+  },
+  {
+    <span class="hljs-string">"type"</span>: <span class="hljs-number">13</span>, <span class="hljs-comment">/* VNODE_CALL */</span>
+    <span class="hljs-string">"tag"</span>: <span class="hljs-string">"\"p\""</span>,
+    <span class="hljs-string">"children"</span>: {
+      <span class="hljs-string">"type"</span>: <span class="hljs-number">2</span>, <span class="hljs-comment">/* ELEMENT */</span>
+      <span class="hljs-string">"content"</span>: <span class="hljs-string">"static"</span>,
+    },
+    <span class="hljs-string">"patchFlag"</span>: <span class="hljs-string">"-1 /* HOISTED */"</span>,
+    <span class="hljs-string">"isBlock"</span>: <span class="hljs-keyword">false</span>,
+    <span class="hljs-string">"disableTracking"</span>: <span class="hljs-keyword">false</span>,
+  }
+]
+</code></pre>
+
+<p data-nodeid="47">这里，hoists 数组的长度为 4，前两个都是 JavaScript 对象表达式节点，后两个是 VNodeCall 节点，通过 genNode 我们可以把这些节点生成对应的代码，这个方法我们后续会详细说明，这里先略过。</p>
+<p data-nodeid="48">然后通过遍历 hoists 我们生成如下代码：</p>
+<pre class="lang-js hljs" data-nodeid="8381"><code data-language="js"><span class="hljs-keyword">import</span> { resolveComponent <span class="hljs-keyword">as</span> _resolveComponent, createVNode <span class="hljs-keyword">as</span> _createVNode, createCommentVNode <span class="hljs-keyword">as</span> _createCommentVNode, toDisplayString <span class="hljs-keyword">as</span> _toDisplayString, openBlock <span class="hljs-keyword">as</span> _openBlock, createBlock <span class="hljs-keyword">as</span> _createBlock } <span class="hljs-keyword">from</span> <span class="hljs-string">"vue"</span>
+<span class="hljs-keyword">const</span> _hoisted_1 = { <span class="hljs-attr">class</span>: <span class="hljs-string">"app"</span> }
+<span class="hljs-keyword">const</span> _hoisted_2 = { <span class="hljs-attr">key</span>: <span class="hljs-number">1</span> }
+<span class="hljs-keyword">const</span> _hoisted_3 = <span class="hljs-comment">/*#__PURE__*/</span>_createVNode(<span class="hljs-string">"p"</span>, <span class="hljs-literal">null</span>, <span class="hljs-string">"static"</span>, <span class="hljs-number">-1</span> <span class="hljs-comment">/* HOISTED */</span>)
+<span class="hljs-keyword">const</span> _hoisted_4 = <span class="hljs-comment">/*#__PURE__*/</span>_createVNode(<span class="hljs-string">"p"</span>, <span class="hljs-literal">null</span>, <span class="hljs-string">"static"</span>, <span class="hljs-number">-1</span> <span class="hljs-comment">/* HOISTED */</span>)
+</code></pre>
+
+
+<p data-nodeid="50">可以看到，除了从 Vue 中导入辅助方法，我们还创建了静态提升的变量。</p>
+<p data-nodeid="51">我们回到 genModulePreamble，接着会执行<code data-backticks="1" data-nodeid="124">newline()</code>和<code data-backticks="1" data-nodeid="126">push(export )</code>，非常好理解，也就是添加了一个空行和 export 字符串。</p>
+<p data-nodeid="52">至此，预设代码生成完毕，我们就得到了这些代码：</p>
+<pre class="lang-js hljs" data-nodeid="9003"><code data-language="js"><span class="hljs-keyword">import</span> { resolveComponent <span class="hljs-keyword">as</span> _resolveComponent, createVNode <span class="hljs-keyword">as</span> _createVNode, createCommentVNode <span class="hljs-keyword">as</span> _createCommentVNode, toDisplayString <span class="hljs-keyword">as</span> _toDisplayString, openBlock <span class="hljs-keyword">as</span> _openBlock, createBlock <span class="hljs-keyword">as</span> _createBlock } <span class="hljs-keyword">from</span> <span class="hljs-string">"vue"</span>
+<span class="hljs-keyword">const</span> _hoisted_1 = { <span class="hljs-attr">class</span>: <span class="hljs-string">"app"</span> }
+<span class="hljs-keyword">const</span> _hoisted_2 = { <span class="hljs-attr">key</span>: <span class="hljs-number">1</span> }
+<span class="hljs-keyword">const</span> _hoisted_3 = <span class="hljs-comment">/*#__PURE__*/</span>_createVNode(<span class="hljs-string">"p"</span>, <span class="hljs-literal">null</span>, <span class="hljs-string">"static"</span>, <span class="hljs-number">-1</span> <span class="hljs-comment">/* HOISTED */</span>)
+<span class="hljs-keyword">const</span> _hoisted_4 = <span class="hljs-comment">/*#__PURE__*/</span>_createVNode(<span class="hljs-string">"p"</span>, <span class="hljs-literal">null</span>, <span class="hljs-string">"static"</span>, <span class="hljs-number">-1</span> <span class="hljs-comment">/* HOISTED */</span>)
+<span class="hljs-keyword">export</span> 
+</code></pre>
+
+
+<h3 data-nodeid="54">生成渲染函数</h3>
+<p data-nodeid="55">接下来，就是生成渲染函数了，我们回到 generate 函数：</p>
+<pre class="lang-java hljs" data-nodeid="9314"><code data-language="java"><span class="hljs-keyword">if</span> (!ssr) {
+push(\`<span class="hljs-function">function <span class="hljs-title">render</span><span class="hljs-params">(_ctx, _cache)</span> </span>{\`);
+}
+<span class="hljs-keyword">else</span> {
+push(\`<span class="hljs-function">function <span class="hljs-title">ssrRender</span><span class="hljs-params">(_ctx, _push, _parent, _attrs)</span> </span>{\`);
+}
+indent();
+</code></pre>
+
+<p data-nodeid="57">由于 ssr 为 false, 所以生成如下代码：</p>
+<pre class="lang-js hljs" data-nodeid="9936"><code data-language="js"><span class="hljs-keyword">import</span> { resolveComponent <span class="hljs-keyword">as</span> _resolveComponent, createVNode <span class="hljs-keyword">as</span> _createVNode, createCommentVNode <span class="hljs-keyword">as</span> _createCommentVNode, toDisplayString <span class="hljs-keyword">as</span> _toDisplayString, openBlock <span class="hljs-keyword">as</span> _openBlock, createBlock <span class="hljs-keyword">as</span> _createBlock } <span class="hljs-keyword">from</span> <span class="hljs-string">"vue"</span>
+<span class="hljs-keyword">const</span> _hoisted_1 = { <span class="hljs-attr">class</span>: <span class="hljs-string">"app"</span> }
+<span class="hljs-keyword">const</span> _hoisted_2 = { <span class="hljs-attr">key</span>: <span class="hljs-number">1</span> }
+<span class="hljs-keyword">const</span> _hoisted_3 = <span class="hljs-comment">/*#__PURE__*/</span>_createVNode(<span class="hljs-string">"p"</span>, <span class="hljs-literal">null</span>, <span class="hljs-string">"static"</span>, <span class="hljs-number">-1</span> <span class="hljs-comment">/* HOISTED */</span>)
+<span class="hljs-keyword">const</span> _hoisted_4 = <span class="hljs-comment">/*#__PURE__*/</span>_createVNode(<span class="hljs-string">"p"</span>, <span class="hljs-literal">null</span>, <span class="hljs-string">"static"</span>, <span class="hljs-number">-1</span> <span class="hljs-comment">/* HOISTED */</span>)
+<span class="hljs-keyword">export</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">render</span>(<span class="hljs-params">_ctx, _cache</span>) </span>{
+</code></pre>
+
+
+<p data-nodeid="59">注意，<strong data-nodeid="137">这里代码的最后一行有 2 个空格的缩进</strong>。</p>
+<p data-nodeid="60">另外，由于 useWithBlock 为 false，所以我们也不需生成 with 相关的代码。而且，这里我们创建了 render 的函数声明，接下来的代码都是在生成 render 的函数体。</p>
+<h3 data-nodeid="61">生成资源声明代码</h3>
+<p data-nodeid="62">在 render 函数体的内部，我们首先要生成资源声明代码：</p>
+<pre class="lang-java hljs" data-nodeid="10247"><code data-language="java"><span class="hljs-comment">// 生成自定义组件声明代码</span>
+<span class="hljs-keyword">if</span> (ast.components.length) {
+  genAssets(ast.components, <span class="hljs-string">'component'</span>, context);
+  <span class="hljs-keyword">if</span> (ast.directives.length || ast.temps &gt; <span class="hljs-number">0</span>) {
+    newline();
+  }
+}
+<span class="hljs-comment">// 生成自定义指令声明代码</span>
+<span class="hljs-keyword">if</span> (ast.directives.length) {
+  genAssets(ast.directives, <span class="hljs-string">'directive'</span>, context);
+  <span class="hljs-keyword">if</span> (ast.temps &gt; <span class="hljs-number">0</span>) {
+    newline();
+  }
+}
+<span class="hljs-comment">// 生成临时变量代码</span>
+<span class="hljs-keyword">if</span> (ast.temps &gt; <span class="hljs-number">0</span>) {
+  push(\`let \`);
+  <span class="hljs-keyword">for</span> (let i = <span class="hljs-number">0</span>; i &lt; ast.temps; i++) {
+    push(\`\${i &gt; <span class="hljs-number">0</span> ? \`, \` : \`\`}_temp\${i}\`);
+  }
+}
+</code></pre>
+
+<p data-nodeid="64">在我们的示例中，directives 数组长度为 0，temps 的值是 0，所以自定义指令和临时变量代码生成的相关逻辑跳过，而这里 components的值是<code data-backticks="1" data-nodeid="142">["hello"]</code>。</p>
+<p data-nodeid="65">接着就通过 genAssets 去生成自定义组件声明代码，我们来看一下它的实现：</p>
+<pre class="lang-java hljs" data-nodeid="10558"><code data-language="java"><span class="hljs-function">function <span class="hljs-title">genAssets</span><span class="hljs-params">(assets, type, { helper, push, newline })</span> </span>{
+  <span class="hljs-keyword">const</span> resolver = helper(type === <span class="hljs-string">'component'</span> ? RESOLVE_COMPONENT : RESOLVE_DIRECTIVE)
+  <span class="hljs-keyword">for</span> (let i = <span class="hljs-number">0</span>; i &lt; assets.length; i++) {
+    <span class="hljs-keyword">const</span> id = assets[i]
+    push(\`<span class="hljs-keyword">const</span> \${toValidAssetId(id, type)} = \${resolver}(\${JSON.stringify(id)})\`)
+    <span class="hljs-keyword">if</span> (i &lt; assets.length - <span class="hljs-number">1</span>) {
+      newline()
+    }
+  }
+}
+</code></pre>
+
+<p data-nodeid="67">这里的 helper 函数就是从前面提到的 helperNameMap 中查找对应的字符串，对于 component，返回的就是 resolveComponent。</p>
+<p data-nodeid="68">接着会遍历 assets 数组，生成自定义组件声明代码，在这个过程中，它们会把变量通过 toValidAssetId 进行一层包装：</p>
+<pre class="lang-java hljs" data-nodeid="10869"><code data-language="java"><span class="hljs-function">function <span class="hljs-title">toValidAssetId</span><span class="hljs-params">(name, type)</span> </span>{
+  <span class="hljs-keyword">return</span> \`_\${type}_\${name.replace(/[^\w]/g, <span class="hljs-string">'_'</span>)}\`;
+}
+</code></pre>
+
+<p data-nodeid="70">比如 hello 组件，执行 toValidAssetId 就变成了 _component_hello。</p>
+<p data-nodeid="71">因此对于我们的示例而言，genAssets 后生成的代码是这样的：</p>
+<pre class="lang-js hljs" data-nodeid="11491"><code data-language="js"><span class="hljs-keyword">import</span> { resolveComponent <span class="hljs-keyword">as</span> _resolveComponent, createVNode <span class="hljs-keyword">as</span> _createVNode, createCommentVNode <span class="hljs-keyword">as</span> _createCommentVNode, toDisplayString <span class="hljs-keyword">as</span> _toDisplayString, openBlock <span class="hljs-keyword">as</span> _openBlock, createBlock <span class="hljs-keyword">as</span> _createBlock } <span class="hljs-keyword">from</span> <span class="hljs-string">"vue"</span>
+<span class="hljs-keyword">const</span> _hoisted_1 = { <span class="hljs-attr">class</span>: <span class="hljs-string">"app"</span> }
+<span class="hljs-keyword">const</span> _hoisted_2 = { <span class="hljs-attr">key</span>: <span class="hljs-number">1</span> }
+<span class="hljs-keyword">const</span> _hoisted_3 = <span class="hljs-comment">/*#__PURE__*/</span>_createVNode(<span class="hljs-string">"p"</span>, <span class="hljs-literal">null</span>, <span class="hljs-string">"static"</span>, <span class="hljs-number">-1</span> <span class="hljs-comment">/* HOISTED */</span>)
+<span class="hljs-keyword">const</span> _hoisted_4 = <span class="hljs-comment">/*#__PURE__*/</span>_createVNode(<span class="hljs-string">"p"</span>, <span class="hljs-literal">null</span>, <span class="hljs-string">"static"</span>, <span class="hljs-number">-1</span> <span class="hljs-comment">/* HOISTED */</span>)
+<span class="hljs-keyword">export</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">render</span>(<span class="hljs-params">_ctx, _cache</span>) </span>{
+  <span class="hljs-keyword">const</span> _component_hello = _resolveComponent(<span class="hljs-string">"hello"</span>)
+</code></pre>
+
+
+<p data-nodeid="73">这很好理解，通过 resolveComponent，我们就可以解析到注册的自定义组件对象，然后在后面创建组件 vnode 的时候当做参数传入。</p>
+<p data-nodeid="74">回到 generate 函数，接下来会执行如下代码：</p>
+<pre class="lang-java hljs" data-nodeid="11802"><code data-language="java"><span class="hljs-keyword">if</span> (ast.components.length || ast.directives.length || ast.temps) {
+  push(\`\n\`);
+  newline();
+}
+<span class="hljs-keyword">if</span> (!ssr) {
+  push(\`<span class="hljs-keyword">return</span> \`);
+}
+</code></pre>
+
+<p data-nodeid="76">这里是指，如果生成了资源声明代码，则在尾部添加一个换行符，然后再生成一个空行，并且如果不是 ssr，则再添加一个 return 字符串，此时得到的代码结果如下：</p>
+<pre class="lang-js hljs" data-nodeid="12735"><code data-language="js"><span class="hljs-keyword">import</span> { resolveComponent <span class="hljs-keyword">as</span> _resolveComponent, createVNode <span class="hljs-keyword">as</span> _createVNode, createCommentVNode <span class="hljs-keyword">as</span> _createCommentVNode, toDisplayString <span class="hljs-keyword">as</span> _toDisplayString, openBlock <span class="hljs-keyword">as</span> _openBlock, createBlock <span class="hljs-keyword">as</span> _createBlock } <span class="hljs-keyword">from</span> <span class="hljs-string">"vue"</span>
+<span class="hljs-keyword">const</span> _hoisted_1 = { <span class="hljs-attr">class</span>: <span class="hljs-string">"app"</span> }
+<span class="hljs-keyword">const</span> _hoisted_2 = { <span class="hljs-attr">key</span>: <span class="hljs-number">1</span> }
+<span class="hljs-keyword">const</span> _hoisted_3 = <span class="hljs-comment">/*#__PURE__*/</span>_createVNode(<span class="hljs-string">"p"</span>, <span class="hljs-literal">null</span>, <span class="hljs-string">"static"</span>, <span class="hljs-number">-1</span> <span class="hljs-comment">/* HOISTED */</span>)
+<span class="hljs-keyword">const</span> _hoisted_4 = <span class="hljs-comment">/*#__PURE__*/</span>_createVNode(<span class="hljs-string">"p"</span>, <span class="hljs-literal">null</span>, <span class="hljs-string">"static"</span>, <span class="hljs-number">-1</span> <span class="hljs-comment">/* HOISTED */</span>)
+<span class="hljs-keyword">export</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">render</span>(<span class="hljs-params">_ctx, _cache</span>) </span>{
+  <span class="hljs-keyword">const</span> _component_hello = _resolveComponent(<span class="hljs-string">"hello"</span>)
+  <span class="hljs-keyword">return</span> 
+</code></pre>
+
+
+
+<p data-nodeid="78">好的，我们就先分析到这里，下节课继续来看生成创建 VNode 树的表达式的过程。</p>
+<blockquote data-nodeid="79">
+<p data-nodeid="80">本节课的相关代码在源代码中的位置如下：<br>
+packages/compiler-core/src/codegen.ts</p>
+</blockquote></div>
+
+</body></html>

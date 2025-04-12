@@ -1,0 +1,1454 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>07 | 数据分片：如何实现分库、分表、分库+分表以及强制路由？（下）</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>07 | 数据分片：如何实现分库、分表、分库+分表以及强制路由？（下）</h1><p data-nodeid="1" class="">在上一课时中，我们基于业务场景介绍了如何将单库单表架构改造成分库架构。今天我们继续后续的改造工作，主要涉及如何实现分表、分库+分表以及如何实现强制路由。</p>
+<h3 data-nodeid="2">系统改造：如何实现分表？</h3>
+<p data-nodeid="3">相比分库，分表操作是在同一个数据库中，完成对一张表的拆分工作。所以从数据源上讲，我们只需要定义一个 DataSource 对象即可，这里把这个新的 DataSource 命名为 ds2：</p>
+<pre class="lang-java hljs" data-nodeid="4"><code data-language="java">spring.shardingsphere.datasource.names=ds2
+&nbsp;
+spring.shardingsphere.datasource.ds2.type=com.alibaba.druid.pool.DruidDataSource
+spring.shardingsphere.datasource.ds2.driver-<span class="hljs-class"><span class="hljs-keyword">class</span>-<span class="hljs-title">name</span></span>=com.mysql.jdbc.Driver
+spring.shardingsphere.datasource.ds2.url=jdbc:mysql:<span class="hljs-comment">//localhost:3306/ds2</span>
+spring.shardingsphere.datasource.ds2.username=root
+spring.shardingsphere.datasource.ds2.password=root
+</code></pre>
+<p data-nodeid="5">同样，为了提高访问性能，我们设置了绑定表和广播表：</p>
+<pre class="lang-java hljs" data-nodeid="6"><code data-language="java">spring.shardingsphere.sharding.binding-tables=health_record, health_task
+spring.shardingsphere.sharding.broadcast-tables=health_level
+</code></pre>
+<p data-nodeid="7">现在，让我们再次回想起 TableRuleConfiguration 配置，该配置中的 tableShardingStrategyConfig 代表分表策略。与用于分库策略的 databaseShardingStrategyConfig 一样，设置分表策略的方式也是指定一个用于分表的分片键以及分片表达式：</p>
+<pre class="lang-java hljs" data-nodeid="8"><code data-language="java">spring.shardingsphere.sharding.tables.health_record.table-strategy.inline.sharding-column=record_id
+spring.shardingsphere.sharding.tables.health_record.table-strategy.inline.algorithm-expression=health_record$-&gt;{record_id % <span class="hljs-number">2</span>}
+</code></pre>
+<p data-nodeid="9">在代码中可以看到，对于 health_record 表而言，我们设置它用于分表的分片键为 record_id，以及它的分片行表达式为 health_record$-&gt;{record_id % 2}。也就是说，我们会根据 record_id 将 health_record 单表拆分成 health_record0 和 health_record1 这两张分表。<br>
+基于分表策略，再加上 actualDataNodes 和 keyGeneratorConfig 配置项，我们就可以完成对 health_record 表的完整分表配置：</p>
+<pre class="lang-java hljs" data-nodeid="10"><code data-language="java">spring.shardingsphere.sharding.tables.health_record.actual-data-nodes=ds2.health_record$-&gt;{<span class="hljs-number">0.</span>.<span class="hljs-number">1</span>}
+spring.shardingsphere.sharding.tables.health_record.table-strategy.inline.sharding-column=record_id
+spring.shardingsphere.sharding.tables.health_record.table-strategy.inline.algorithm-expression=health_record$-&gt;{record_id % <span class="hljs-number">2</span>}
+spring.shardingsphere.sharding.tables.health_record.key-generator.column=record_id
+spring.shardingsphere.sharding.tables.health_record.key-generator.type=SNOWFLAKE
+spring.shardingsphere.sharding.tables.health_record.key-generator.props.worker.id=<span class="hljs-number">33</span>
+</code></pre>
+<p data-nodeid="11">对于 health_task 表而言，可以采用同样的配置方法完成分表操作：</p>
+<pre class="lang-java hljs" data-nodeid="12"><code data-language="java">spring.shardingsphere.sharding.tables.health_task.actual-data-nodes=ds2.health_task$-&gt;{<span class="hljs-number">0.</span>.<span class="hljs-number">1</span>}
+spring.shardingsphere.sharding.tables.health_task.table-strategy.inline.sharding-column=record_id
+spring.shardingsphere.sharding.tables.health_task.table-strategy.inline.algorithm-expression=health_task$-&gt;{record_id % <span class="hljs-number">2</span>}
+spring.shardingsphere.sharding.tables.health_task.key-generator.column=task_id
+spring.shardingsphere.sharding.tables.health_task.key-generator.type=SNOWFLAKE
+spring.shardingsphere.sharding.tables.health_task.key-generator.props.worker.id=<span class="hljs-number">33</span>
+</code></pre>
+<p data-nodeid="13">可以看到，由于 health_task 与 health_record 互为绑定表，所以在 health_task 的配置中，我们同样基于 record_id 列进行分片，也就是说，我们会根据 record_id 将 health_task 单表拆分成 health_task0 和 health_task1 两张分表。当然，自增键的生成列还是需要设置成 health_task 表中的 task_id 字段。</p>
+<p data-nodeid="14">这样，完整的分表配置就完成了。现在，让我们重新执行 HealthRecordTest 单元测试，会发现数据已经进行了正确的分表。下图是分表之后的 health_record0 和 health_record1 表：</p>
+<p data-nodeid="15"><img src="https://s0.lgstatic.com/i/image/M00/2D/4A/Ciqc1F8DAu2AZENtAAAorUxRubo162.png" alt="Drawing 0.png" data-nodeid="155"><br>
+分表后的 health_record0 表数据</p>
+<p data-nodeid="16"><img src="https://s0.lgstatic.com/i/image/M00/2D/55/CgqCHl8DAvqAd70QAAAoo2znVos400.png" alt="Drawing 1.png" data-nodeid="162"><br>
+分表后的 health_record1 表数据</p>
+<p data-nodeid="17">而这是分表之后的 health_task0 和 health_task1 表：</p>
+<p data-nodeid="18"><img src="https://s0.lgstatic.com/i/image/M00/2D/4A/Ciqc1F8DAwSAYM8IAAAwZnweE9o329.png" alt="Drawing 2.png" data-nodeid="174"><br>
+分表后的 health_task0 表数据</p>
+<p data-nodeid="19"><img src="https://s0.lgstatic.com/i/image/M00/2D/55/CgqCHl8DAxuAKVVqAAAv_CCh4xs830.png" alt="Drawing 3.png" data-nodeid="181"><br>
+分表后的 health_task1表数据</p>
+<h3 data-nodeid="20">系统改造：如何实现分库+分表？</h3>
+<p data-nodeid="21">在完成独立的分库和分表操作之后，系统改造的第三步是尝试把分库和分表结合起来。这个过程听起来比较复杂，但事实上，基于 ShardingSphere 提供的强大配置体系，开发人员要做的只是将分表针对分库和分表的配置项整合在一起就可以了。这里我们重新创建 3 个新的数据源，分别为 ds3、ds4 和 ds5:</p>
+<pre class="lang-java hljs" data-nodeid="22"><code data-language="java">spring.shardingsphere.datasource.names=ds3,ds4,ds5
+&nbsp;
+spring.shardingsphere.datasource.ds3.type=com.alibaba.druid.pool.DruidDataSource
+spring.shardingsphere.datasource.ds3.driver-<span class="hljs-class"><span class="hljs-keyword">class</span>-<span class="hljs-title">name</span></span>=com.mysql.jdbc.Driver
+spring.shardingsphere.datasource.ds3.url=jdbc:mysql:<span class="hljs-comment">//localhost:3306/ds3</span>
+spring.shardingsphere.datasource.ds3.username=root
+spring.shardingsphere.datasource.ds3.password=root
+&nbsp;
+spring.shardingsphere.datasource.ds4.type=com.alibaba.druid.pool.DruidDataSource
+spring.shardingsphere.datasource.ds4.driver-<span class="hljs-class"><span class="hljs-keyword">class</span>-<span class="hljs-title">name</span></span>=com.mysql.jdbc.Driver
+spring.shardingsphere.datasource.ds4.url=jdbc:mysql:<span class="hljs-comment">//localhost:3306/ds4</span>
+spring.shardingsphere.datasource.ds4.username=root
+spring.shardingsphere.datasource.ds4.password=root
+&nbsp;
+spring.shardingsphere.datasource.ds5.type=com.alibaba.druid.pool.DruidDataSource
+spring.shardingsphere.datasource.ds5.driver-<span class="hljs-class"><span class="hljs-keyword">class</span>-<span class="hljs-title">name</span></span>=com.mysql.jdbc.Driver
+spring.shardingsphere.datasource.ds5.url=jdbc:mysql:<span class="hljs-comment">//localhost:3306/ds5</span>
+spring.shardingsphere.datasource.ds5.username=root
+spring.shardingsphere.datasource.ds5.password=root
+</code></pre>
+<p data-nodeid="23"><strong data-nodeid="196">注意，到现在有 3 个数据源，而且命名分别是 ds3、ds4 和 ds5</strong>。所以，为了根据 user_id 来将数据分别分片到对应的数据源，我们需要调整行表达式，这时候的行表达式应该是 ds$-&gt;{user_id % 3 + 3}：</p>
+<pre class="lang-java hljs" data-nodeid="24"><code data-language="java">spring.shardingsphere.sharding.<span class="hljs-keyword">default</span>-database-strategy.inline.sharding-column=user_id
+spring.shardingsphere.sharding.<span class="hljs-keyword">default</span>-database-strategy.inline.algorithm-expression=ds$-&gt;{user_id % <span class="hljs-number">3</span> + <span class="hljs-number">3</span>} 
+spring.shardingsphere.sharding.binding-tables=health_record,health_task
+spring.shardingsphere.sharding.broadcast-tables=health_level
+</code></pre>
+<p data-nodeid="25">对于 health_record 和 health_task 表而言，同样需要调整对应的行表达式，我们将 actual-data-nodes 设置为 ds$-&gt;{3..5}.health_record$-&gt;{0..2}，也就是说每张原始表将被拆分成 3 张分表：</p>
+<pre class="lang-java hljs" data-nodeid="26"><code data-language="java">spring.shardingsphere.sharding.tables.health_record.actual-data-nodes=ds$-&gt;{<span class="hljs-number">3.</span>.<span class="hljs-number">5</span>}.health_record$-&gt;{<span class="hljs-number">0.</span>.<span class="hljs-number">2</span>}
+spring.shardingsphere.sharding.tables.health_record.table-strategy.inline.sharding-column=record_id
+spring.shardingsphere.sharding.tables.health_record.table-strategy.inline.algorithm-expression=health_record$-&gt;{record_id % <span class="hljs-number">3</span>}
+spring.shardingsphere.sharding.tables.health_record.key-generator.column=record_id
+spring.shardingsphere.sharding.tables.health_record.key-generator.type=SNOWFLAKE
+spring.shardingsphere.sharding.tables.health_record.key-generator.props.worker.id=<span class="hljs-number">33</span>
+spring.shardingsphere.sharding.tables.health_task.actual-data-nodes=ds$-&gt;{<span class="hljs-number">3.</span>.<span class="hljs-number">5</span>}.health_task$-&gt;{<span class="hljs-number">0.</span>.<span class="hljs-number">2</span>}
+spring.shardingsphere.sharding.tables.health_task.table-strategy.inline.sharding-column=record_id
+spring.shardingsphere.sharding.tables.health_task.table-strategy.inline.algorithm-expression=health_task$-&gt;{record_id % <span class="hljs-number">3</span>}
+spring.shardingsphere.sharding.tables.health_task.key-generator.column=task_id
+spring.shardingsphere.sharding.tables.health_task.key-generator.type=SNOWFLAKE
+spring.shardingsphere.sharding.tables.health_task.key-generator.props.worker.id=<span class="hljs-number">33</span>
+</code></pre>
+<p data-nodeid="27">这样，整合分库+分表的配置方案就介绍完毕了，可以看到，这里并没有引入任何新的配置项让我们重新执行单元测试，从而确认数据是否已经正确地进行了分库分表。这是 ds3 中的 health_record0、health_record1 和 health_record2 表：</p>
+<p data-nodeid="28"><img src="https://s0.lgstatic.com/i/image/M00/2D/55/CgqCHl8DAzSASmBxAAAd6KQozFQ934.png" alt="Drawing 4.png" data-nodeid="213"><br>
+ds3 中的 health_record0 表数据</p>
+<p data-nodeid="29"><img src="https://s0.lgstatic.com/i/image/M00/2D/4A/Ciqc1F8DAzyASYmJAAAcLJ8apdE028.png" alt="Drawing 5.png" data-nodeid="220"><br>
+ds3 中的 health_record1 表数据</p>
+<p data-nodeid="30"><img src="https://s0.lgstatic.com/i/image/M00/2D/4A/Ciqc1F8DA0SAYIakAAAhEMAxu08885.png" alt="Drawing 6.png" data-nodeid="227"><br>
+ds3 中的 health_record2 表数据</p>
+<p data-nodeid="31">这是 ds4 中的 health_record0、health_record1 和 health_record2 表：</p>
+<p data-nodeid="32"><img src="https://s0.lgstatic.com/i/image/M00/2D/55/CgqCHl8DA0yAOsX6AAAdfXJXZLU117.png" alt="Drawing 7.png" data-nodeid="241"><br>
+ds4 中的 health_record0 表数据</p>
+<p data-nodeid="33"><img src="https://s0.lgstatic.com/i/image/M00/2D/55/CgqCHl8DA1SAL5oqAAAkdpi4XLE109.png" alt="Drawing 8.png" data-nodeid="248"><br>
+ds4 中的 health_record1 表数据</p>
+<p data-nodeid="34"><img src="https://s0.lgstatic.com/i/image/M00/2D/55/CgqCHl8DA1uAOGMkAAAbjxxXSj0605.png" alt="Drawing 9.png" data-nodeid="255"><br>
+ds4 中的 health_record2 表数据</p>
+<p data-nodeid="35">而下面是 ds5 中的 health_record0、health_record1 和 health_record2 表：</p>
+<p data-nodeid="36"><img src="https://s0.lgstatic.com/i/image/M00/2D/55/CgqCHl8DA2WAKMa9AAAcEzad5hA767.png" alt="Drawing 10.png" data-nodeid="269"><br>
+ds5 中的 health_record0 表数据</p>
+<p data-nodeid="37"><img src="https://s0.lgstatic.com/i/image/M00/2D/55/CgqCHl8DA22ATWUKAAAb7_TpJ5A158.png" alt="Drawing 11.png" data-nodeid="276"><br>
+ds5 中的 health_record1 表数据</p>
+<p data-nodeid="38"><img src="https://s0.lgstatic.com/i/image/M00/2D/4A/Ciqc1F8DA3SAY3EWAAAkd3H1CBI553.png" alt="Drawing 12.png" data-nodeid="283"><br>
+ds5 中的 health_record2 表数据</p>
+<p data-nodeid="39">对于 health_task 表而言，我们得到的也是类似的分库分表效果。</p>
+<h3 data-nodeid="40">系统改造：如何实现强制路由？</h3>
+<p data-nodeid="41">从 SQL 执行效果而言，分库分表可以看作是一种路由机制，也就是说把 SQL 语句路由到目标数据库或数据表中并获取数据。<strong data-nodeid="296">在实现了分库分表的基础之上，我们将要引入一种不同的路由方法，即强制路由。</strong></p>
+<h4 data-nodeid="42">什么是强制路由？</h4>
+<p data-nodeid="43">强制路由与一般的分库分表路由不同，它并没有使用任何的分片键和分片策略。我们知道通过解析 SQL 语句提取分片键，并设置分片策略进行分片是 ShardingSphere 对重写 JDBC 规范的实现方式。但是，如果我们没有分片键，是否就只能访问所有的数据库和数据表进行全路由呢？显然，这种处理方式也不大合适。<strong data-nodeid="302">有时候，我们需要为 SQL 执行开一个“后门”，允许在没有分片键的情况下，同样可以在外部设置目标数据库和表，这就是强制路由的设计理念。</strong></p>
+<p data-nodeid="44">在 ShardingSphere 中，通过 Hint 机制实现强制路由。我们在这里对 Hint 这一概念再做进一步的阐述。在关系型数据库中，Hint 作为一种 SQL 补充语法扮演着非常重要的角色。它允许用户通过相关的语法影响 SQL 的执行方式，改变 SQL 的执行计划，从而对 SQL 进行特殊的优化。很多数据库工具也提供了特殊的 Hint 语法。以 MySQL 为例，比较典型的 Hint 使用方式之一就是对所有索引的强制执行和忽略机制。</p>
+<p data-nodeid="45"><br>
+MySQL 中的强制索引能够确保所需要执行的 SQL 语句只作用于所指定的索引上，我们可以通过 FORCE INDEX 这一 Hint 语法实现这一目标：</p>
+<pre class="lang-java hljs" data-nodeid="46"><code data-language="java">SELECT * <span class="hljs-function">FROM TABLE1 FORCE <span class="hljs-title">INDEX</span> <span class="hljs-params">(FIELD1)</span>
+</span></code></pre>
+<p data-nodeid="47">类似的，IGNORE INDEX 这一 Hint 语法使得原本设置在具体字段上的索引不被使用：</p>
+<pre class="lang-java hljs" data-nodeid="48"><code data-language="java">SELECT * <span class="hljs-function">FROM TABLE1 IGNORE <span class="hljs-title">INDEX</span> <span class="hljs-params">(FIELD1, FIELD2)</span>
+</span></code></pre>
+<p data-nodeid="49">对于分片字段非 SQL 决定、而由其他外置条件决定的场景，可使用 SQL Hint 灵活地注入分片字段。</p>
+<h4 data-nodeid="50">如何设计和开发强制路由？</h4>
+<p data-nodeid="51">基于 Hint 进行强制路由的设计和开发过程需要遵循一定的约定，同时，ShardingSphere 也提供了专门的 HintManager 来简化强制路由的开发过程。</p>
+<ul data-nodeid="52">
+<li data-nodeid="53">
+<p data-nodeid="54">HintManager</p>
+</li>
+</ul>
+<p data-nodeid="55">HintManager 类的使用方式比较固化，我们可以通过查看源码中的类定义以及核心变量来理解它所包含的操作内容：</p>
+<pre class="lang-java hljs" data-nodeid="16122"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">final</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">HintManager</span> <span class="hljs-keyword">implements</span> <span class="hljs-title">AutoCloseable</span> </span>{
+
+    <span class="hljs-comment">//基于ThreadLocal存储HintManager实例</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> ThreadLocal&lt;HintManager&gt; HINT_MANAGER_HOLDER = <span class="hljs-keyword">new</span> ThreadLocal&lt;&gt;();
+    <span class="hljs-comment">//数据库分片值</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Multimap&lt;String, Comparable&lt;?&gt;&gt; databaseShardingValues = HashMultimap.create();
+&nbsp;   <span class="hljs-comment">//数据表分片值</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Multimap&lt;String, Comparable&lt;?&gt;&gt; tableShardingValues = HashMultimap.create();
+    <span class="hljs-comment">//是否只有数据库分片</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">boolean</span> databaseShardingOnly;
+    <span class="hljs-comment">//是否只路由主库</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">boolean</span> masterRouteOnly;
+    …
+}
+</code></pre>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<p data-nodeid="57">在变量定义上，我们注意到 HintManager 使用了 ThreadLocal 来保存 HintManager 实例。显然，基于这种处理方式，所有分片信息的作用范围就是当前线程。我们也看到了用于分别存储数据库分片值和数据表分片值的两个 Multimap 对象，以及分别用于指定是否只有数据库分片，以及是否只路由主库的标志位。可以想象，HintManager 基于这些变量开放了一组 get/set 方法供开发人员根据具体业务场景进行分片键的设置。</p>
+<p data-nodeid="58">同时，在类的定义上，我们也注意到 HintManager 实现了 AutoCloseable 接口，这个接口是在 JDK7 中引入的一个新接口，用于自动释放资源。AutoCloseable 接口只有一个 close 方法，我们可以实现这个方法来释放自定义的各种资源。</p>
+<pre class="lang-java hljs" data-nodeid="17524"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">interface</span> <span class="hljs-title">AutoCloseable</span> </span>{
+    <span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">close</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> Exception</span>;
+}
+</code></pre>
+
+
+<p data-nodeid="60">在 JDK1.7 之前，我们需要手动通过 try/catch/finally 中的 finally 语句来释放资源，而使用 AutoCloseable 接口，在 try 语句结束的时候，不需要实现 finally 语句就会自动将这些资源关闭，JDK 会通过回调的方式，调用 close 方法来做到这一点。这种机制被称为 try with resource。AutoCloseable 还提供了语法糖，在 try 语句中可以同时使用多个实现这个接口的资源，并通过使用分号进行分隔。</p>
+<p data-nodeid="61">HintManager 中通过实现 AutoCloseable 接口支持资源的自动释放，事实上，JDBC 中的 Connection 和 Statement 接口的实现类同样也实现了这个 AutoCloseable 接口。</p>
+<p data-nodeid="62">对于 HintManager 而言，所谓的资源实际上就是 ThreadLocal 中所保存的 HintManager 实例。下面这段代码实现了 AutoCloseable 接口的 close 方法，进行资源的释放：</p>
+<pre class="lang-java hljs" data-nodeid="28740"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">clear</span><span class="hljs-params">()</span> </span>{
+    HINT_MANAGER_HOLDER.remove();
+}
+
+<span class="hljs-meta">@Override</span>
+<span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">close</span><span class="hljs-params">()</span> </span>{
+    HintManager.clear();
+}
+</code></pre>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<p data-nodeid="64">HintManager 的创建过程使用了典型的单例设计模式，下面这段代码展现了通过一个静态的 getInstance 方法，从 ThreadLocal 中获取或设置针对当前线程的 HintManager 实例。</p>
+<pre class="lang-java hljs" data-nodeid="37853"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> HintManager <span class="hljs-title">getInstance</span><span class="hljs-params">()</span> </span>{
+    Preconditions.checkState(<span class="hljs-keyword">null</span> == HINT_MANAGER_HOLDER.get(), <span class="hljs-string">"Hint has previous value, please clear first."</span>);
+    HintManager result = <span class="hljs-keyword">new</span> HintManager();
+    HINT_MANAGER_HOLDER.set(result);
+    <span class="hljs-keyword">return</span> result;
+}
+</code></pre>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<p data-nodeid="66">在理解了 HintManager 的基本结构之后，在应用程序中获取 HintManager 的过程就显得非常简单了，这里给出推荐的使用方式：</p>
+<pre class="lang-java hljs" data-nodeid="43461"><code data-language="java"><span class="hljs-keyword">try</span> (HintManager hintManager = HintManager.getInstance();
+    Connection connection = dataSource.getConnection();
+    Statement statement = connection.createStatement()) {
+    …
+}
+</code></pre>
+
+
+
+
+
+
+
+
+<p data-nodeid="68">可以看到，我们在 try 语句中获取了 HintManager、Connection 和 Statement 实例，然后就可以基于这些实例来完成具体的 SQL 执行。</p>
+<ul data-nodeid="69">
+<li data-nodeid="70">
+<p data-nodeid="71">实现并配置强制路由分片算法</p>
+</li>
+</ul>
+<p data-nodeid="72"><strong data-nodeid="326">开发基于 Hint 的强制路由的基础还是配置</strong>。在介绍与 Hint 相关的配置项之前，让我们回想在 05 课时：“ShardingSphere 中的配置体系是如何设计的？”中介绍的 TableRuleConfiguration。我们知道 TableRuleConfiguration 中包含两个 ShardingStrategyConfiguration，分别用于设置分库策略和分表策略。而 ShardingSphere 专门提供了 HintShardingStrategyConfiguration 用于完成 Hint 的分片策略配置，如下面这段代码所示：</p>
+<pre class="lang-java hljs" data-nodeid="73"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">final</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">HintShardingStrategyConfiguration</span> <span class="hljs-keyword">implements</span> <span class="hljs-title">ShardingStrategyConfiguration</span> </span>{
+
+&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> HintShardingAlgorithm shardingAlgorithm;
+
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-title">HintShardingStrategyConfiguration</span><span class="hljs-params">(<span class="hljs-keyword">final</span> HintShardingAlgorithm shardingAlgorithm)</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Preconditions.checkNotNull(shardingAlgorithm, <span class="hljs-string">"ShardingAlgorithm is required."</span>);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">this</span>.shardingAlgorithm = shardingAlgorithm;
+&nbsp;&nbsp;&nbsp; }
+}
+</code></pre>
+<p data-nodeid="74">可以看到，HintShardingStrategyConfiguration 中需要设置一个 HintShardingAlgorithm。HintShardingAlgorithm 是一个接口，我们需要提供它的实现类来根据 Hint 信息执行分片。</p>
+<pre class="lang-java hljs" data-nodeid="46265"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">interface</span> <span class="hljs-title">HintShardingAlgorithm</span>&lt;<span class="hljs-title">T</span> <span class="hljs-keyword">extends</span> <span class="hljs-title">Comparable</span>&lt;?&gt;&gt; <span class="hljs-keyword">extends</span> <span class="hljs-title">ShardingAlgorithm</span> </span>{
+    <span class="hljs-comment">//根据Hint信息执行分片</span>
+    <span class="hljs-function">Collection&lt;String&gt; <span class="hljs-title">doSharding</span><span class="hljs-params">(Collection&lt;String&gt; availableTargetNames, HintShardingValue&lt;T&gt; shardingValue)</span></span>;
+}
+</code></pre>
+
+
+
+
+<p data-nodeid="76">在 ShardingSphere 中内置了一个 HintShardingAlgorithm 的实现类 DefaultHintShardingAlgorithm，但这个实现类并没有执行任何的分片逻辑，只是将传入的所有 availableTargetNames 直接进行返回而已，如下面这段代码所示：</p>
+<pre class="lang-java hljs" data-nodeid="48368"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">final</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">DefaultHintShardingAlgorithm</span> <span class="hljs-keyword">implements</span> <span class="hljs-title">HintShardingAlgorithm</span>&lt;<span class="hljs-title">Integer</span>&gt; </span>{
+
+&nbsp;&nbsp;&nbsp; <span class="hljs-meta">@Override</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> Collection&lt;String&gt; <span class="hljs-title">doSharding</span><span class="hljs-params">(<span class="hljs-keyword">final</span> Collection&lt;String&gt; availableTargetNames, <span class="hljs-keyword">final</span> HintShardingValue&lt;Integer&gt; shardingValue)</span> </span>{
+        <span class="hljs-keyword">return</span> availableTargetNames;
+&nbsp;&nbsp;&nbsp; }
+}
+</code></pre>
+
+
+
+<p data-nodeid="78">我们可以根据需要提供自己的 HintShardingAlgorithm 实现类并集成到 HintShardingStrategyConfiguration 中。例如，我们可以对比所有可用的分库分表键值，然后与传入的强制分片键进行精准匹配，从而确定目标的库表信息：</p>
+<pre class="lang-java hljs" data-nodeid="79"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">final</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">MatchHintShardingAlgorithm</span> <span class="hljs-keyword">implements</span> <span class="hljs-title">HintShardingAlgorithm</span>&lt;<span class="hljs-title">Long</span>&gt; </span>{
+
+&nbsp;&nbsp;&nbsp; <span class="hljs-meta">@Override</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> Collection&lt;String&gt; <span class="hljs-title">doSharding</span><span class="hljs-params">(<span class="hljs-keyword">final</span> Collection&lt;String&gt; availableTargetNames, <span class="hljs-keyword">final</span> HintShardingValue&lt;Long&gt; shardingValue)</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Collection&lt;String&gt; result = <span class="hljs-keyword">new</span> ArrayList&lt;&gt;();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">for</span> (String each : availableTargetNames) {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">for</span> (Long value : shardingValue.getValues()) {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">if</span> (each.endsWith(String.valueOf(value))) {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; result.add(each);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; }
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; }
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; }
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> result;
+&nbsp;&nbsp;&nbsp; }
+}
+</code></pre>
+<p data-nodeid="80">一旦提供了自定的 HintShardingAlgorithm 实现类，就需要将它添加到配置体系中。在这里，我们基于 Yaml 配置风格来完成这一操作：</p>
+<pre class="lang-js te-preview-highlight hljs" data-nodeid="52574"><code data-language="js">defaultDatabaseStrategy:
+    hint:
+        algorithmClassName: com.tianyilan.shardingsphere.demo.hint.MatchHintShardingAlgorithm
+</code></pre>
+
+
+
+
+
+
+<p data-nodeid="82">ShardingSphere 在进行路由时，如果发现 TableRuleConfiguration 中设置了 Hint 的分片算法，就会从 HintManager 中获取分片值并进行路由操作。</p>
+<h4 data-nodeid="83">如何基于强制路由访问目标库表？</h4>
+<p data-nodeid="84">在理解了强制路由的概念和开发过程之后，让我们回到案例。这里以针对数据库的强制路由为例，给出具体的实现过程。为了更好地组织代码结构，我们先来构建两个 Helper 类，一个是用于获取 DataSource 的 DataSourceHelper。在这个 Helper 类中，我们通过加载 .yaml 配置文件来完成 DataSource 的构建：</p>
+<pre class="lang-java hljs" data-nodeid="85"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">DataSourceHelper</span> </span>{
+&nbsp;
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">static</span> DataSource <span class="hljs-title">getDataSourceForShardingDatabases</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> IOException, SQLException </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> YamlShardingDataSourceFactory.createDataSource(getFile(<span class="hljs-string">"/META-INF/hint-databases.yaml"</span>)); 
+&nbsp;&nbsp;&nbsp; }
+
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> File <span class="hljs-title">getFile</span><span class="hljs-params">(<span class="hljs-keyword">final</span> String configFile)</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> File(Thread.currentThread().getClass().getResource(configFile).getFile());
+&nbsp;&nbsp;&nbsp; }
+}
+</code></pre>
+<p data-nodeid="86">这里用到了 YamlShardingDataSourceFactory 工厂类，针对 Yaml 配置的实现方案你可以回顾 05 课时中的内容。</p>
+<p data-nodeid="87">另一个 Helper 类是包装 HintManager 的 HintManagerHelper。在这个帮助类中，我们通过使用 HintManager 开放的 setDatabaseShardingValue 来完成数据库分片值的设置。在这个示例中，我们只想从第一个库中获取目标数据。HintManager 还提供了 addDatabaseShardingValue 和 addTableShardingValue 等方法设置强制路由的分片值。</p>
+<pre class="lang-java hljs" data-nodeid="88"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">HintManagerHelper</span> </span>{
+&nbsp;
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">initializeHintManagerForShardingDatabases</span><span class="hljs-params">(<span class="hljs-keyword">final</span> HintManager hintManager)</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; hintManager.setDatabaseShardingValue(<span class="hljs-number">1L</span>);
+&nbsp;&nbsp;&nbsp; }
+}
+</code></pre>
+<p data-nodeid="89">最后，我们构建一个 HintService 来完成整个强制路由流程的封装：</p>
+<pre class="lang-java hljs" data-nodeid="90"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">HintService</span> </span>{
+&nbsp;
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">processWithHintValueForShardingDatabases</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> SQLException, IOException </span>{
+&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; DataSource dataSource = DataSourceHelper.getDataSourceForShardingDatabases();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">try</span> (HintManager hintManager = HintManager.getInstance();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Connection connection = dataSource.getConnection();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Statement statement = connection.createStatement()) {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; HintManagerHelper.initializeHintManagerForShardingDatabases(hintManager);
+&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ResultSet result = statement.executeQuery(<span class="hljs-string">"select * from health_record"</span>);
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">while</span> (result.next()) {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; System.out.println(result.getInt(<span class="hljs-number">0</span>) + result.getString(<span class="hljs-number">1</span>));
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; }
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; }
+&nbsp;&nbsp;&nbsp; }
+}
+</code></pre>
+<p data-nodeid="91">可以看到，在这个 processWithHintValueForShardingDatabases 方法中，我们首先通过 DataSourceHelper 获取目标 DataSource。然后使用 try with resource 机制在 try 语句中获取了 HintManager、Connection 和 Statement 实例，并通过 HintManagerHelper 帮助类设置强制路由的分片值。最后，通过 Statement 来执行一个全表查询，并打印查询结果：</p>
+<pre class="lang-java hljs" data-nodeid="92"><code data-language="java"><span class="hljs-number">2020</span>-<span class="hljs-number">05</span>-<span class="hljs-number">25</span> <span class="hljs-number">21</span>:<span class="hljs-number">58</span>:<span class="hljs-number">13.932</span>&nbsp; INFO <span class="hljs-number">20024</span> --- [&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; main] ShardingSphere-SQL&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; : Logic SQL: select user_id, user_name from user
+…
+<span class="hljs-number">2020</span>-<span class="hljs-number">05</span>-<span class="hljs-number">25</span> <span class="hljs-number">21</span>:<span class="hljs-number">58</span>:<span class="hljs-number">13.932</span>&nbsp; INFO <span class="hljs-number">20024</span> --- [&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; main] ShardingSphere-SQL&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; : Actual SQL: ds1 ::: select user_id, user_name from user
+<span class="hljs-number">6</span>: user_6
+<span class="hljs-number">7</span>: user_7
+<span class="hljs-number">8</span>: user_8
+<span class="hljs-number">9</span>: user_9
+<span class="hljs-number">10</span>: user_10
+</code></pre>
+<p data-nodeid="93">我们获取执行过程中的日志信息，可以看到原始的逻辑 SQL 是 select user_id, user_name from user，而真正执行的真实 SQL 则是 ds1 ::: select user_id, user_name from user。显然，强制路由发生了效果，我们获取的只是 ds1 中的所有 User 信息。</p>
+<h3 data-nodeid="94">小结</h3>
+<p data-nodeid="95">承接上一课时的内容，今天我们继续在对单库单表架构进行分库操作的基础上，讲解如何实现分表、分库+分表以及强制路由的具体细节。有了分库的实践经验，要完成分表以及分库分表是比较容易的，所做的工作只是调整和设置对应的配置项。而强制路由是一种新的路由机制，我们通过较大的篇幅来对它的概念和实现方法进行了展开，并结合业务场景给出了案例分析。</p>
+<p data-nodeid="96">这里给你留一道思考题：ShardingSphere 如何基于 Hint 机制实现分库分表场景下的强制路由？</p>
+<p data-nodeid="97">从路由的角度讲，基于数据库主从架构的读写分离机制也可以被认为是一种路由。在下一课时的内容中，我们将对 ShardingSphere 提供的读写分离机制进行讲解，并同样给出读写分离与分库分表、强制路由进行整合的具体方法。</p></div>
+
+</body></html>

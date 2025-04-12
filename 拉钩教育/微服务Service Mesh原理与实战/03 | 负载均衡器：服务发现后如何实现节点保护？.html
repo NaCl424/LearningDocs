@@ -1,0 +1,795 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>03 | 负载均衡器：服务发现后如何实现节点保护？</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>03 | 负载均衡器：服务发现后如何实现节点保护？</h1><p data-nodeid="853" class="">今天我要和你分享的内容是负载均衡器第一篇：在微服务架构中，应该选择什么样的负载均衡器以及服务发现后如何实现节点保护？</p>
+<p data-nodeid="854">负载均衡器是微服务架构中非常核心的部分，因为一旦算法出现了问题，后端节点负载不一致，就会导致某个节点被打挂，甚至引起雪崩的级联反应。</p>
+<h3 data-nodeid="855">负载均衡器基本概念</h3>
+<p data-nodeid="856"><strong data-nodeid="904">负载均衡（Load Balance），是一种网络流量分配技术，用于解决单台机器性能出现瓶颈时，需要多台机器分摊处理流量的情况</strong>。load 在中文里也有“量”的意思，在这里可以理解为机器的工作量，那么 Load Balance 就是让每台机器平摊处理的工作量（请求量）。</p>
+<p data-nodeid="857">一般情况下，我们说的负载均衡器，有以下几种实现方式。</p>
+<p data-nodeid="858"><strong data-nodeid="910">硬件负载均衡</strong>：比较常见的硬件负载均衡器有NetScaler、F5、Radware，Array 等，由专业的硬件公司生产，一般在互联网公司的早期阶段进行使用，但是由于价格昂贵，现在互联网公司很少使用了。</p>
+<p data-nodeid="859"><strong data-nodeid="915">DNS 负载均衡</strong>：通过域名返回后端节点 IP 进行负载均衡，也可以为每个后端 IP 设置权重。因为 DNS 解析存在缓存延时的问题，所以在内网较少使用。但对于大流量的 Web 和 App，入口层一般会使用此种方式做负载均衡，后端多组四层 LB 做负载均衡。</p>
+<p data-nodeid="860"><img src="https://s0.lgstatic.com/i/image2/M01/03/F6/Cip5yF_liTCAWeozAABK8gkEa7w975.png" alt="Lark20201225-143913.png" data-nodeid="918"></p>
+<div data-nodeid="861"><p style="text-align:center">DNS 负载均衡示意图</p></div>
+<p data-nodeid="862"><strong data-nodeid="923">软件负载均衡</strong>：比较流行的是 Nginx、HAproxy、LVS 等，像 LVS 是四层负载均衡器，性能较高；Nginx、HAproxy 主要用于七层的负载均衡，有较多的负载均衡策略，同时流量相对于四层会更加均衡。像我们常用的云厂商，比如阿里云的 SLB 同时提供了基于 LVS 的四层负载均衡器和基于七层的 Tengine 负载均衡器供大家选择。</p>
+<p data-nodeid="863"><strong data-nodeid="932">程序内负载均衡</strong>：严格来说它属于软件负载均衡的一种，只是<strong data-nodeid="933">把负载均衡的策略放在了服务内部</strong>。对于微服务架构来说，服务内部做负载均衡更合适，因为微服务就是通过服务发现发现服务节点的，在程序内部选取合适的流量节点自然更加合理。</p>
+<p data-nodeid="864"><strong data-nodeid="938">Serivce Mesh 负载均衡</strong>：利用 sidecar 做程序内的负载均衡，属于软件负载均衡的一种，相比 SDK 内负载均衡，可以随时更新各种负载均衡策略。</p>
+<p data-nodeid="865">现在，你已经对负载均衡器已经有了基本的了解，实际上无论是软负载还是硬负载，基本上都用到了以下几种算法。</p>
+<h3 data-nodeid="866">常用的负载均衡算法</h3>
+<p data-nodeid="867"><strong data-nodeid="945">Round Robin</strong>：简单轮询算法，适合后端节点权重一致的情况。应用场景较少，但算法时间复杂度为 O(1)， 可以在预先判断后端节点权重一致的情况下使用。</p>
+<p data-nodeid="868"><strong data-nodeid="950">Weighted Round Robin</strong>：通过取最大公约数的方式，做简单轮询。因为权重多的节点会比较集中，Nginx发明了一种平滑加权轮询，通过算法将权重大的节点分散开，但在服务重启时依然会出现节点请求较为集中的情况。</p>
+<p data-nodeid="869"><strong data-nodeid="955">Weighted Random</strong>：通过随机的方式进行负载均衡，配合二分查找，可以将时间复杂度降到O(log^n)。该算法对于后端节点非常均衡，不会出现加权轮询导致的重启时节点请求较为集中的情况。</p>
+<p data-nodeid="870"><strong data-nodeid="960">Two&nbsp;Random&nbsp;Choices</strong>：目前比较流行的算法，适合后端节点权重一致的情况，通过两次随机算法，获取到两个节点，然后对比节点的 CPU 负载，延时情况等信息，获取一个最优的节点，好处是后端节点的 CPU 或者延时会比较均衡，因为分区和虚拟机硬件配置的原因，此种做法可以动态调节后端节点负载，在生产中是非常好的选择。</p>
+<p data-nodeid="871"><strong data-nodeid="969">Sticky Session（会话保持）</strong>：根据客户端 IP 或者 Cookie 进行会话保持，实际上就是同一个客户端，每次选取的后端节点 IP 保持一致，主要是用于登录验证的会话保持。实际上<strong data-nodeid="970">此种算法让服务变成了有状态服务，另外对于后端负载也会不均衡，在微服务架构中已经较少使用</strong>。如果想要进行 Session 的保持，大多是将 Session 存储在外部存储中，比如 Redis 等。</p>
+<p data-nodeid="872">现在你已经对负载均衡有了一个基本的了解，接下来我们进一步看看服务发现后的节点保护。</p>
+<h3 data-nodeid="873">服务发现后的节点保护</h3>
+<p data-nodeid="874">服务发现后的节点保护，我在注册中心的章节也简单提到过。实际上最早我是把节点保护放在了注册发现的模块中，后来因为耦合性过高将此模块拆解出来成为独立的模块，并和负载均衡模块配合使用。实际上，在 Envoy 中，节点保护的功能也放在了负载均衡器中。</p>
+<h4 data-nodeid="875">主动健康检查</h4>
+<p data-nodeid="876">受注册中心的网络分区故障等原因影响，<strong data-nodeid="984">在负载均衡器中进行主动健康检查</strong>，是避免此类情况发生的最佳模式，但长时间的主动健康检查会产生大量无用的 ping 操作，造成不必要的机器负载损失。所以在实践中，建议选择<strong data-nodeid="985">获取过少的节点时才触发主动健康检查模式</strong>。</p>
+<p data-nodeid="877">当获取节点过少、进入主动健康检查的模式时会触发对后端节点的 ping 操作，这个过少的阈值可以根据公司负载情况确定。比如在实际操作中，<strong data-nodeid="991">如果机器负载长期处于比较高的水位，你可以采用一个比较保守的数值，比如小于 80% 的时候触发</strong>。</p>
+<p data-nodeid="878">为了能够保证两台机器至少能够下掉一台，<strong data-nodeid="999">我采用了 (currentNodeNum+1)/nodeCount &lt; 80% 这样的算法，以保证至少下掉一个节点</strong>。其中 nodeCount 为 15 分钟前的服务节点总数，当然这样是一个经验值，你也可以根据公司的实际情况适当调整。</p>
+<p data-nodeid="879">另外，在容器环境中，扩缩容时可能会触发节点的自我保护模式，造成一定的短时间流量损失，但相对于因为流量打到了错误的节点上引发的雪崩，我认为此种情况还是可以接受的。</p>
+<p data-nodeid="880"><strong data-nodeid="1004">恐慌阈值</strong></p>
+<p data-nodeid="881">依据健康检查的结果判断后端节点是否正常，这种方式虽然可以保证网络分区异常情况下节点间的连通性，但如果后端节点大量不可用的情况下，只有少数节点能够通过健康检查。此种情况下，少量的节点显然是无法提供正常服务的。</p>
+<p data-nodeid="882">另外，因为服务发版导致的服务节点多数或者全部不可用的情况也很容易出现，此时你的首选操作一定是回滚。回滚期间，节点的可用是有先后顺序的，这个时候如果完全信任主动健康检查的结果，会导致流量全部路由到新回滚成功的节点上，造成新启动的节点会立即被打挂。</p>
+<p data-nodeid="883">解决上面两种问题的办法一种是服务治理中的限流，这部分内容我在后面会讲到；另外一种办法就是<strong data-nodeid="1012">负载均衡器中的恐慌阈值。</strong> 当健康检查后节点依然少于设定的阈值，则忽略健康检查结果，将流量路由到全部的节点，包括不健康的节点，这样就可以保证负载的均衡，也不会把流量集中到过少的节点，导致服务处于“雪崩”的状态。</p>
+<p data-nodeid="884">这个阈值的设置也是比较讲究的，虽然 Envoy 官方默认值是 50%，但我觉得这并不是最合适的设置：<strong data-nodeid="1022">50% 的阈值太过激进，很容易达到触发条件</strong>。而当你理解了这个阈值的作用，就会明白当线上出现故障的时候，节点是会趋于全部不可用的，所以线上我把这个值设置为 10%。因为<strong data-nodeid="1023">随着故障节点变多，剩下的少量节点也扛不住调用方的所有流量，剩余的节点会慢慢趋近我们设置的阈值，一样可以达到恐慌阈值设置的目的</strong>，而且也不会因为只是少量节点故障，触发阈值导致的错误流量。</p>
+<h4 data-nodeid="885">被动健康检查</h4>
+<p data-nodeid="886">有些时候单纯靠主动健康检查依然无法避免错误的流量，毕竟主动健康检查只是通过特定的 ping 接口或者 TCP 探活进行健康检查的，这些并不是服务的真实流量，特别是在使用 TCP 探活的时候，更容易出现问题。这个时候就需要<strong data-nodeid="1034">被动健康检查</strong>了，<strong data-nodeid="1035">通过真实流量来判断节点是否正常，也就是利用节点熔断器</strong>。</p>
+<p data-nodeid="887">和服务级别的熔断器一样，节点熔断器也是<strong data-nodeid="1045">通过状态码判断服务是否正常</strong>，假如后端是 HTTP 服务，我们通常会<strong data-nodeid="1046">将 499 以上的错误码认为是后端服务错误</strong>。通过记录 10s 的滑动窗口内的错误码比例，当后端节点的错误比例达到我们设置的阈值时，便将后端节点从负载均衡器中移除。当然你也要考虑不能摘除过多的节点，所以熔断器需要设置和自我保护相同的触发阈值，以避免过多的节点被移出引发“雪崩”。</p>
+<p data-nodeid="888">现在我们已经讲完了主动和被动健康检查，通过两种健康检查的配合，你基本上能够避免大多数节点故障的异常情况了。</p>
+<h3 data-nodeid="889">结语</h3>
+<p data-nodeid="890">这一节我主要讲解了负载均衡的基础知识，包括负载均衡的基本概念、常用的负载均衡算法以及负载均衡中的节点保护。</p>
+<p data-nodeid="891"><img src="https://s0.lgstatic.com/i/image2/M01/03/F8/CgpVE1_liT-AFWYWAALgY2P_R3c036.png" alt="Lark20201225-143917.png" data-nodeid="1052"></p>
+<p data-nodeid="892">本节内容到这里就结束了，下一小节我会讲解负载均衡的进阶知识，包括在跨区部署的情况下如何更好地做负载均衡以及如何让后端节点的机器负载更加均衡。</p>
+<p data-nodeid="1491" class="te-preview-highlight">最后我想给你留一个小问题：如果让你为微服务架构选取一个合适的负载均衡算法，你会选择哪一种，欢迎在留言区和我分享你的观点。我们下一讲再见。</p>
+
+
+<hr data-nodeid="894">
+<p data-nodeid="895"><a href="https://shenceyun.lagou.com/t/Mka" data-nodeid="1061"><img src="https://s0.lgstatic.com/i/image/M00/8B/BD/Ciqc1F_gEFiAcnCNAAhXSgFweBY589.png" alt="java_高薪训练营.png" data-nodeid="1060"></a></p>
+<p data-nodeid="896" class=""><a href="https://shenceyun.lagou.com/t/Mka" data-nodeid="1064">拉勾背书内推 + 硬核实战技术干货，帮助每位 Java 工程师达到阿里 P7 技术能力。点此链接，快来领取！</a></p></div>
+
+</body></html>

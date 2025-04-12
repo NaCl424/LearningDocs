@@ -1,0 +1,878 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>02 | 背压机制：响应式流为什么能够提高系统的弹性？</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>02 | 背压机制：响应式流为什么能够提高系统的弹性？</h1><p data-nodeid="8918">上一讲，我们通过分析传统开发模式和响应式编程实现方法之间的差别，引出了数据流的概念。我们知道响应式系统都是通过对数据流中每个事件进行处理，来提高系统的即时响应性的。</p>
+<p data-nodeid="8919">那么今天这一讲，我们就先从“流”的概念出发，并引入响应式流程规范，从而分析响应式编程中所包含的各个核心组件。希望通过这一讲的学习，你可以掌握通过背压机制对流量进行高效控制的系统方法，并基于响应式流规范来实现背压机制。</p>
+<h3 data-nodeid="8920">流的概念</h3>
+<p data-nodeid="8921">简单来讲，所谓的流就是由生产者生产并由一个或多个消费者消费的元素序列。这种生产者/消费者模型也可以被称为发布者/订阅者模型，我在上一讲中已经介绍过这个模型。而关于流的介绍，我将从两方面入手，首先明确流的分类，然后再来讨论如何进行流量控制，流量控制是讨论数据流的核心话题。</p>
+<h4 data-nodeid="8922">流的处理模型</h4>
+<p data-nodeid="10362">关于流的处理，存在两种基本的实现机制。一种就是传统开发模式下的“拉”模式，即消费者主动从生产者拉取元素；而另一种就是上一讲中分析的“推”模式，在这种模式下，生产者将元素推送给消费者。相较于“拉”模式，“推”模式下的数据处理的资源利用率更好，下图所示的就是一种典型的推模式处理流程。</p>
+<p data-nodeid="10363" class=""><img src="https://s0.lgstatic.com/i/image6/M01/21/38/Cgp9HWBUIRCAHSoEAACQmzpsJME739.png" alt="Drawing 1.png" data-nodeid="10368"></p>
+<div data-nodeid="10364"><p style="text-align:center">图 1  推模式下的数据流处理方式示意图</p></div>
+
+
+
+
+
+<p data-nodeid="8927">上图中，数据流的生产者会持续地生成数据并推送给消费者。这里就引出了流量控制问题，即如果数据的生产者和消费者处理数据的速度是不一致的，我们应该如何确保系统的稳定性呢？</p>
+<h4 data-nodeid="8928">流量控制</h4>
+<p data-nodeid="8929">先来看第一种场景，即生产者生产数据的速率小于消费者的场景。在这种情况下，因为消费者消费数据没有任何压力，也就不需要进行流量的控制。</p>
+<p data-nodeid="8930">现实中，更多的是生产者生产数据的速率大于消费者消费数据的场景。这种情况比较复杂，因为消费者可能因为无法处理过多的数据而发生崩溃。针对这种情况的一种常见解决方案是在生产者和消费者之间添加一种类似于消息队列的机制。我们知道队列具有存储并转发的功能，所以可以由它来进行一定的流量控制，效果如下图所示。</p>
+<p data-nodeid="11168" class=""><img src="https://s0.lgstatic.com/i/image6/M00/21/35/CioPOWBUIRiAedZZAACVgTxgC80957.png" alt="Drawing 3.png" data-nodeid="11172"></p>
+<div data-nodeid="11169"><p style="text-align:center">图 2  添加队列机制之后的生产者/消费者场景示意图</p></div>
+
+
+
+
+<p data-nodeid="8934">现在，问题的关键就转变为<strong data-nodeid="9028">如何设计一种合适的队列</strong>。通常，我们可以选择三种不同类型的队列来分别支持不同的功能特性。</p>
+<p data-nodeid="8935"><strong data-nodeid="9032">无界队列</strong></p>
+<p data-nodeid="8936">第一种最容易想到的队列就是无界队列（Unbounded Queue），这种队列原则上拥有无限大小的容量，可以存放所有生产者所生产的消息，如下图所示。</p>
+<p data-nodeid="11952" class=""><img src="https://s0.lgstatic.com/i/image6/M01/21/38/Cgp9HWBUISGAJrh5AACOo3oalK8601.png" alt="Drawing 5.png" data-nodeid="11956"></p>
+<div data-nodeid="11953"><p style="text-align:center">图 3  无界队列结构示意图</p></div>
+
+
+
+
+<p data-nodeid="8940">显然，无界队列的优势就是确保了所有消息都能得到消费，但显然会降低系统的回弹性，因为没有一个系统拥有无限的资源。一旦内存等资源被耗尽，系统可能就崩溃了。</p>
+<p data-nodeid="8941"><strong data-nodeid="9045">有界丢弃队列</strong></p>
+<p data-nodeid="8942">与无界队列相对的，更合适的方案是选择一种有界队列。为了避免内存溢出，我们可以使用这样一个队列，一般队列的容量满了，就忽略后续传入的消息，如下图所示。</p>
+<p data-nodeid="13469" class=""><img src="https://s0.lgstatic.com/i/image6/M00/21/35/CioPOWBUISqAal3JAACp2GTWvZM658.png" alt="Drawing 7.png" data-nodeid="13473"></p>
+<div data-nodeid="13470"><p style="text-align:center">图 4  有界丢弃队列结构示意图</p></div>
+
+
+
+
+
+
+
+
+<p data-nodeid="8946">上图中，可以看出这个有界队列的容量为 6，所以第 7 和第 8 个元素被丢弃了。然后当消费者消费了一部分消息之后，队列出现了新的空闲位置，后续的消息就又被填充到队列中。当然，这里可以设置一些丢弃元素的策略，比方说按照优先级或先进先出等。</p>
+<p data-nodeid="8947">有界丢弃队列考虑了资源的限制，比较适合用于允许丢消息的业务场景，但在消息重要性很高的场景显然不可能采取这种队列。</p>
+<p data-nodeid="8948"><strong data-nodeid="9059">有界阻塞队列</strong></p>
+<p data-nodeid="14213">如果需要确保消息不丢失，则需要引入有界阻塞队列。在这种队列中，我们会在队列消息数量达到上限后阻塞生产者，而不是直接丢弃消息，如下图所示。</p>
+<p data-nodeid="14214" class=""><img src="https://s0.lgstatic.com/i/image6/M01/21/38/Cgp9HWBUIUOAChJ1AACq6l5LR5Y136.png" alt="Drawing 9.png" data-nodeid="14219"></p>
+<div data-nodeid="14215"><p style="text-align:center">图 5  有界阻塞队列结构示意图</p></div>
+
+
+
+
+
+<p data-nodeid="8953">上图中，队列的容量同样是 6，所以当第 7 个元素到来时，发现队列已经满了，那么生产者就会一直等到队列空间的释放而产生阻塞行为。显然，这种阻塞行为是不可能实现异步操作的，所以结合上一讲中的讨论结果，无论从回弹性、弹性还是即时响应性出发，有界阻塞队列都不是我们想要的解决方案。</p>
+<h3 data-nodeid="8954">背压机制</h3>
+<p data-nodeid="8955">讲到这里，我们已经明确，纯“推”模式下的数据流量会有很多不可控制的因素，并不能直接应用，而是需要在“推”模式和“拉”模式之间考虑一定的平衡性，从而优雅地实现流量控制。这就需要引出响应式系统中非常重要的一个概念——背压机制（Backpressure）。</p>
+<p data-nodeid="8956">什么是背压？简单来说就是下游能够向上游反馈流量请求的机制。通过前面的分析，我们知道如果消费者消费数据的速度赶不上生产者生产数据的速度时，它就会持续消耗系统的资源，直到这些资源被消耗殆尽。</p>
+<p data-nodeid="8957">这个时候，就需要有一种机制使得消费者可以根据自身当前的处理能力通知生产者来调整生产数据的速度，这种机制就是背压。采用背压机制，消费者会根据自身的处理能力来请求数据，而生产者也会根据消费者的能力来生产数据，从而在两者之间达成一种动态的平衡，确保系统的即时响应性。</p>
+<h3 data-nodeid="8958">响应式流规范</h3>
+<p data-nodeid="8959">关于流量控制我们已经讨论了很多，而针对流量控制的解决方案以及背压机制都包含在响应式流规范中，其中包含了响应式编程的各个核心组件，让我们一起来看一下。</p>
+<h4 data-nodeid="8960" class="">响应式流的核心接口</h4>
+<p data-nodeid="14948" class="">在 Java 的世界中，响应式流规范只定义了四个核心接口，即 Publisher<code data-backticks="1" data-nodeid="14950">&lt;T&gt;</code>、Subscriber<code data-backticks="1" data-nodeid="14952">&lt;T&gt;</code>、Subscription 和 Processor&lt;T,R&gt;。</p>
+
+
+<ul data-nodeid="15316">
+<li data-nodeid="15317">
+<p data-nodeid="15318" class="">Publisher<code data-backticks="1" data-nodeid="15320">&lt;T&gt;</code></p>
+</li>
+</ul>
+
+<p data-nodeid="8965">Publisher 代表的就是一种可以生产无限数据的发布者，该接口定义如下所示。</p>
+<pre class="lang-java" data-nodeid="8966"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">interface</span> <span class="hljs-title">Publisher</span>&lt;<span class="hljs-title">T</span>&gt; </span>{
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">subscribe</span><span class="hljs-params">(Subscriber&lt;? <span class="hljs-keyword">super</span> T&gt; s)</span></span>;
+}
+</code></pre>
+<p data-nodeid="8967">可以看到，Publisher 根据收到的请求向当前订阅者 Subscriber 发送元素。</p>
+<ul data-nodeid="15681">
+<li data-nodeid="15682">
+<p data-nodeid="15683" class="">Subscriber <code data-backticks="1" data-nodeid="15685">&lt;T&gt;</code></p>
+</li>
+</ul>
+
+<p data-nodeid="16046" class="">对应的，Subscriber 代表的是一种可以从发布者那里订阅并接收元素的订阅者。Subscriber <code data-backticks="1" data-nodeid="16048">&lt;T&gt;</code> 接口定义如下所示。</p>
+
+<pre class="lang-java" data-nodeid="8972"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">interface</span> <span class="hljs-title">Subscriber</span>&lt;<span class="hljs-title">T</span>&gt; </span>{
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">onSubscribe</span><span class="hljs-params">(Subscription s)</span></span>;
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">onNext</span><span class="hljs-params">(T t)</span></span>;
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">onError</span><span class="hljs-params">(Throwable t)</span></span>;
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">onComplete</span><span class="hljs-params">()</span></span>;
+}
+</code></pre>
+<p data-nodeid="8973">我们注意到 Subscriber 接口包含了一组有用的方法，这组方法构成了数据流请求和处理的基本流程，我们一一来看一下。</p>
+<p data-nodeid="8974">其中，onSubscribe() 从命名上看就是一个回调方法，当发布者的 subscribe() 方法被调用时就会触发这个回调。而在该方法中有一个参数 Subscription，可以把这个 Subscription 看作是一种用于订阅的上下文对象。Subscription 对象中包含了这次回调中订阅者想要向发布者请求的数据个数。</p>
+<p data-nodeid="8975">当订阅关系已经建立，那么发布者就可以调用订阅者的 onNext() 方法向订阅者发送一个数据。这个过程是持续不断的，直到所发送的数据已经达到 Subscription 对象中所请求的数据个数。这时候 onComplete() 方法就会被触发，代表这个数据流已经全部发送结束。而一旦在这个过程中出现了异常，那么就会触发 onError() 方法，我们可以通过这个方法捕获到具体的异常信息进行处理，而数据流也就自动终止了。</p>
+<ul data-nodeid="8976">
+<li data-nodeid="8977">
+<p data-nodeid="8978">Subscription</p>
+</li>
+</ul>
+<p data-nodeid="8979">Subscription 代表的就是一种订阅上下文对象，它在订阅者和发布者之间进行传输，从而在两者之间形成一种契约关系。Subscription 接口定义如下所示。</p>
+<pre class="lang-java" data-nodeid="8980"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">interface</span> <span class="hljs-title">Subscription</span> </span>{
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">request</span><span class="hljs-params">(<span class="hljs-keyword">long</span> n)</span></span>;
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">cancel</span><span class="hljs-params">()</span></span>;
+}
+</code></pre>
+<p data-nodeid="8981">这里的 request() 方法用于请求 n 个元素，订阅者可以通过不断调用该方法来向发布者请求数据；而 cancel() 方法显然是用来取消这次订阅。请注意，<strong data-nodeid="9102">Subscription 对象是确保生产者和消费者针对数据处理速度达成一种动态平衡的基础，也是流量控制中实现背压机制的关键所在</strong>，我们可以通过下图来进一步理解整个数据请求和处理过程。</p>
+<p data-nodeid="16769" class="te-preview-highlight"><img src="https://s0.lgstatic.com/i/image6/M00/21/38/Cgp9HWBUIZqASTpVAADEEHREqvE168.png" alt="Drawing 11.png" data-nodeid="16773"></p>
+<div data-nodeid="16770"><p style="text-align:center">图 6  Subscription 与背压机制示意图</p></div>
+
+
+
+
+<p data-nodeid="8985">Publisher、Subscriber 和 Subscription 接口是响应式编程的核心组件，响应式流规范也只包含了这些接口，因此是一个非常抽象且精简的接口规范。结合前面的讨论结果，我们可以明确，响应式流规范实际上提供了一种“推-拉”结合的混合数据流模型。</p>
+<p data-nodeid="8986">当然，响应式流规范非常灵活，还可以提供独立的“推”模型和“拉”模型。如果为了实现纯“推”模型，我们可以考虑一次请求足够多的元素；而对于纯“拉”模型，相当于就是在每次调用 Subscriber 的 onNext() 方法时只请求一个新元素。</p>
+<h4 data-nodeid="8987">响应式流的技术生态圈</h4>
+<p data-nodeid="8988">响应式流是一种规范，而该规范的核心价值就在于为业界提供了一种非阻塞式背压的异步流处理标准。各个供应商都可以基于该规范实现自己的响应式开发库，而这些开发库之间则可以做到互相兼容、相互交互。</p>
+<p data-nodeid="8989">目前，业界主流响应式开发库包括 RxJava、Akka、Vert.x 以及 Project Reactor。在本课程中，我们将重点介绍 Project Reactor，它是 Spring 5 中所默认集成的响应式开发库。</p>
+<h3 data-nodeid="8990">小结与预告</h3>
+<p data-nodeid="8991">承接上一讲内容，本讲进一步分析了数据流的概念的分类，以及“推”流模式下的流量控制问题，从而引出了响应式系统中的背压机制。而流量控制的解决方案都包含在响应式流规范中，我们对这一规范中的核心组件展开了详细的说明。</p>
+<p data-nodeid="8992">响应式流规范是对响应式编程思想精髓的呈现，对于开发人员而言，理解这一规范有助于更好地掌握开发库的使用方法和基本原理。</p>
+<p data-nodeid="8993">这里给你留一道思考题：你能简要描述响应式流规范中数据的生产者和消费者之间的交互关系吗？</p>
+<p data-nodeid="8994">下一讲，我们来聊聊响应式编程的应用场景，相信这也是你最关心的内容，到时见。</p>
+<blockquote data-nodeid="8995">
+<p data-nodeid="8996">点击链接，获取课程相关代码↓↓↓<br>
+<a href="https://github.com/lagoueduCol/ReactiveProgramming-jianxiang.git?fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="9124">https://github.com/lagoueduCol/ReactiveProgramming-jianxiang.git</a></p>
+</blockquote></div>
+
+</body></html>

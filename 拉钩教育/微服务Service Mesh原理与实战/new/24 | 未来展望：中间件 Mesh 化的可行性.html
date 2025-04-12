@@ -1,0 +1,1233 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>24 | 未来展望：中间件 Mesh 化的可行性</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>24 | 未来展望：中间件 Mesh 化的可行性</h1><p data-nodeid="941" class="">在前面的章节中，我们讲解了 Service Mesh 如何进一步在生产中落地，以及它的最佳实践。这一讲我们继续来看 Service Mesh 的未来发展趋势。</p>
+<p data-nodeid="942">从整个开源社区的角度来看，随着云原生和 Kubernetes 的发展，Service Mesh 逐步成为微服务架构的基础组件。</p>
+<p data-nodeid="943">结合前面讲解过的内容，我们已经知道 Service Mesh 主要接管服务间的流量，包括边缘网关的南北向流量和内部通信的东西向流量。在微服务架构中，除了服务间的流量，服务和中间件通信的流量也非常重要，这块流量的代理也是未来整个微服务 Mesh 化中重要的一环。</p>
+<p data-nodeid="944">另外随着微服务架构的进一步发展，FaaS（Function as a Service）也是未来微服务架构重要的演进方向之一，在 FaaS 架构中，Service Mesh 同样可以<strong data-nodeid="1044">作为底层基础设施接管服务间的流量</strong>。</p>
+<p data-nodeid="945">接下来，我们就来看看 Service Mesh 对于数据中间件的支持。</p>
+<h3 data-nodeid="946">中间件 Mesh 化</h3>
+<p data-nodeid="947">著名的数据面已经支持了诸多数据库和队列中间件，例如 MySQL、MongoDB、PostgreSQL、Redis、Kafka 等。下面就让我们以 Redis 为例子，看看 Envoy 对于数据中间件的支持。</p>
+<h4 data-nodeid="948">Redis 代理</h4>
+<p data-nodeid="949">Envoy 可以作为 Redis 的代理，部署在每个服务的节点上，这样就无须传统的 Redis 中间件负责 Redis 集群的代理工作，也不需要传统 Redis 官方提供的 Smart Client。Envoy 可以替代这部分功能，控制 Redis 集群，路由到正确的 hash 分片节点上。</p>
+<p data-nodeid="950">使用 Envoy 做 Redis 代理，<strong data-nodeid="1055">既避免了传统的 Smart Client 的升级维护问题，也避免了传统的 Redis 中间件中心化</strong>的问题。通过 Mesh 的架构、Metrics 注入等方式，可以看到到底是哪个服务调用的 Redis，再配合服务间的链路调用图，这样整个内网间所有流量的链路调用图就可以绘制出来了。</p>
+<p data-nodeid="951">目前 Envoy 的 Redis 代理支持以下功能：</p>
+<ul data-nodeid="952">
+<li data-nodeid="953">
+<p data-nodeid="954">Redis 协议的编解码；</p>
+</li>
+<li data-nodeid="955">
+<p data-nodeid="956">基于哈希的分片；</p>
+</li>
+<li data-nodeid="957">
+<p data-nodeid="958">Ketama 一致性哈希算法；</p>
+</li>
+<li data-nodeid="959">
+<p data-nodeid="960">详细的数据统计信息；</p>
+</li>
+<li data-nodeid="961">
+<p data-nodeid="962">对于 Redis 节点的主动和被动健康检查；</p>
+</li>
+<li data-nodeid="963">
+<p data-nodeid="964">上游代理和下游代理分别进行身份认证。</p>
+</li>
+</ul>
+<p data-nodeid="965">通过上述功能，我们可以看到 Envoy 对于 Redis 的支持相对比较简单，当然未来社区也在规划支持更多的功能，包括熔断、链路追踪、重试等。</p>
+<p data-nodeid="966">数据库中间件产品（比如 Redis 集群中间件、MySQL 集群中间件）的功能主要是对数据做分片处理，以解决单个 Redis 或者 MySQL 节点无法处理的负载。<strong data-nodeid="1069">这些功能最早也在 SDK 中，因为维护升级不方便，所以演进成了数据库中间件</strong>。随着 Mesh 化架构的流行，在服务本地部署一个 Sidecar，就可以解决数据库中间件产品中心化的问题。</p>
+<p data-nodeid="967">数据库中间件的 Mesh 化和传统的服务 Mesh 化，关注的点略有不同：<strong data-nodeid="1075">数据库的中间件产品更关注的是对于数据的分片处理</strong>，比如 MySQL 的分库分表等算法、Redis 集群的分片算法等。但也有很多功能是通用的，比如限流熔断等治理功能、链路追踪、Metrics 监控，甚至服务发现等功能。</p>
+<p data-nodeid="968">现在，我们已经了解了数据库中间件产品 Mesh 化的发展方向，接下来我们继续学习在 FaaS 中 Service Mesh 架构到底能发挥什么样的作用。</p>
+<h3 data-nodeid="969">FaaS</h3>
+<p data-nodeid="970">FaaS（Function as a Service）是一种在无状态容器中运行的事件驱动模型。简单来说，Function 是比 Service 更小的程序单元，如果要进行标准化的 FaaS 化改造，就需要进一步拆分，<strong data-nodeid="1083">将微服务中的每个方法都拆成一个单独的服务</strong>。</p>
+<p data-nodeid="971">虽然到目前为止，FaaS 依然是一种非常理想化的架构，比如在服务 0 节点的情况下要消耗大量的时间等待服务启动，但 FaaS 中的一些核心思想，依然是微服务架构的发展趋势，或者说它们可以直接落地，比如强大的自动扩缩容能力、基于异步的事件驱动模型等。</p>
+<p data-nodeid="972">FaaS 的开源方案有 Knative、OpenFaaS、Fission、Kubeless 等，下面我们简单介绍一下这几种常见的开源方案。</p>
+<ul data-nodeid="973">
+<li data-nodeid="974">
+<p data-nodeid="975">Knative</p>
+</li>
+</ul>
+<p data-nodeid="976">Knative 是谷歌牵头发起的 Serverless 项目，是基于 Kubernetes 和 Istio 的 Serverless 解决方案。</p>
+<ul data-nodeid="977">
+<li data-nodeid="978">
+<p data-nodeid="979">OpenFaaS</p>
+</li>
+</ul>
+<p data-nodeid="980">OpenFaaS 是一个使用 Docker 构建无服务器（Serverless）功能的框架，可以部署在 Kubernetes 或者 Swarm 平台。通过 Watchdog 启动进程的方式进行函数式调用。</p>
+<ul data-nodeid="981">
+<li data-nodeid="982">
+<p data-nodeid="983">Fission</p>
+</li>
+</ul>
+<p data-nodeid="984">Fission 是一款基于 Kubernetes 的 FaaS 框架，通过 Fission 可以轻而易举地将函数发布成 HTTP 服务。它的主要特点是 Fission 维护一个容器池，可以做到函数 100ms 冷启动。</p>
+<ul data-nodeid="985">
+<li data-nodeid="986">
+<p data-nodeid="987">Kubeless</p>
+</li>
+</ul>
+<p data-nodeid="988">Kubeless 是基于 Kubernetes 的 Serverless 框架，借助 Kubernetes 提供自动扩缩容、API 路由、监控的功能。</p>
+<p data-nodeid="989">这里我们针对 Knative 做具体分析，它借助了 Istio 的强大能力，是未来 FaaS 架构发展的趋势。</p>
+<h4 data-nodeid="990">Knative</h4>
+<p data-nodeid="991">Knative 包含三个核心组件，分别是负责服务处理的 Serving、事件处理的 Eventing，以及负责云原生 CI/CD 构建的 Tekton。</p>
+<ul data-nodeid="992">
+<li data-nodeid="993">
+<p data-nodeid="994">Serving</p>
+</li>
+</ul>
+<p data-nodeid="995">Knative Serving 组件依托于 Kubernetes 平台和 Istio，提供服务自动扩缩容、服务路由、流量代理、容器部署等功能。</p>
+<ul data-nodeid="996">
+<li data-nodeid="997">
+<p data-nodeid="998">Eventing</p>
+</li>
+</ul>
+<p data-nodeid="999">Eventing 主要由事件源（EventSource）、事件处理（Flow）以及事件消费者（EventConsumer）三部分构成，定义了 CloudEvent 的通用事件标准。</p>
+<ul data-nodeid="1000">
+<li data-nodeid="1001">
+<p data-nodeid="1002">Tekton</p>
+</li>
+</ul>
+<p data-nodeid="1003">Tekton 是一个功能强大且灵活的 Kubernetes 云原生 CI/CD 开源框架。</p>
+<p data-nodeid="1004">接下来，我们结合一张 Knative 架构图，进一步讲解 FaaS 的核心原理。</p>
+<p data-nodeid="1005">下图中的 Route 可以理解为 Istio Gateway 的角色。实际上，大多数 FaaS 架构，都有一个类似 API Gateway 的角色，主要用来处理流量的转发，在 Pod 数量为 0 时，也会做一些特殊处理，比如此时要 hold 住流量，等待 Pod 启动。</p>
+<p data-nodeid="1006"><img src="https://s0.lgstatic.com/i/image6/M00/16/B7/Cgp9HWBG4P-AFQzZAAFOLVdbxMk069.png" alt="Drawing 0.png" data-nodeid="1107"></p>
+<div data-nodeid="1007"><p style="text-align:center">Knative 架构图</p></div>
+<p data-nodeid="1008">从上图可以看到，流量经过 Gateway（Route）后，会有两个分支，一个是服务的 Pod 存在的时候，流量会直接路由到 Pod 上面；另外一个在 Pod 缩容到 0 的情况下，会转发到一个 Activator 的组件中，这个组件的主要功能是对容器资源的调度。</p>
+<p data-nodeid="1009">当有流量被转发到 Activator 组件时，它会主动通知 Autoscaler 组件进行<strong data-nodeid="1114">扩容</strong>操作，这时 Autoscaler 会创建新的 Pod，提供服务。此时 Activator 对启动的 Pod 进行健康检查，检查通过后，将流量转发到相应的 Pod 上面。</p>
+<p data-nodeid="1010">后面的流程就清晰了， Activator 组件处理完流量后，会将结果返回给 Gateway。至此，整个流程就结束了。</p>
+<p data-nodeid="1011">在流量被转发到 Activator 组件这个分支的过程中，如果 Pod 数量为 0，本次流量处理的时间在很大程度上就取决于 Pod 启动的时间，而这个时间大概率是秒级别的。但在实际生产中，一般的请求<strong data-nodeid="1125">需要毫秒级别返回结果</strong>，秒级别的响应速度很难接受，这也是 FaaS 架构目前在落地中面临的最大问题，<strong data-nodeid="1126">大部分对响应速度要求比较高的场景，Pod 缩容为 0 都是难以接受的</strong>。</p>
+<p data-nodeid="1012">所以 Knative 也提供了 Pod 是否缩容到 0 的选项，这样更有利于 FaaS 架构的落地。尽管没有做到完全的 Serverless，但能够拥有强大的扩缩容能力已经非常有诱惑力了。</p>
+<p data-nodeid="1013">至此，Knative 的核心架构就讲完了。下面我们再来看看在 OpenFaaS 中，一个相较于其他 FaaS 架构的改进部分，这部分改进让 FaaS 相较于传统的队列系统更具优势。</p>
+<h4 data-nodeid="1014">OpenFaaS</h4>
+<p data-nodeid="1015"><strong data-nodeid="1133">同步</strong></p>
+<p data-nodeid="1016">下图是一个传统的 FaaS 调用，或者你也可以理解为传统的微服务调用。在这张图片中，我们的需求是从数据库中读取数据，并根据获取的数据生成一个 PDF 文件上传到 S3 服务器中。但是这个场景消耗的时间会比较长，大概是 2 分钟左右，而且下图的同步架构，会阻塞程序进程，前端的响应也会等待很长时间。</p>
+<p data-nodeid="2375">在传统的微服务架构中，一般我们也不会采用下图的同步系统，而是采用异步队列系统解决：将生成 PDF 作为事件存入队列中，通过队列消费生成 PDF 并上传到 S3 服务器，这样就可以大大提高微服务的同步响应速度了。</p>
+<p data-nodeid="4327" class=""><img src="https://s0.lgstatic.com/i/image6/M00/17/F4/CioPOWBIXc-AQeVHAAO1JrBGh-k128.png" alt="image (7).png" data-nodeid="4335"></p>
+<div data-nodeid="4328"><p style="text-align:center">同步 OpenFaaS 调用图</p></div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<p data-nodeid="1020">那么，在 FaaS 中有没有更好的解决方案呢？我们来看 OpenFaaS 中的异步方案。</p>
+<p data-nodeid="1021"><strong data-nodeid="1143">异步</strong></p>
+<p data-nodeid="4819">在 OpenFaaS 中， OpenFaaS 将请求作为事件直接放入 NATS 这个队列系统中，对于使用者来说，他并不需要关心这是否是一个异步调用。这个调用的编程方式，依然是 HTTP 的方式，只是 OpenFaaS Gateway 自动将此次 HTTP 调用放入了 NATS 队列中，通过 queue-worker这个进程进行队列消费，再通过 HTTP 请求 Generate Statement 服务的方式触发此次服务调用，<strong data-nodeid="4826">用看起来同步的方式完成了整个异步调用</strong>。</p>
+<p data-nodeid="5815" class=""><img src="https://s0.lgstatic.com/i/image6/M00/17/F8/Cgp9HWBIXeSAIKrRAAW1muIBZHo599.png" alt="image (8).png" data-nodeid="5823"></p>
+<div data-nodeid="5816"><p style="text-align:center">OpenFaaS 异步调用图</p></div>
+
+
+
+
+
+
+
+
+<p data-nodeid="6310">通过下图我们可以更直观地了解整个运行过程。</p>
+<p data-nodeid="7316" class="te-preview-highlight"><img src="https://s0.lgstatic.com/i/image6/M01/17/F4/CioPOWBIXfqANn-vAAObuUHa1s0115.png" alt="image (11).png" data-nodeid="7323"></p>
+
+
+
+
+
+
+<p data-nodeid="1027">在这个架构中，使用者无须关心甚至无须感知 NATS 队列系统，对于使用者来说，这看起来就是一次普通的 HTTP 服务调用。而 PDF 生成服务的编写者，也不需要处理复杂的队列消费，对于他来说，也和其他同步服务一样，提供一个简单的 HTTP 服务接口就可以了。FaaS 架构<strong data-nodeid="1162">让队列系统和业务解耦</strong>，可以让队列系统完全交给基础架构团队维护，甚至未来可以随意更换其他的开源队列系统。</p>
+<p data-nodeid="1028">至此，Service Mesh 在 FaaS 场景中的应用我们就讲完了。下面我们来做一个简单的总结。</p>
+<h3 data-nodeid="1029">总结</h3>
+<p data-nodeid="1030">这一讲我介绍了 Service Mesh 在未来的展望，包括中间件 Mesh 化和 FaaS 中 Service Mesh 的作用。在云原生的大趋势下， Service Mesh 已经成为云原生的基础组件，未来云原生架构中的很多场景都会看到 Service Mesh 的应用。</p>
+<p data-nodeid="1031">本讲内容总结如下：</p>
+<p data-nodeid="1032"><img src="https://s0.lgstatic.com/i/image6/M00/16/B7/Cgp9HWBG4SqAPJUBAAGt3f2z_2M257.png" alt="Drawing 4.png" data-nodeid="1169"></p>
+<p data-nodeid="1033">通过这一讲，相信你已经了解了 Envoy 在数据库中间件 Mesh 化中做出的一些尝试，也清楚了 FaaS 的开源架构之一——Knative 就是通过集成 Istio 来为 FaaS 产品提供强大的路由转发能力。</p>
+<p data-nodeid="1034">结合今天的内容，你能谈一谈自己对 Service Mesh 未来的发展方向和演进趋势吗？欢迎在留言区和我分享你的观点。</p>
+<p data-nodeid="1035" class="">今天内容到这里就结束了，下一讲我们将迎来专栏的结束语 ：Service Mesh 会是微服务演进的终极方向吗？作为结束语，我除了讲解相关知识，也想和你分享一下自己的心路历程。我们下一讲再见。</p></div>
+
+</body></html>

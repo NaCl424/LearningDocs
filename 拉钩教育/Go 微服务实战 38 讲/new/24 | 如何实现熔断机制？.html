@@ -1,0 +1,1249 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>24 | 如何实现熔断机制？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>24 | 如何实现熔断机制？</h1><p data-nodeid="22232">在第 22 课时中，我们已经了解了熔断的基本原理和断路器在服务高可用架构中的重要性。那本课时我们继续往下剖析，来详细介绍熔断主要预防的<strong data-nodeid="22310">服务雪崩现象的形成和危害</strong>，以及推荐使用的断路器中间件<strong data-nodeid="22311">Hystrix 的使用方法和相关原理</strong>。</p>
+<h3 data-nodeid="22233">分布式系统中的服务雪崩</h3>
+<p data-nodeid="23480">在分布式系统中，由于业务上的划分，一次完整的请求可能需要借助好几个不同的模块协力完成，在微服务架构中就是需要多个服务实例协力完成。请求会在这些服务实例中传递，服务之间的调用会产生新的请求，它们共同组成一次<strong data-nodeid="23487">服务调用链</strong>，关系如下图所示：</p>
+<p data-nodeid="23841"><img src="https://s0.lgstatic.com/i/image/M00/4F/F7/CgqCHl9hoYyAd7J7AAAu6XVpTzE568.png" alt="Drawing 0.png" data-nodeid="23845"></p>
+<div data-nodeid="23842" class=""><p style="text-align:center">微服务服务调用链示意图</p></div>
+
+
+
+
+
+<p data-nodeid="22237">通过该时序图，我们可以看到：客户端（Client）发起了一次请求 Request1，网关（Gateway）在接收到请求后将它转发（标记为 Request2）给 Service-A；由于这次请求涉及 Service-B 中的数据，所以 Service-A 又向 Service-B 发起了一次 Request3 获取对应的数据；处理结束后，将结果返回给网关，由网关将结果返回给客户端。这里的 Request2 和 Request3 就共同组成了这次调用的调用链。</p>
+<p data-nodeid="24881">至于服务雪崩，我们在第 22 课时曾讲解过，<strong data-nodeid="24889">服务雪崩是指当调用链的某个环节（特别是服务提供方服务）不可用时，将会导致其上游环节不可用，并最终将这种影响扩大到整个系统中，导致整个系统的不可用</strong>。如下图所示：</p>
+<p data-nodeid="24882" class=""><img src="https://s0.lgstatic.com/i/image/M00/4F/F7/CgqCHl9hoZqAaUmRAABYO2_cRvk414.png" alt="Drawing 1.png" data-nodeid="24892"></p>
+<div data-nodeid="24883"><p style="text-align:center">服务雪崩示意图</p></div>
+
+
+
+
+
+
+<p data-nodeid="22241">从图中我们可以看到，服务雪崩一般有 3 个阶段流程。</p>
+<p data-nodeid="25237" class=""><strong data-nodeid="25242">第一阶段是服务提供者不能用。</strong> 如上图所示，在初始阶段，一切运行良好，网关、Service-A 和 Service-B 可以响应客户端的各种请求。但在某一个时间节点，服务提供者 Service-B 由于网络故障或者请求过载不可用，而无法及时响应各类请求。</p>
+
+<p data-nodeid="22243"><strong data-nodeid="22343">第二阶段是服务调用者不可用</strong>。在服务提供者不可用之后，客户端可能会因为错误提示或者长时间的阻塞而不断发送相同的请求到网关中，网关再次将请求转发给 Service-A 进行处理，Service-A 根据业务流程也向 Service-B 发起数据请求；同时，上一阶段中 Service-A 对 Service-B 超时或者失败的请求可能会因为 Service-A 中的重试机制再次请求 Service-B。但这些请求都无法从 Service-B 中获取到有效的返回，最坏的结果就是都被阻塞，无法及时响应。Service-A 会因为发起过多对 Service-B 的请求而逐渐累积一堆等待线程，耗尽线程池中的资源，从而无法响应其他请求，最终导致自身的不可用。</p>
+<p data-nodeid="22244"><strong data-nodeid="22348">最后一阶段是整个系统的不可用</strong>。Service-A 中的等待请求同样阻塞了转发请求的网关。在多线程阻塞型的网关中，大量等待请求将会产生大量的阻塞线程，使得网关没有足够的资源处理其他请求，进而导致整个系统无法对外提供服务。</p>
+<p data-nodeid="26271">为了避免服务雪崩现象的出现，我们就需要及时“壮士断腕”，在必要的时候暂时切断对异常服务提供者的调用，以保证部分服务可用和整体系统的稳定性。这时<strong data-nodeid="26279">断路器</strong>（Circuit Breaker）就该登场了。</p>
+<p data-nodeid="26272" class=""><img src="https://s0.lgstatic.com/i/image/M00/4F/EC/Ciqc1F9hoaiANJYgAAA_xMaFiWc181.png" alt="Drawing 2.png" data-nodeid="26282"></p>
+<div data-nodeid="26273"><p style="text-align:center">断路器</p></div>
+
+
+
+
+
+<p data-nodeid="22248">如上图所示，我们在 Serivce-A 向 Service-B 的请求中增加了一根“保险丝”——断路器。它统计一段时间内 Service-A 对 Serivice-B 请求的响应结果，在超时或者失败次数过多的情况下，阻断 Service-A 对 Service-B 的请求，直接返回相关的异常处理结果，使得 Service-A 中的请求线程能够及时返回，避免资源耗尽而不可用，从而保护了服务调用者和避免了服务级联失败。</p>
+<p data-nodeid="22249">到这里，相信你已经迫不及待地准备在项目中使用断路器保护自己的服务不受分布式系统服务雪崩的影响。但自研断路器组件往往费时费力，秉承着不能重复“造轮子”的理念，我这里推荐你使用 Hystrix。</p>
+<h3 data-nodeid="22250">Hystrix 简介</h3>
+<p data-nodeid="22251"><strong data-nodeid="22366">Hystrix 是 Netflix 开源的一个优秀的服务间断路器</strong>。它能够在服务提供者出现故障时，隔离服务调用者和服务提供者，防止服务级联失败；同时提供失败回滚逻辑，使系统快速从异常中恢复。</p>
+<p data-nodeid="22252">Hystrix 完美地实现了断路器模式，同时还提供了信号量和线程隔离的方式保护服务调用者的线程资源，对延迟和失败提供强大的容错能力，进而保护和控制系统。</p>
+<p data-nodeid="22253">典型的 Hystrix 编程形式如下所示：</p>
+<pre class="lang-java hljs" data-nodeid="27911"><code data-language="java">err := hystrix.Do(<span class="hljs-string">"test_command"</span>, func() error {
+    <span class="hljs-comment">// 远程调用&amp;或者其他需要保护的方法</span>
+    <span class="hljs-keyword">return</span> nil
+  }, func(err error) error{
+    <span class="hljs-comment">// 失败回滚方法</span>
+    <span class="hljs-keyword">return</span> nil
+  })
+</code></pre>
+<p data-nodeid="27912">被 hystrix 包装的远程调用逻辑都会封装为一个 hystrix 命令，其内包含<strong data-nodeid="27961">远程调用逻辑</strong>和<strong data-nodeid="27962">失败回滚逻辑</strong>，根据 hystrix 命名唯一确认一个 hystrix 命令。</p>
+<p data-nodeid="27913">上述代码执行时会先根据 hystrix 命令的命名获取到对应的断路器，并判断断路器是否打开。如果断路器打开，说明此时服务调用已经被熔断了，将直接执行失败回滚逻辑，不执行真正的远程调用逻辑；如果断路器关闭或者处于半开状态，则执行远程调用逻辑。</p>
+<p data-nodeid="27914">接下来我们将通过一个简单的例子来了解 Hystrix 的使用方式。</p>
+<h3 data-nodeid="27915">Hystrix 基础使用案例</h3>
+<p data-nodeid="29017">我们以常见的电商商品系统为例，商品详情页面需要展示下游评论系统的具体评论信息，但是实时最新的评论信息相对来说并不是不可或缺的，紧急情况下可以不进行显示。下图展示了相关的服务交互图：</p>
+<p data-nodeid="29018" class=""><img src="https://s0.lgstatic.com/i/image/M00/4F/F8/CgqCHl9hobqAJ0fBAABU7XC4gtY397.png" alt="Drawing 3.png" data-nodeid="29023"></p>
+<div data-nodeid="29019"><p style="text-align:center">商品系统和评论系统交互图</p></div>
+
+
+
+
+
+<p data-nodeid="27919">商品系统相对于下游的评论系统来说，级别更高，不应该受到评论系统的错误影响，为避免上面我们所说的服务雪崩问题，这二者之间的交互需要使用断路器进行熔断保护。其示例代码如下：</p>
+<pre class="lang-java hljs" data-nodeid="30557"><code data-language="java"><span class="hljs-function">func <span class="hljs-title">GetGoodsComments</span><span class="hljs-params">(id string)</span> <span class="hljs-params">(common.CommentListVO, error)</span>  </span>{
+   <span class="hljs-keyword">var</span> result common.CommentListVO
+   serviceName := <span class="hljs-string">"Comments"</span>
+   err := hystrix.Do(serviceName, func() error{
+      requestUrl := url.URL{
+         Scheme:<span class="hljs-string">"http"</span>,
+         Host: <span class="hljs-string">"127.0.0.1"</span> + <span class="hljs-string">":"</span> + <span class="hljs-string">"8081"</span>,
+         Path:<span class="hljs-string">"/comments/detail"</span>,
+         RawQuery:<span class="hljs-string">"id="</span> + id,
+      }
+      resp, err := http.Get(requestUrl.String())
+      <span class="hljs-keyword">if</span> err != nil{
+         <span class="hljs-keyword">return</span> err
+      }
+      body, _ := ioutil.ReadAll(resp.Body)
+​      jsonErr := json.Unmarshal(body, result)
+      <span class="hljs-keyword">if</span> jsonErr != nil {
+        <span class="hljs-keyword">return</span> jsonErr
+      }
+<span class="hljs-keyword">return</span> nil
+   }, func(e error) error {
+      <span class="hljs-comment">// 断路器打开时的处理逻辑，本示例是直接返回错误提示</span>
+      <span class="hljs-keyword">return</span> errors.New(<span class="hljs-string">"Http errors！"</span>)
+   })​
+   <span class="hljs-keyword">if</span> err == nil {
+      <span class="hljs-keyword">return</span> result, nil
+   } <span class="hljs-keyword">else</span> {
+      <span class="hljs-keyword">return</span> result, err
+   }
+}
+</code></pre>
+<p data-nodeid="30558">我们启动 Goods 服务和 Comments 服务，接着我们访问 Goods 的 /goods/detail 接口，查询固定商品的详情，Goods 服务会发起对 Comments 服务的远程调用。访问地址如下：</p>
+<pre class="lang-java hljs" data-nodeid="32136"><code data-language="java">http:<span class="hljs-comment">//localhost:12312/goods/detail/id=1</span>
+</code></pre>
+<p data-nodeid="32137">可以获取到正确的响应，如下：</p>
+<pre class="lang-java hljs" data-nodeid="33703"><code data-language="java">{
+&nbsp; &nbsp; <span class="hljs-string">"detail"</span>: {
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-string">"Id"</span>: <span class="hljs-string">"1"</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-string">"Name"</span>: <span class="hljs-string">"Name"</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-string">"Comments"</span>: {
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-string">"Id"</span>: <span class="hljs-string">""</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-string">"CommentList"</span>: [
+               {
+                 <span class="hljs-string">"Id"</span>:<span class="hljs-string">"1"</span>,
+                 <span class="hljs-string">"Desc"</span>:<span class="hljs-string">"Comments"</span>,
+                 <span class="hljs-string">"Score"</span>:<span class="hljs-number">2.0</span>,
+                 <span class="hljs-string">"ReplyId"</span>:<span class="hljs-string">"0"</span>
+               }
+            ]
+&nbsp; &nbsp; &nbsp; &nbsp; }
+&nbsp; &nbsp; },
+&nbsp; &nbsp; <span class="hljs-string">"error"</span>: <span class="hljs-string">""</span>
+}
+</code></pre>
+<p data-nodeid="33704">然后，我们关闭 Comments 服务模仿下游服务出现错误的场景，继续访问上述地址，得到的结果包含如下内容：</p>
+<pre class="lang-java hljs" data-nodeid="35258"><code data-language="java"><span class="hljs-string">"error"</span>: <span class="hljs-string">"Get http://127.0.0.1:8081/comments/detail?id=1: dial tcp 127.0.0.1:8081: connect: connection refused"</span>
+</code></pre>
+<p data-nodeid="35259">可以看到返回结果中直接把异常输出了，同时日志中也会输出上述的 connection refused 信息，这说明 hystrix.Do 中包装代码被执行，但是找不到下游服务实例，无法发起调用，返回了错误码。</p>
+<p data-nodeid="35260">接着，我们再多次访问上述地址，发现被包装的代码会被一直执行，并没有触发断路器打开逻辑。这是为什么呢？</p>
+<p data-nodeid="35261">原来 hystrix 的默认配置是访问请求数在 20 次以上才会触发断路器计算的逻辑，我们可以在程序启动时修改断路器最低启动阈值为 4 次，来验证断路器打开后效果，在 Goods 的 main 函数中添加 hystrix 的配置信息，如下所示：</p>
+<pre class="lang-java hljs" data-nodeid="36789"><code data-language="java"><span class="hljs-function">func <span class="hljs-title">main</span><span class="hljs-params">()</span>  </span>{
+  .....
+  <span class="hljs-comment">// 设置断路器最低启动阈值为 4</span>
+  hystrix.ConfigureCommand(<span class="hljs-string">"Comments"</span>, hystrix.CommandConfig{
+    RequestVolumeThreshold:<span class="hljs-number">4</span>,
+  })​
+  .....
+}
+</code></pre>
+<p data-nodeid="36790">重新启动 Goods 服务，连续访问接口失败 4 次之后，继续访问将不会持续出现 connection refused 的错误日志，说明此时断路器已经打开，直接执行了失败回滚函数，返回异常结果。</p>
+<p data-nodeid="36791">如果 5 秒之后我们重新访问接口，将会发现请求重新执行了 hystrix.Do 中的远程调用代码，这是因为断路器打开之后的超时时间已经结束（默认为 5 秒钟），断路器进入了半开状态，允许程序重新执行远程调用，试探下游服务是否恢复可用状态，因为 Comments 服务处于一直不可用的状态，请求失败后，断路器又回到的打开状态。</p>
+<h3 data-nodeid="36792">Hystrix 原理</h3>
+<p data-nodeid="37844">看完 Hystrix 使用的简单案例后，我们再来了解一下 Hystrix 断路器的相关原理，分析一下 Hystrix.Do 的关键实现。</p>
+<p data-nodeid="37845" class=""><img src="https://s0.lgstatic.com/i/image/M00/4F/EC/Ciqc1F9hodmASLFTAADzDRuBp1g798.png" alt="Drawing 4.png" data-nodeid="37850"></p>
+<div data-nodeid="37846"><p style="text-align:center">Hystrix 断路器原理示意图</p></div>
+
+
+
+
+
+<p data-nodeid="36796">从上述的流程图中，可以看到：</p>
+<ul data-nodeid="36797">
+<li data-nodeid="36798">
+<p data-nodeid="36799">Hystrix.Do 或 Go 函数执行时，都会调用 Hystrix.Doc 函数，然后交由对应的 HystrixCommand 处理。</p>
+</li>
+<li data-nodeid="36800">
+<p data-nodeid="36801">HystrixCommand 会首先调用 allowRequest 函数判断当前是否处在熔断状态中，如果不是则直接放行，执行包装定义的代码逻辑；如果是的话，还要看是否到达预定熔断时长，如果熔断时长到了，也是放行，否则直接执行预先设定的错误逻辑。</p>
+</li>
+<li data-nodeid="36802">
+<p data-nodeid="36803">HystrixCommand 执行结束前都会调用 markSuccess(duration) 或 markFailure(duration) 函数，统计一下在一定的 duration（时间间隔）内有多少调用是成功的，另有多少调用是失败的。</p>
+</li>
+<li data-nodeid="36804">
+<p data-nodeid="36805">isOpen 函数会判断当前是否需要打开断路器，计算一下本个周期内的请求整体错误率，如果高于一个阈值，那么打开熔断，否则关闭。</p>
+</li>
+<li data-nodeid="36806">
+<p data-nodeid="36807">Hystrix 会在内存中为每个 HystrixCommand 维护一个数组，其记录着每一个周期的请求结果的统计。该数组只能维护固定数量的周期数据，超过一定时间的周期数据会被删除掉，这样才能添加新的周期数据进入数组。</p>
+</li>
+</ul>
+<h3 data-nodeid="36808">小结</h3>
+<p data-nodeid="36809">在本课时，我为你讲述了 Hystrix 的使用和原理，作为开源的熔断组件，Hystrix 能在下游服务调用出现问题时，主动打开断路器，返回预先设置的默认值，防止服务雪崩现象，这为我们提供了开箱即用的服务自我保护能力。</p>
+<p data-nodeid="36810">那么除了使用 Hystrix 作为熔断组件外，你知道还有哪些组件或者中间件可以为服务提供熔断功能呢？欢迎你在评论区积极留言讨论。</p></div>
+
+</body></html>

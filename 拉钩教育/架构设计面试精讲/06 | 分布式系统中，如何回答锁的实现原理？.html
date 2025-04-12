@@ -1,0 +1,952 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>06 | 分布式系统中，如何回答锁的实现原理？</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>06 | 分布式系统中，如何回答锁的实现原理？</h1><p data-nodeid="122531" class="">上一讲，我讲了分布系统的事务一致性，今天这一讲，我想带你了解分布式系统中与锁有关的面试问题。</p>
+<h3 data-nodeid="122532">案例背景</h3>
+<p data-nodeid="124883" class="">分布式锁是解决协调分布式系统之间，同步访问共享资源的一种方式。详细来讲：在分布式环境下，多个系统在同时操作共享资源（如写数据）时，发起操作的系统通常会通过一种方式去协调其他系统，然后获取访问权限，得到访问权限后才可以写入数据，其他系统必须等待权限释放。<br>
+<img src="https://s0.lgstatic.com/i/image/M00/8D/67/CgqCHl_-esuAcq7vAAFRjfl0DJE878.png" alt="22.png" data-nodeid="124888"></p>
+
+
+
+
+<div data-nodeid="126883" class=""><p style="text-align:center"></p><p style="text-align:center"><span style="color:#b8b8b8">分布式锁</span></p></div>
+
+
+
+
+
+
+
+<p data-nodeid="122536">我和其他的面试官交流后发现，很多面试官都会问候选人与分布式锁相关的问题，在一些细节上挖得还比较细。比如在分布式系统中涉及共享资源的访问，一些面试官会深挖如何控制并发访问共享资源；如何解决资源争抢等技术细节，这些问题在下单场景、优惠券场景都会被考察到，足以证明“分布式锁”考点的重要性。</p>
+<p data-nodeid="122537">那么假设你正在面试，面试官模拟了系统秒杀的场景：为了防止商品库存超售，在并发场景下用到了分布式锁的机制，做商品扣减库存的串行化操作。然后问你：“你如何实现分布式锁？”你该怎么回答呢？</p>
+<h3 data-nodeid="122538">案例分析</h3>
+<p data-nodeid="122539">当你听到这个问题后，心里会不会窃喜？觉得这是一道送分题，因为可选方案有很多，比如：</p>
+<ul data-nodeid="122540">
+<li data-nodeid="122541">
+<p data-nodeid="122542">基于关系型数据库 MySQL 实现分布式锁；</p>
+</li>
+<li data-nodeid="122543">
+<p data-nodeid="122544">基于分布式缓存 Redis 实现分布式锁；</p>
+</li>
+</ul>
+<p data-nodeid="122545">你从中选择一个熟悉的实现方式，然后和面试官展开拉锯式的问答环节。</p>
+<blockquote data-nodeid="122546">
+<p data-nodeid="122547">你：“可以基于 Redis 的 setnx 命令来实现分布式锁。”<br>
+面试官：“当拿到锁的服务挂掉，如何防止死锁？”<br>
+你：“可以为锁设置一个过期时间。”<br>
+面试官：“那如何保证加锁和设置过期时间是原子操作？”<br>
+……</p>
+</blockquote>
+<p data-nodeid="122548">如果面试官觉得你回答问题的思路清晰有条理，给出的实现方案也可以落地，并且满足你的业务场景，那么他会认可你具备初中级研发工程师该具备的设计能力，但不要高兴得太早。</p>
+<p data-nodeid="122549">因为有些面试官会继续追问：“分布式锁用 Zookeeper 实现行不行？”，“分布式锁用 etcd 实现行不行？” 借机考察你对分布式协调组件的掌握。你可能会觉得开源组件那么多，自己不可能每一个都用过，答不出来也无妨。<strong data-nodeid="122684">但面试官提问的重点不是停留在组件的使用上，而是你对分布式锁的原理问题的掌握程度。</strong></p>
+<p data-nodeid="122550">换句话说，“如果让借助第三方组件，你怎么设计分布式锁？” 这背后涉及了分布式锁的底层设计逻辑，是你需要掌握的。</p>
+<p data-nodeid="122551">02 讲我提到，在给出方案之前，你要明确待解决的问题点是什么。虽然你可以借助数据库 DB、Redis 和 ZooKeeper 等方式实现分布式锁，但要设计一个分布式锁，就需要明确分布式锁经常出现哪些问题，以及如何解决。</p>
+<ul data-nodeid="122552">
+<li data-nodeid="122553">
+<p data-nodeid="122554"><strong data-nodeid="122691">可用问题</strong>：无论何时都要保证锁服务的可用性（这是系统正常执行锁操作的基础）。</p>
+</li>
+<li data-nodeid="122555">
+<p data-nodeid="122556"><strong data-nodeid="122696">死锁问题</strong>：客户端一定可以获得锁，即使锁住某个资源的客户端在释放锁之前崩溃或者网络不可达（这是避免死锁的设计原则）。</p>
+</li>
+<li data-nodeid="122557">
+<p data-nodeid="122558"><strong data-nodeid="122701">脑裂问题</strong>：集群同步时产生的数据不一致，导致新的进程有可能拿到锁，但之前的进程以为自己还有锁，那么就出现两个进程拿到了同一个锁的问题。</p>
+</li>
+</ul>
+<p data-nodeid="122559">总的来说，设计分布式锁服务，至少要解决上面最核心的几个问题，才能评估锁的优劣，从问题本质来回答面试中的提问，以不变应万变。接下来，我就以开篇的 “库存扣减” 为例，带你了解分布式锁的常见实现方式、优缺点，以及方案背后的原理。</p>
+<h3 data-nodeid="122560">案例解答</h3>
+<h4 data-nodeid="122561">基于关系型数据库实现分布式锁</h4>
+<p data-nodeid="122562">基于关系型数据库（如 MySQL） 来实现分布式锁是任何阶段的研发同学都需要掌握的，做法如下：先查询数据库是否存在记录，为了防止幻读取（幻读取：事务 A 按照一定条件进行数据读取，这期间事务 B 插入了相同搜索条件的新数据，事务 A 再次按照原先条件进行读取时，发现了事务 B 新插入的数据&nbsp;）通过数据库行锁 select for update 锁住这行数据，然后将查询和插入的 SQL 在同一个事务中提交。</p>
+<p data-nodeid="122563">以订单表为例：</p>
+<pre class="lang-sql" data-nodeid="122564"><code data-language="sql"><span class="hljs-keyword">select</span> <span class="hljs-keyword">id</span> <span class="hljs-keyword">from</span> <span class="hljs-keyword">order</span> <span class="hljs-keyword">where</span> order_id = xxx <span class="hljs-keyword">for</span> <span class="hljs-keyword">update</span>
+</code></pre>
+<p data-nodeid="130200">基于关系型数据库实现分布式锁比较简单，不过你要注意，基于 MySQL 行锁的方式会出现交叉死锁，比如事务 1 和事务 2 分别取得了记录 1 和记录 2 的排它锁，然后事务 1 又要取得记录 2 的排它锁，事务 2 也要获取记录 1 的排它锁，那这两个事务就会因为相互锁等待，产生死锁。</p>
+<p data-nodeid="130201" class=""><img src="https://s0.lgstatic.com/i/image/M00/8D/5C/Ciqc1F_-euqAGDKSAAMBFlwOlu0123.png" alt="23.png" data-nodeid="130206"></p>
+<div data-nodeid="130202"><p style="text-align:center"><span style="color:#b8b8b8">数据库交叉死锁</span></p></div>
+
+
+
+
+
+
+
+<p data-nodeid="122568">当然，你可以通过“超时控制”解决交叉死锁的问题，但在高并发情况下，出现的大部分请求都会排队等待，所以“基于关系型数据库实现分布式锁”的方式在性能上存在缺陷，所以如果你回答“基于关系型数据库 MySQL 实现分布式锁”，通常会延伸出下面两个问题。</p>
+<ul data-nodeid="122569">
+<li data-nodeid="122570">
+<p data-nodeid="122571"><strong data-nodeid="122715">数据库的事务隔离级别</strong></p>
+</li>
+</ul>
+<p data-nodeid="122572">如果你想让系统支持海量并发，那数据库的并发处理能力就尤为重要，而影响数据库并发能力最重要的因素是<strong data-nodeid="122721">数据库的事务隔离机制</strong>。</p>
+<p data-nodeid="122573">数据库的四种隔离级别从低到高分别是：</p>
+<ul data-nodeid="122574">
+<li data-nodeid="122575">
+<p data-nodeid="122576">读未提交（READ UNCOMMITTED）；</p>
+</li>
+<li data-nodeid="122577">
+<p data-nodeid="122578">读已提交（READ COMMITTED）；</p>
+</li>
+<li data-nodeid="122579">
+<p data-nodeid="122580">可重复读（REPEATABLE READ）；</p>
+</li>
+<li data-nodeid="122581">
+<p data-nodeid="122582">可串行化（SERIALIZABLE）。</p>
+</li>
+</ul>
+<p data-nodeid="122583">其中，可串行化操作就是按照事务的先后顺序，排队执行，然而一个事务操作可能要执行很久才能完成，这就没有并发效率可言了，<strong data-nodeid="122731">所以数据库隔离级别越高，系统的并发性能就越差。</strong></p>
+<ul data-nodeid="122584">
+<li data-nodeid="122585">
+<p data-nodeid="122586"><strong data-nodeid="122735">基于乐观锁的方式实现分布式锁</strong></p>
+</li>
+</ul>
+<p data-nodeid="122587">在数据库层面，select for update 是悲观锁，会一直阻塞直到事务提交，所以为了不产生锁等待而消耗资源，你可以基于乐观锁的方式来实现分布式锁，比如基于版本号的方式，首先在数据库增加一个 int 型字段 ver，然后在 SELECT 同时获取 ver 值，最后在 UPDATE 的时候检查 ver 值是否为与第 2 步或得到的版本值相同。</p>
+<pre class="lang-sql" data-nodeid="122588"><code data-language="sql"><span class="hljs-comment">## SELECT 同时获取 ver 值</span>
+<span class="hljs-keyword">select</span> amount, old_ver <span class="hljs-keyword">from</span> <span class="hljs-keyword">order</span> <span class="hljs-keyword">where</span> order_id = xxx
+<span class="hljs-comment">## UPDATE 的时候检查 ver 值是否与第 2 步获取到的值相同</span>
+<span class="hljs-keyword">update</span> <span class="hljs-keyword">order</span> <span class="hljs-keyword">set</span> ver = old_ver + <span class="hljs-number">1</span>, amount = yyy <span class="hljs-keyword">where</span> order_id = xxx <span class="hljs-keyword">and</span> ver = old_ver
+</code></pre>
+<p data-nodeid="122589">此时，如果更新结果的记录数为1，就表示成功，如果更新结果的记录数为 0，就表示已经被其他应用更新过了，需要做异常处理。</p>
+<p data-nodeid="122590">你可以看到，初中级的研发工程师除了要掌握如何基于关系型数据库实现分布式锁，还要提前掌握数据库隔离级别的相关知识点，以及锁机制，它们是 MySQL 知识体系的一环，我会在第 10 讲中帮你梳理“如何回答 MySQL 的事务隔离级别和锁的机制？”相关问题。</p>
+<h4 data-nodeid="122591">基于分布式缓存实现分布式锁</h4>
+<p data-nodeid="122592">我在开篇提到，因为数据库的性能限制了业务的并发量，所以针对“ 618 和双 11 大促”等请求量剧增的场景，你要引入基于缓存的分布式锁，这个方案可以避免大量请求直接访问数据库，提高系统的响应能力。</p>
+<p data-nodeid="122593">基于缓存实现的分布式锁，就是将数据仅存放在系统的内存中，不写入磁盘，从而减少 I/O 读写。<strong data-nodeid="122745">接下来，我以 Redis 为例讲解如何实现分布式锁。</strong></p>
+<p data-nodeid="122594">在加锁的过程中，实际上就是在给 Key 键设置一个值，为避免死锁，还要给 Key 键设置一个过期时间。</p>
+<pre class="lang-basic" data-nodeid="122595"><code data-language="basic">SET lock_key unique_value NX PX 10000
+</code></pre>
+<ul data-nodeid="122596">
+<li data-nodeid="122597">
+<p data-nodeid="122598">lock_key 就是 key 键；</p>
+</li>
+<li data-nodeid="122599">
+<p data-nodeid="122600">unique_value 是客户端生成的唯一的标识；</p>
+</li>
+<li data-nodeid="122601">
+<p data-nodeid="122602">NX 代表只在 lock_key 不存在时，才对 lock_key 进行设置操作；</p>
+</li>
+<li data-nodeid="122603">
+<p data-nodeid="122604">PX 10000 表示设置 lock_key 的过期时间为 10s，这是为了避免客户端发生异常而无法释放锁。</p>
+</li>
+</ul>
+<p data-nodeid="122605">而解锁的过程就是将 lock_key 键删除，但不能乱删，要保证执行操作的客户端就是加锁的客户端。而这个时候， unique_value 的作用就体现出来，实现方式可以通过 lua 脚本判断 unique_value 是否为加锁客户端。</p>
+<p data-nodeid="122606">选用 Lua 脚本是为了保证解锁操作的原子性。因为 Redis 在执行 Lua 脚本时，可以以原子性的方式执行，从而保证了锁释放操作的原子性。</p>
+<pre class="lang-lua" data-nodeid="122607"><code data-language="lua">// 释放锁时，先比较 unique_value 是否相等，避免锁的误释放
+<span class="hljs-keyword">if</span> redis.call(<span class="hljs-string">"get"</span>,KEYS[<span class="hljs-number">1</span>]) == ARGV[<span class="hljs-number">1</span>] <span class="hljs-keyword">then</span>
+    <span class="hljs-keyword">return</span> redis.call(<span class="hljs-string">"del"</span>,KEYS[<span class="hljs-number">1</span>])
+<span class="hljs-keyword">else</span>
+    <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>
+<span class="hljs-keyword">end</span>
+</code></pre>
+<p data-nodeid="122608">以上，就是基于 Redis 的 SET 命令和 Lua 脚本在 Redis 单节点上完成了分布式锁的加锁、解锁，不过在实际面试中，<strong data-nodeid="122774">你不能仅停留在操作上，因为这并不能满足应对面试需要掌握的知识深度，</strong> 所以你还要清楚基于 Redis 实现分布式锁的优缺点；Redis 的超时时间设置问题；站在架构设计层面上 Redis 怎么解决集群情况下分布式锁的可靠性问题。</p>
+<p data-nodeid="122609">需要注意的是，你不用一股脑全部将其说出来，而是要做好准备，以便跟上面试官的思路，同频沟通。</p>
+<ul data-nodeid="122610">
+<li data-nodeid="122611">
+<p data-nodeid="122612"><strong data-nodeid="122779">基于 Redis 实现分布式锁的优缺点</strong></p>
+</li>
+</ul>
+<p data-nodeid="122613">基于数据库实现分布式锁的方案来说，基于缓存实现的分布式锁主要的优点主要有三点。</p>
+<ol data-nodeid="122614">
+<li data-nodeid="122615">
+<p data-nodeid="122616">性能高效（这是选择缓存实现分布式锁最核心的出发点）。</p>
+</li>
+<li data-nodeid="122617">
+<p data-nodeid="122618">实现方便。很多研发工程师选择使用 Redis 来实现分布式锁，很大成分上是因为 Redis 提供了 setnx 方法，实现分布式锁很方便。但是需要注意的是，在 Redis2.6.12 的之前的版本中，由于加锁命令和设置锁过期时间命令是两个操作（不是原子性的），当出现某个线程操作完成 setnx 之后，还没有来得及设置过期时间，线程就挂掉了，就会导致当前线程设置 key 一直存在，后续的线程无法获取锁，最终造成死锁的问题，<strong data-nodeid="122787">所以要选型 Redis 2.6.12 后的版本或通过 Lua 脚本执行加锁和设置超时时间</strong>（Redis 允许将 Lua 脚本传到 Redis 服务器中执行, 脚本中可以调用多条 Redis 命令，并且 Redis 保证脚本的原子性）。</p>
+</li>
+<li data-nodeid="122619">
+<p data-nodeid="122620">避免单点故障（因为 Redis 是跨集群部署的，自然就避免了单点故障）。</p>
+</li>
+</ol>
+<p data-nodeid="122621">当然，基于 Redis 实现分布式锁也存在缺点，主要是不合理设置超时时间，以及 Redis 集群的数据同步机制，都会导致分布式锁的不可靠性。</p>
+<ul data-nodeid="122622">
+<li data-nodeid="122623">
+<p data-nodeid="122624"><strong data-nodeid="122793">如何合理设置超时时间</strong></p>
+</li>
+</ul>
+<p data-nodeid="122625">通过超时时间来控制锁的失效时间，不太靠谱，比如在有些场景中，一个线程 A 获取到了锁之后，由于业务代码执行时间可能比较长，导致超过了锁的超时时间，自动失效，后续线程 B 又意外的持有了锁，当线程 A 再次恢复后，通过 del 命令释放锁，就错误的将线程 B 中同样 key 的锁误删除了。</p>
+<p data-nodeid="132201" class=""><img src="https://s0.lgstatic.com/i/image2/M01/05/43/Cip5yF_-ewGAUSb5AAFrhs6QnWo499.png" alt="24.png" data-nodeid="132205"></p>
+<div data-nodeid="132870" class="te-preview-highlight"><p style="text-align:center"><span style="color:#b8b8b8">锁超时导致的误操作</span></p></div>
+
+
+
+
+
+<p data-nodeid="122628">所以，如果锁的超时时间设置过长，会影响性能，如果设置的超时时间过短，有可能业务阻塞没有处理完成，<strong data-nodeid="122802">能否合理设置超时时间，是基于缓存实现分布式锁很难解决的一个问题。</strong></p>
+<p data-nodeid="122629"><strong data-nodeid="122807">那么如何合理设置超时时间呢？</strong> 你可以基于续约的方式设置超时时间：先给锁设置一个超时时间，然后启动一个守护线程，让守护线程在一段时间后，重新设置这个锁的超时时间。实现方式就是：写一个守护线程，然后去判断锁的情况，当锁快失效的时候，再次进行续约加锁，当主线程执行完成后，销毁续约锁即可。</p>
+<p data-nodeid="122630">不过这种方式实现起来相对复杂，我建议你结合业务场景进行回答，所以针对超时时间的设置，要站在实际的业务场景中进行衡量。</p>
+<ul data-nodeid="122631">
+<li data-nodeid="122632">
+<p data-nodeid="122633"><strong data-nodeid="122812">Redis 如何解决集群情况下分布式锁的可靠性？</strong></p>
+</li>
+</ul>
+<p data-nodeid="122634">我在 03 讲中提到了，在回答基于 Redis 实现分布式锁时候，你需要具备的答题思路和扩展点。其中也提到了基于 Redis 集群节点实现分布式锁会存在高可用的问题。</p>
+<blockquote data-nodeid="122635">
+<p data-nodeid="122636">由于 Redis 集群数据同步到各个节点时是异步的，如果在 Redis 主节点获取到锁后，在没有同步到其他节点时，Redis 主节点宕机了，此时新的 Redis 主节点依然可以获取锁，所以多个应用服务就可以同时获取到锁。</p>
+</blockquote>
+<p data-nodeid="122637">但 03 讲我没有说怎么解决这个问题，其实 Redis 官方已经设计了一个分布式锁算法 Redlock 解决了这个问题。</p>
+<p data-nodeid="122638">而如果你能基于 Redlock 原理回答出怎么解决 Redis 集群节点实现分布式锁的问题，会成为面试的加分项。<strong data-nodeid="122820">那官方是怎么解决的呢？</strong></p>
+<p data-nodeid="122639">为了避免 Redis 实例故障导致锁无法工作的问题，Redis 的开发者 Antirez 设计了分布式锁算法 Redlock。Redlock 算法的基本思路，是让客户端和多个独立的 Redis 实例依次请求申请加锁，如果客户端能够和半数以上的实例成功地完成加锁操作，那么我们就认为，客户端成功地获得分布式锁，否则加锁失败。</p>
+<p data-nodeid="122640">这样一来，即使有某个 Redis 实例发生故障，因为锁的数据在其他实例上也有保存，所以客户端仍然可以正常地进行锁操作，锁的数据也不会丢失。<strong data-nodeid="122826">那 Redlock 算法是如何做到的呢？</strong></p>
+<p data-nodeid="122641"><strong data-nodeid="122831">我们假设目前有 N 个独立的 Redis 实例，</strong> 客户端先按顺序依次向 N 个 Redis 实例执行加锁操作。这里的加锁操作和在单实例上执行的加锁操作一样，但是需要注意的是，Redlock 算法设置了加锁的超时时间，为了避免因为某个 Redis 实例发生故障而一直等待的情况。</p>
+<p data-nodeid="122642">当客户端完成了和所有 Redis 实例的加锁操作之后，如果有超过半数的 Redis 实例成功的获取到了锁，并且总耗时没有超过锁的有效时间，那么就是加锁成功。</p>
+<h3 data-nodeid="122643">总结</h3>
+<p data-nodeid="122644">在课程的最后，我们总结一下，分布式锁是解决多个进程同时访问临界资源的常用方法，在分布式系统中非常普遍，常见的实现方式是基于数据库，基于 Redis。在同等服务器配置下，Redis 的性能是最好的，数据库最差。</p>
+<p data-nodeid="122645">但是在面试时，你要分清楚面试官的考查点，并结合工作中的业务场景给出答案，面试官不侧重你是否能很快地给出结果，而是你思考的过程。</p>
+<p data-nodeid="122646">对于分布式锁，<strong data-nodeid="122841">你要从“解决可用性、死锁、脑裂”等问题为出发点来展开回答各分布式锁的实现方案的优缺点和适用场景。</strong> 另外，在设计分布式锁的时候，为了解决可用性、死锁、脑裂等问题，一般还会再考虑一下锁的四种设计原则。</p>
+<ul data-nodeid="122647">
+<li data-nodeid="122648">
+<p data-nodeid="122649"><strong data-nodeid="122846">互斥性</strong>：即在分布式系统环境下，对于某一共享资源，需要保证在同一时间只能一个线程或进程对该资源进行操作。</p>
+</li>
+<li data-nodeid="122650">
+<p data-nodeid="122651"><strong data-nodeid="122851">高可用</strong>：也就是可靠性，锁服务不能有单点风险，要保证分布式锁系统是集群的，并且某一台机器锁不能提供服务了，其他机器仍然可以提供锁服务。</p>
+</li>
+<li data-nodeid="122652">
+<p data-nodeid="122653"><strong data-nodeid="122856">锁释放</strong>：具备锁失效机制，防止死锁。即使出现进程在持有锁的期间崩溃或者解锁失败的情况，也能被动解锁，保证后续其他进程可以获得锁。</p>
+</li>
+<li data-nodeid="122654">
+<p data-nodeid="122655"><strong data-nodeid="122861">可重入</strong>：一个节点获取了锁之后，还可以再次获取整个锁资源。</p>
+</li>
+</ul>
+<p data-nodeid="122656" class="">最后，留一道思考题：我在本讲文中并没有介绍基于 Zookeeper 实现分布式锁的方式，按照今天讲的评估一个分布式锁的方式，基于 Zookeeper 是如何设计和解决的呢？它的优缺点是什么。欢迎你在留言区分享你的观点，我们下一讲见。</p></div>
+
+</body></html>

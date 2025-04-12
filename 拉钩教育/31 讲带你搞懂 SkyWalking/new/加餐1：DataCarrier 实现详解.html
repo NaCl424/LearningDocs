@@ -1,0 +1,1264 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>加餐1：DataCarrier 实现详解</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>加餐1：DataCarrier 实现详解</h1><p>在开始介绍 Trace 相关 BootService 实现以及 Trace 数据的收集和发送之前，我们需要了解另一个关键的组件 —— DataCarrier 。DataCarrier 是一个轻量级的生产者-消费者模式的实现库， SkyWalking Agent 在收集到 Trace 数据之后，会先写入到 DataCarrier 中的缓存，然后由后台线程定时发送到后端的 OAP。其实，在多数涉及网络传输的场景中都会使用这种设计：先在本地缓存数据，然后聚合，最后定时批量发送。</p>
+<p>DataCarrier 之前是一个单独的项目，现在并入 SkyWalking 之中作为一个独立的子模块存在，具体位置如下图所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/8B/D8/Cgq2xl6enDGAd7mqAAF-K97sPzE781.png" alt="sw1.png"></p>
+<h4>Buffer 核心原理</h4>
+<p>DataCarrier 底层使用多个定长数组作为存储缓冲区，即 apm-datacarrier 模块中的 Buffer 类，其底层的 buffer 字段（Object[] 类型）是真正存储数据的地方。每个 Buffer 内部维护了一个环形指针（AtomicRangeInteger 类型），我们可以指定其中的 value 字段（AtomicInteger 类型）从 start 值开始递增，当 value 递增到 end 值（int 类型）时，value 字段会被重置为 start 值，实现环形指针的效果，这样，Buffer 就可以实现循环覆盖写入的模式了。</p>
+<p>需要注意的是，AtomicRangeInteger 环形指针底层是基于乐观锁实现的，这样就能够解决并发问题。AtomicRangeInteger 的核心方法 getAndIncrement() 实现如下：</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">final</span> <span class="hljs-keyword">int</span> <span class="hljs-title">getAndIncrement</span><span class="hljs-params">()</span> </span>{ <span class="hljs-comment">//  典型的基于乐观锁的环形指针实现</span>
+    <span class="hljs-keyword">int</span> next;
+    <span class="hljs-keyword">do</span> {
+        next = <span class="hljs-keyword">this</span>.value.incrementAndGet(); <span class="hljs-comment">// </span>
+        <span class="hljs-keyword">if</span> (next &gt; endValue &amp;&amp; 
+              <span class="hljs-keyword">this</span>.value.compareAndSet(next, startValue)) { <span class="hljs-comment">// CAS操作</span>
+            <span class="hljs-keyword">return</span> endValue;
+        }
+    } <span class="hljs-keyword">while</span> (next &gt; endValue);
+    <span class="hljs-keyword">return</span> next - <span class="hljs-number">1</span>;
+}
+</code></pre>
+<p>Buffer 可以指定下面三种写入策略，这些策略只在 Buffer 写满的情况下才生效：</p>
+<ul>
+<li><strong>BLOCKING 策略</strong>（默认）：写入线程阻塞等待，直到 Buffer 有空闲空间为止。如果选择了 BLOCKING 策略，我们可以向 Buffer 中注册 Callback 回调，当发生阻塞时 Callback 会收到相应的事件。</li>
+<li><strong>OVERRIDE 策略</strong>：覆盖旧数据，会导致缓存在 Buffer 中的旧数据丢失。</li>
+<li><strong>IF_POSSIBLE 策略</strong>：如果无法写入则直接返回 false，由上层应用判断如何处理。</li>
+</ul>
+<p>Buffer 提供了读写底层 Objec[] 数组的相关方法，其中 save() 方法负责向底层数组中填充数据，实现如下：</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-function"><span class="hljs-keyword">boolean</span> <span class="hljs-title">save</span><span class="hljs-params">(T data)</span> </span>{
+    <span class="hljs-comment">// AtomicRangeInteger已经处理了并发问题，这里i对应的位置只有当前线程操作</span>
+    <span class="hljs-keyword">int</span> i = index.getAndIncrement(); 
+    <span class="hljs-comment">// 如果当前位置空闲，可以直接填充即可，否则需要按照策略进行处理</span>
+    <span class="hljs-keyword">if</span> (buffer[i] != <span class="hljs-keyword">null</span>) {
+        <span class="hljs-keyword">switch</span> (strategy) {
+            <span class="hljs-keyword">case</span> BLOCKING: <span class="hljs-comment">// BLOCKING策略</span>
+                <span class="hljs-keyword">boolean</span> isFirstTimeBlocking = <span class="hljs-keyword">true</span>;
+                <span class="hljs-keyword">while</span> (buffer[i] != <span class="hljs-keyword">null</span>) {<span class="hljs-comment">// 自旋等待下标为i的位置被释放</span>
+                    <span class="hljs-keyword">if</span> (isFirstTimeBlocking) {
+                        <span class="hljs-comment">// 阻塞当前线程，并通知所有Callback</span>
+                        isFirstTimeBlocking = <span class="hljs-keyword">false</span>;
+                        <span class="hljs-keyword">for</span> (QueueBlockingCallback&lt;T&gt; callback : 
+                              callbacks) {
+                            callback.notify(data);
+                        }
+                    }
+                    Thread.sleep(<span class="hljs-number">1L</span>); <span class="hljs-comment">// sleep</span>
+                }
+                <span class="hljs-keyword">break</span>;
+            <span class="hljs-keyword">case</span> IF_POSSIBLE: <span class="hljs-comment">// IF_POSSIBLE策略直接返回false</span>
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">false</span>; 
+            <span class="hljs-keyword">case</span> OVERRIDE: <span class="hljs-comment">// OVERRIDE策略直接走下面的赋值逻辑，覆盖旧数据</span>
+            <span class="hljs-keyword">default</span>:
+        }
+    }
+    buffer[i] = data; <span class="hljs-comment">// 向下标为i的位置填充数据</span>
+    <span class="hljs-keyword">return</span> <span class="hljs-keyword">true</span>;
+}
+</code></pre>
+<p>obtain() 方法提供了一次性读取（并清理） Buffer 中全部数据的功能，同时也提供了部分读取的重载，具体实现如下：</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-function"><span class="hljs-keyword">public</span> LinkedList&lt;T&gt; <span class="hljs-title">obtain</span><span class="hljs-params">(<span class="hljs-keyword">int</span> start, <span class="hljs-keyword">int</span> end)</span> </span>{
+    LinkedList&lt;T&gt; result = <span class="hljs-keyword">new</span> LinkedList&lt;T&gt;();
+    <span class="hljs-comment">// 将 start~end 之间的元素返回，消费者消费这个result集合就行了</span>
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">int</span> i = start; i &lt; end; i++) {
+        <span class="hljs-keyword">if</span> (buffer[i] != <span class="hljs-keyword">null</span>) {
+            result.add((T)buffer[i]);
+            buffer[i] = <span class="hljs-keyword">null</span>;
+        }
+    }
+    <span class="hljs-keyword">return</span> result;
+}
+</code></pre>
+<blockquote>
+<p><strong>思考题</strong><br>
+假设在 Buffer 写满的情况下，两个线程同时调用 save() 方法写入同一个位置时，会出现什么问题？我们应该如何解决呢？</p>
+</blockquote>
+<h4>Channels</h4>
+<p>Channels 底层管理了多个 Buffer 对象，提供了 IDataPartitioner 选择器用于确定一个数据元素写入到底层的哪个 Buffer 对象中。如果你了解 Kafka 可能知道，Kafka Producer 在发送数据时也会有相应的分区策略，IDataPartitioner 与之类似。当数据并行写入的时候，由 IDataPartitioner 选择器根据一定的均衡策略将数据分散到不同的 Buffer 中写入，这样就可以有效减少并发导致的自旋锁等待时间，降低整个 Channels 的写入压力，提高写入效率。IDataPartitioner 接口有两个实现，如下图所示：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/8B/D9/Cgq2xl6enRKAKlx5AAAlHmaDotA329.png" alt="sw2.png"></p>
+<ul>
+<li><strong>ProducerThreadPartitioner</strong> 会根据写入的 Thread ID 进行分发，这样可以保证相同线程写入的数据都在一个 Buffer 中。</li>
+<li><strong>SimpleRollingPartitioner</strong> 简单循环自增选择器，使用无锁整型（volatile 修饰）的自增并取模，选择要写入的 Buffer 。当然，在高负载时会产生批量连续写入一个 Buffer 的情况，但在中低负载情况下，可以很好的避免不同线程写入数据量不均衡的问题，从而提供较好性能。</li>
+</ul>
+<p>在初始化 Channels 时，有两个特殊的参数需要进行说明：</p>
+<ul>
+<li><strong>channelSize 参数</strong>：指定 Channels 底层 Buffer 的数量，合理的 Buffer 数量搭配合理的分区选择器，可以让整个 Channels 写入无竞争或很少出现竞争。</li>
+<li><strong>bufferSize</strong>：指定每个 Buffer 的大小，合理的 Buffer 大小可以在满足缓冲能力的同时占用合理的内存大小。</li>
+</ul>
+<p>下图展示了 bufferSize 、channelSize 参数与 Channels之间的关系：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/05/95/CgoCgV6enVKAMtBMAABQyIHkIPs184.png" alt="sw3.png"></p>
+<h4>DataCarrier 消费者</h4>
+<p>DataCarrier 没有为生产者定义特殊的接口，上层应用直接调用其 save() 方法即可完成写入。而 DataCarrier 消费者的具体行为都定义在 IConsumer 接口之中：</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">interface</span> <span class="hljs-title">IConsumer</span>&lt;<span class="hljs-title">T</span>&gt; </span>{
+    <span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">init</span><span class="hljs-params">()</span></span>; <span class="hljs-comment">// 初始化消费者</span>
+    <span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">consume</span><span class="hljs-params">(List&lt;T&gt; data)</span></span>; <span class="hljs-comment">// 批量消费消息</span>
+    <span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">onError</span><span class="hljs-params">(List&lt;T&gt; data, Throwable t)</span></span>; <span class="hljs-comment">// 处理消费过程中发生的异常</span>
+    <span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">onExit</span><span class="hljs-params">()</span></span>; <span class="hljs-comment">// 消费结束时通过该方法关闭消费者，释放资源</span>
+}
+</code></pre>
+<p>ConsumerThread 是专门与 IConsumer 对象配合使用的消费线程，它继承 Thread ，并封装了一个 IConsumer 对象，每个 ConsumerThread 线程可以消费多个 DataSource，这里的 DataSource 是 Buffer 的一部分或是完整的 Buffer（DataSource 通过 start、end 字段标记当前 ConsumerThread 消费的 Buffer 区域）。下图展示了 ConsumerThread 的结构图：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/8B/DA/Cgq2xl6enYSAPp8SAADKo6QU_14981.png" alt="sw4.png"></p>
+<p>这里的 ConsumerThread 1 线程同时消费了三个 Buffer，后面介绍 Driver 接口实现时会看到，一个 ConsumerThread 消费的 Buffer 都是来自同一个 Channels。如上图所示，ConsumerThread 1 线程会消费 Buffer 1 和 Buffer 2 中 1~3 这部分元素；同时也会消费 Buffer 3 中 2 ~ 5 这部分元素。ConsumerThread 2 线程只会消费Buffer 3 中 0 ~ 1 这部分元素。</p>
+<p>在 run() 方法中，ConsumerThread 线程会定时循环遍历其负责的所有 Buffer 区域，一旦发现可消费的数据，就会调用 consume() 方法进行处理。ConsumerThread.consume() 方法的核心实现如下：</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-function"><span class="hljs-keyword">private</span> <span class="hljs-keyword">boolean</span> <span class="hljs-title">consume</span><span class="hljs-params">()</span> </span>{
+    <span class="hljs-keyword">boolean</span> hasData = <span class="hljs-keyword">false</span>;
+    LinkedList&lt;T&gt; consumeList = <span class="hljs-keyword">new</span> LinkedList&lt;T&gt;();
+    <span class="hljs-keyword">for</span> (DataSource dataSource : dataSources) {
+        <span class="hljs-comment">// DataSource.obtain()方法是对Buffer.obtain()方法的封装</span>
+        LinkedList&lt;T&gt; data = dataSource.obtain();
+        <span class="hljs-keyword">if</span> (data.size() == <span class="hljs-number">0</span>) { <span class="hljs-keyword">continue</span>; }
+        consumeList.addAll(data); <span class="hljs-comment">// 将待消费的数据转存到consumeList集合</span>
+        hasData = <span class="hljs-keyword">true</span>; <span class="hljs-comment">// 标记此次消费是否有数据</span>
+    }
+
+    <span class="hljs-keyword">if</span> (consumeList.size() &gt; <span class="hljs-number">0</span>) {
+        <span class="hljs-keyword">try</span> { <span class="hljs-comment">// 执行IConsumer.consume()方法中封装的消费逻辑处理消息</span>
+            consumer.consume(consumeList);
+        } <span class="hljs-keyword">catch</span> (Throwable t) {<span class="hljs-comment">// 消费过程中出现异常的时候</span>
+            consumer.onError(consumeList, t);
+        }
+    }
+    <span class="hljs-keyword">return</span> hasData;
+}
+</code></pre>
+<p>使用 ConsumerThread 我们可以实现一个或多个消费线程处理同一个 Channels 的消费模式。MultipleChannelsConsumer 提供了另一种消费模式，与 ConsumerThread 的区别在于：MultipleChannelsConsumer 线程可以处理多组 Group，每个 Group 都是一个 IConsumer + 一个 Channels 的组合。</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/05/95/CgoCgV6eneaAei7OAACQCaME7Fk880.png" alt="sw5.png"></p>
+<p>上图展示了 MultipleChannelsConsumer 的消费模型，MultipleChannelsConsumer 可以同时消费多个 Group，每个 Group 中的 IConsumer 对象包含了消费逻辑，Channels 对象包含了待消费的数据，需要注意的是，一旦 Channels 被添加到 MultipleChannelsConsumer 中，将会被一个 MultipleChannelsConsumer 完全消费，不会像 ConsumerThread 那样分区域部分消费。</p>
+<p>在 run() 方法中，MultipleChannelsConsumer 线程会定时循环遍历其消费的全部 Group，一旦发现可消费的数据，就会循环调用 consume() 方法处理每个 Group。<br>
+MultipleChannelsConsumer.consume() 方法的核心实现如下：</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-function"><span class="hljs-keyword">private</span> <span class="hljs-keyword">boolean</span> <span class="hljs-title">consume</span><span class="hljs-params">(Group target)</span> </span>{
+    <span class="hljs-keyword">boolean</span> hasData;
+    LinkedList consumeList = <span class="hljs-keyword">new</span> LinkedList();
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">int</span> i = <span class="hljs-number">0</span>; i &lt; target.channels.getChannelSize(); i++) {
+        Buffer buffer = target.channels.getBuffer(i);
+        <span class="hljs-comment">// 将该Group中Channels全部可消费的数据都导出到consumeList列表</span>
+        consumeList.addAll(buffer.obtain()); 
+    }
+    <span class="hljs-keyword">if</span> (hasData = consumeList.size() &gt; <span class="hljs-number">0</span>) {
+        <span class="hljs-keyword">try</span> { <span class="hljs-comment">// 通过该Group中相应的IConsumer消费数据</span>
+            target.consumer.consume(consumeList);
+        } <span class="hljs-keyword">catch</span> (Throwable t) { <span class="hljs-comment">// 消费过程的异常处理</span>
+            target.consumer.onError(consumeList, t);
+        }
+    }
+    <span class="hljs-keyword">return</span> hasData;
+}
+</code></pre>
+<p>MultipleChannelsConsumer 底层通过一个 ArrayList 维护 Group 集合（consumeTargets 字段），MultipleChannelsConsumer 通过 Copy-on-Write 的方式保证线程安全，即在调用 addNewTarget() 方法向 consumeTargets 集合添加 Group 时，会创建一个新的 ArrayList 集合并拷贝原集合内容，然后向新集合中添加数据，待新集合添加完成之后，直接替换原有集合。之所以这样做是因为在添加的过程中，MultipleChannelsConsumer 线程可能正在循环处理 consumeTargets 集合，这也是 consumeTargets 用 volatile 修饰的原因。下图展示了添加 Group 的核心逻辑：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/8B/DA/Cgq2xl6enhKADPe-AAIoMSB90P4701.png" alt="sw6.png"></p>
+<h4>IDriver 实现剖析</h4>
+<p>IDriver 接口会将前文介绍的 IConsumer 消费者以及 ConsumerThread 线程或 MultipleChannelsConsumer 线程按照一定的消费模式集成到一起，提供更加简单易用的 API。<br>
+IDriver 接口的继承关系如下图所示，其中依赖 ConsumerThread 的实现是 ConsumerDriver ，依赖 MultipleChannelsConsumer 的实现是 BulkConsumerPool ：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/05/95/CgoCgV6enimAbhHkAAIykJeqP-I840.png" alt="sw7.png"></p>
+<p>在 IDriver 接口中定义了三个与消费线程生命周期相关方法：</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">interface</span> <span class="hljs-title">IDriver</span> </span>{
+    <span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">begin</span><span class="hljs-params">(Channels channels)</span></span>; <span class="hljs-comment">// 启动消费线程</span>
+    <span class="hljs-function"><span class="hljs-keyword">boolean</span> <span class="hljs-title">isRunning</span><span class="hljs-params">(Channels channels)</span></span>; <span class="hljs-comment">// 检测当前IDriver是否正在运行</span>
+    <span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">close</span><span class="hljs-params">(Channels channels)</span></span>; <span class="hljs-comment">// 关闭消费线程</span>
+}
+</code></pre>
+<p>在 ConsumerDriver 实现中维护了固定数量的 ConsumerThread 线程（consumerThreads 字段，ConsumerThread[] 类型），它们共同消费一个 Channels 中的数据（channels 字段，Channels 类型）。</p>
+<p>ConsumerDriver 的核心逻辑是在其 begin() 方法中，它会根据 Channels 中的 Buffer 数量以及ConsumerThread 线程数进行分配：</p>
+<ul>
+<li>如果 Buffer 个数较多，则一个 ConsumerThread 线程需要处理多个 Buffer。</li>
+<li>如果 ConsumerThread 线程数较多，则一个 Buffer 会被划分为多个区域，由不同的 ConsumerThread 线程进行消费，也就是前文介绍的，每个 ConsumerThread 线程负责消费一个 Buffer 的一个区域。</li>
+<li>如果两者数量正好相同，则是一对一的消费关系。</li>
+</ul>
+<p>消费的 Channels、ConsumerThread 线程数以及两者的绑定关系一旦确定，在整个 ConsumerDriver 的生命周期中不会再进行变更。</p>
+<p>BulkConsumePool 是 IDriver 接口的另一个实现，在其 allConsumers 字段（List类型）中维护了当前启动的 MultipleChannelsConsumer 线程。BulkConsumePool 的核心实现在其 add() 方法，通过该方法向 BulkConsumePool 添加新 Channels 以及对应 IConsumer 时，会通过 getLowestPayload() 方法选择负载最低的 MultipleChannelsConsumer 线程进行处理（即当前处理 Group 最少的线程）。<br>
+<br></p>
+<h4>DataCarrier</h4>
+<p>DataCarrier 是整个 DataCarrier 模块最顶层的门面类，其中整合 Channels、IDriver 并给 Producer 提供了一个统一的入口。</p>
+<p>在 DataCarrier 构造方法中会接收 channelSize、bufferSize 两个参数初始化 Channels ，默认使用 SimpleRollingPartitioner 分区选择器以及 BLOCKING 策略（同时，DataCarrier 提供了修改这两项配置的方法）。DataCarrier 为生产者提供了 produce() 方法（底层调用 Channels.save() 方法），统一写入数据的入口。</p>
+<p>DataCarrier 最核心的是提供了多个 consume() 方法的重载，下图四个 consume() 方法重载底层是根据参数指定线程数以及轮训时间来新建 ConsumerDriver 实现消费能力的：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/12/C5/Ciqah16enoiAAR34AABZQEoOOp8211.png" alt="sw8.png"></p>
+<p>下图的 consume() 方法重载则是依赖传入的 BulkConsumePool 实现数据消费能力的（注意，这里不会新建 BulkConsumePool）：</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/05/96/CgoCgV6enpaAGX-EAAAccs9p1lw523.png" alt="sw9.png"></p>
+<p>这里传入的 BulkConsumePool 对象一般统一维护在 ConsumerPoolFactory 中。ConsumerPoolFactory 是通过枚举方式实现的单例类，其底层维护了一个 Map&lt;String, ConsumerPool&gt; 集合，其中 Key 就是 BulkConsumePool 的名称，后面会看到大量通过名称在 ConsumerPoolFactory 中查找 BulkConsumePool 对象的场景。</p>
+<h4>总结</h4>
+<p>本课时主要介绍了 DataCarrier 这个轻量级的生产者-消费者模式的实现库，首先介绍了 DataCarrier 最底层的数据存储组件 Buffer 和 Channels 以及相关的填充策略，接下来深入分析了 DataCarrier 提供的消费者接口以及两种消费模型，最后介绍了 IDriver 接口和 DataCarrier 门面类提供的 API 实现。</p></div>
+
+</body></html>

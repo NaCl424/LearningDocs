@@ -1,0 +1,1521 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>23 | KeepAlive 组件：如何让组件在内存中缓存和调度？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>23 | KeepAlive 组件：如何让组件在内存中缓存和调度？</h1><p data-nodeid="29118">通过前面的学习，我们了解到多个平行组件条件渲染，当满足条件的时候会触发某个组件的挂载，而已渲染的组件当条件不满足的时候会触发组件的卸载，举个例子：</p>
+
+
+
+<pre class="lang-js hljs" data-nodeid="29452"><code data-language="js">&lt;comp-a v-<span class="hljs-keyword">if</span>=<span class="hljs-string">"flag"</span>&gt;&lt;/comp-a&gt;
+<span class="xml"><span class="hljs-tag">&lt;<span class="hljs-name">comp-b</span> <span class="hljs-attr">v-else</span>&gt;</span><span class="hljs-tag">&lt;/<span class="hljs-name">comp-b</span>&gt;</span></span>
+<span class="xml"><span class="hljs-tag">&lt;<span class="hljs-name">button</span> @<span class="hljs-attr">click</span>=<span class="hljs-string">"flag=!flag"</span>&gt;</span>toggle<span class="hljs-tag">&lt;/<span class="hljs-name">button</span>&gt;</span></span>
+</code></pre>
+<p data-nodeid="29453">这里，当 flag 为 true 的时候，就会触发组件 A 的渲染，然后我们点击按钮把 flag 修改为 false，又会触发组件 A 的卸载，及组件 B 的渲染。</p>
+<p data-nodeid="29454">根据我们前面的学习，我们也知道组件的挂载和卸载都是一个递归过程，会有一定的性能损耗，对于这种可能会频繁切换的组件，我们有没有办法减少这其中的性能损耗呢？</p>
+<p data-nodeid="29455">答案是有的，Vue.js 提供了内置组件 KeepAlive，我们可以这么使用它：</p>
+<pre class="lang-js hljs" data-nodeid="29948"><code data-language="js">&lt;keep-alive&gt;
+  <span class="xml"><span class="hljs-tag">&lt;<span class="hljs-name">comp-a</span> <span class="hljs-attr">v-if</span>=<span class="hljs-string">"flag"</span>&gt;</span><span class="hljs-tag">&lt;/<span class="hljs-name">comp-a</span>&gt;</span></span>
+  <span class="xml"><span class="hljs-tag">&lt;<span class="hljs-name">comp-b</span> <span class="hljs-attr">v-else</span>&gt;</span><span class="hljs-tag">&lt;/<span class="hljs-name">comp-b</span>&gt;</span></span>
+  <span class="xml"><span class="hljs-tag">&lt;<span class="hljs-name">button</span> @<span class="hljs-attr">click</span>=<span class="hljs-string">"flag=!flag"</span>&gt;</span>toggle<span class="hljs-tag">&lt;/<span class="hljs-name">button</span>&gt;</span></span>
+&lt;/keep-alive&gt;
+</code></pre>
+<p data-nodeid="29949">我们可以用模板导出工具看一下它编译后的 render 函数：</p>
+<pre class="lang-java hljs" data-nodeid="29950"><code data-language="java"><span class="hljs-keyword">import</span> { resolveComponent as _resolveComponent, createVNode as _createVNode, createCommentVNode as _createCommentVNode, KeepAlive as _KeepAlive, openBlock as _openBlock, createBlock as _createBlock } from <span class="hljs-string">"vue"</span>
+<span class="hljs-function">export function <span class="hljs-title">render</span><span class="hljs-params">(_ctx, _cache, $props, $setup, $data, $options)</span> </span>{
+  <span class="hljs-keyword">const</span> _component_comp_a = _resolveComponent(<span class="hljs-string">"comp-a"</span>)
+  <span class="hljs-keyword">const</span> _component_comp_b = _resolveComponent(<span class="hljs-string">"comp-b"</span>)
+  <span class="hljs-keyword">return</span> (_openBlock(), _createBlock(_KeepAlive, <span class="hljs-keyword">null</span>, [
+    (_ctx.flag)
+      ? _createVNode(_component_comp_a, { key: <span class="hljs-number">0</span> })
+      : _createVNode(_component_comp_b, { key: <span class="hljs-number">1</span> }),
+    _createVNode(<span class="hljs-string">"button"</span>, {
+      onClick: $event =&gt; (_ctx.flag=!_ctx.flag)
+    }, <span class="hljs-string">"toggle"</span>, <span class="hljs-number">8</span> <span class="hljs-comment">/* PROPS */</span>, [<span class="hljs-string">"onClick"</span>])
+  ], <span class="hljs-number">1024</span> <span class="hljs-comment">/* DYNAMIC_SLOTS */</span>))
+}
+</code></pre>
+<p data-nodeid="29951">我们使用了 KeepAlive 组件对这两个组件做了一层封装，KeepAlive 是一个抽象组件，它并不会渲染成一个真实的 DOM，只会渲染内部包裹的子节点，并且让内部的子组件在切换的时候，不会走一整套递归卸载和挂载 DOM的流程，从而优化了性能。</p>
+<p data-nodeid="29952">那么它具体是怎么做的呢？我们再来看 KeepAlive 组件的定义：</p>
+<pre class="lang-java hljs" data-nodeid="29953"><code data-language="java"><span class="hljs-keyword">const</span> KeepAliveImpl = {
+  name: \`KeepAlive\`,
+  __isKeepAlive: <span class="hljs-keyword">true</span>,
+  inheritRef: <span class="hljs-keyword">true</span>,
+  props: {
+    include: [String, RegExp, Array],
+    exclude: [String, RegExp, Array],
+    max: [String, Number]
+  },
+  setup(props, { slots }) {
+    <span class="hljs-keyword">const</span> cache = <span class="hljs-keyword">new</span> Map()
+    <span class="hljs-keyword">const</span> keys = <span class="hljs-keyword">new</span> Set()
+    let current = <span class="hljs-keyword">null</span>
+    <span class="hljs-keyword">const</span> instance = getCurrentInstance()
+    <span class="hljs-keyword">const</span> parentSuspense = instance.suspense
+    <span class="hljs-keyword">const</span> sharedContext = instance.ctx
+    <span class="hljs-keyword">const</span> { renderer: { p: patch, m: move, um: _unmount, o: { createElement } } } = sharedContext
+    <span class="hljs-keyword">const</span> storageContainer = createElement(<span class="hljs-string">'div'</span>)
+    sharedContext.activate = (vnode, container, anchor, isSVG, optimized) =&gt; {
+      <span class="hljs-keyword">const</span> instance = vnode.<span class="hljs-function">component
+      <span class="hljs-title">move</span><span class="hljs-params">(vnode, container, anchor, <span class="hljs-number">0</span> <span class="hljs-comment">/* ENTER */</span>, parentSuspense)</span>
+      <span class="hljs-title">patch</span><span class="hljs-params">(instance.vnode, vnode, container, anchor, instance, parentSuspense, isSVG, optimized)</span>
+      <span class="hljs-title">queuePostRenderEffect</span><span class="hljs-params">(()</span> </span>=&gt; {
+        instance.isDeactivated = <span class="hljs-function"><span class="hljs-keyword">false</span>
+        <span class="hljs-title">if</span> <span class="hljs-params">(instance.a)</span> </span>{
+          invokeArrayFns(instance.a)
+        }
+        <span class="hljs-keyword">const</span> vnodeHook = vnode.props &amp;&amp; vnode.props.<span class="hljs-function">onVnodeMounted
+        <span class="hljs-title">if</span> <span class="hljs-params">(vnodeHook)</span> </span>{
+          invokeVNodeHook(vnodeHook, instance.parent, vnode)
+        }
+      }, parentSuspense)
+    }
+    sharedContext.deactivate = (vnode) =&gt; {
+      <span class="hljs-keyword">const</span> instance = vnode.<span class="hljs-function">component
+      <span class="hljs-title">move</span><span class="hljs-params">(vnode, storageContainer, <span class="hljs-keyword">null</span>, <span class="hljs-number">1</span> <span class="hljs-comment">/* LEAVE */</span>, parentSuspense)</span>
+      <span class="hljs-title">queuePostRenderEffect</span><span class="hljs-params">(()</span> </span>=&gt; {
+        <span class="hljs-keyword">if</span> (instance.da) {
+          invokeArrayFns(instance.da)
+        }
+        <span class="hljs-keyword">const</span> vnodeHook = vnode.props &amp;&amp; vnode.props.<span class="hljs-function">onVnodeUnmounted
+        <span class="hljs-title">if</span> <span class="hljs-params">(vnodeHook)</span> </span>{
+          invokeVNodeHook(vnodeHook, instance.parent, vnode)
+        }
+        instance.isDeactivated = <span class="hljs-keyword">true</span>
+      }, parentSuspense)
+    }
+    <span class="hljs-function">function <span class="hljs-title">unmount</span><span class="hljs-params">(vnode)</span> </span>{
+      resetShapeFlag(vnode)
+      _unmount(vnode, instance, parentSuspense)
+    }
+    <span class="hljs-function">function <span class="hljs-title">pruneCache</span><span class="hljs-params">(filter)</span> </span>{
+      cache.forEach((vnode, key) =&gt; {
+        <span class="hljs-keyword">const</span> name = getName(vnode.type)
+        <span class="hljs-keyword">if</span> (name &amp;&amp; (!filter || !filter(name))) {
+          pruneCacheEntry(key)
+        }
+      })
+    }
+    <span class="hljs-function">function <span class="hljs-title">pruneCacheEntry</span><span class="hljs-params">(key)</span> </span>{
+      <span class="hljs-keyword">const</span> cached = cache.get(key)
+      <span class="hljs-keyword">if</span> (!current || cached.type !== current.type) {
+        unmount(cached)
+      }
+      <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (current) {
+        resetShapeFlag(current)
+      }
+      cache.delete(key)
+      keys.delete(key)
+    }
+    watch(() =&gt; [props.include, props.exclude], ([include, exclude]) =&gt; {
+      include &amp;&amp; pruneCache(name =&gt; matches(include, name))
+      exclude &amp;&amp; !pruneCache(name =&gt; matches(exclude, name))
+    })
+    let pendingCacheKey = <span class="hljs-keyword">null</span>
+    <span class="hljs-keyword">const</span> cacheSubtree = () =&gt; {
+      <span class="hljs-keyword">if</span> (pendingCacheKey != <span class="hljs-keyword">null</span>) {
+        cache.set(pendingCacheKey, instance.subTree)
+      }
+    }
+    onBeforeMount(cacheSubtree)
+    onBeforeUpdate(cacheSubtree)
+    onBeforeUnmount(() =&gt; {
+      cache.forEach(cached =&gt; {
+        <span class="hljs-keyword">const</span> { subTree, suspense } = <span class="hljs-function">instance
+        <span class="hljs-title">if</span> <span class="hljs-params">(cached.type === subTree.type)</span> </span>{
+          resetShapeFlag(subTree)
+          <span class="hljs-keyword">const</span> da = subTree.component.da
+          da &amp;&amp; queuePostRenderEffect(da, suspense)
+          <span class="hljs-keyword">return</span>
+        }
+        unmount(cached)
+      })
+    })
+    <span class="hljs-keyword">return</span> () =&gt; {
+      pendingCacheKey = <span class="hljs-function"><span class="hljs-keyword">null</span>
+      <span class="hljs-title">if</span> <span class="hljs-params">(!slots.<span class="hljs-keyword">default</span>)</span> </span>{
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">null</span>
+      }
+      <span class="hljs-keyword">const</span> children = slots.<span class="hljs-keyword">default</span>()
+      let vnode = children[<span class="hljs-number">0</span>]
+      <span class="hljs-keyword">if</span> (children.length &gt; <span class="hljs-number">1</span>) {
+        <span class="hljs-keyword">if</span> ((process.env.NODE_ENV !== <span class="hljs-string">'production'</span>)) {
+          warn(\`KeepAlive should contain exactly one component child.\`)
+        }
+        current = <span class="hljs-keyword">null</span>
+        <span class="hljs-keyword">return</span> children
+      }
+      <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (!isVNode(vnode) ||
+        !(vnode.shapeFlag &amp; <span class="hljs-number">4</span> <span class="hljs-comment">/* STATEFUL_COMPONENT */</span>)) {
+        current = <span class="hljs-keyword">null</span>
+        <span class="hljs-keyword">return</span> vnode
+      }
+      <span class="hljs-keyword">const</span> comp = vnode.type
+      <span class="hljs-keyword">const</span> name = getName(comp)
+      <span class="hljs-keyword">const</span> { include, exclude, max } = <span class="hljs-function">props
+      <span class="hljs-title">if</span> <span class="hljs-params">((include &amp;&amp; (!name || !matches(include, name)</span>)) ||
+        <span class="hljs-params">(exclude &amp;&amp; name &amp;&amp; matches(exclude, name)</span>)) </span>{
+        <span class="hljs-keyword">return</span> (current = vnode)
+      }
+      <span class="hljs-keyword">const</span> key = vnode.key == <span class="hljs-keyword">null</span> ? comp : vnode.key
+      <span class="hljs-keyword">const</span> cachedVNode = cache.get(key)
+      <span class="hljs-keyword">if</span> (vnode.el) {
+        vnode = cloneVNode(vnode)
+      }
+      pendingCacheKey = <span class="hljs-function">key
+      <span class="hljs-title">if</span> <span class="hljs-params">(cachedVNode)</span> </span>{
+        vnode.el = cachedVNode.el
+        vnode.component = cachedVNode.component
+        vnode.shapeFlag |= <span class="hljs-number">512</span> <span class="hljs-comment">/* COMPONENT_KEPT_ALIVE */</span>
+        keys.delete(key)
+        keys.add(key)
+      }
+      <span class="hljs-keyword">else</span> {
+        keys.add(key)
+        <span class="hljs-keyword">if</span> (max &amp;&amp; keys.size &gt; parseInt(max, <span class="hljs-number">10</span>)) {
+          pruneCacheEntry(keys.values().next().value)
+        }
+      }
+      vnode.shapeFlag |= <span class="hljs-number">256</span> <span class="hljs-comment">/* COMPONENT_SHOULD_KEEP_ALIVE */</span>
+      current = vnode
+      <span class="hljs-keyword">return</span> vnode
+    }
+  }
+}
+</code></pre>
+<p data-nodeid="29954">我把 KeepAlive 的实现拆成四个部分：<strong data-nodeid="30044">组件的渲染</strong>、<strong data-nodeid="30045">缓存的设计</strong>、<strong data-nodeid="30046">Props 设计</strong>和<strong data-nodeid="30047">组件的卸载</strong>。接下来，我们就来依次分析它们的实现。分析的过程中，我会结合前面的示例讲解，希望你也能够运行这个示例，并加入一些断点调试。</p>
+<h3 data-nodeid="29955">组件的渲染</h3>
+<p data-nodeid="29956">首先，我们来看组件的渲染部分，可以看到 KeepAlive 组件使用了 Composition API 的方式去实现，我们已经学习过了，当 setup 函数返回的是一个函数，那么这个函数就是组件的渲染函数，我们来看它的实现：</p>
+<pre class="lang-java hljs" data-nodeid="29957"><code data-language="java"><span class="hljs-keyword">return</span> () =&gt; {
+  pendingCacheKey = <span class="hljs-function"><span class="hljs-keyword">null</span>
+  <span class="hljs-title">if</span> <span class="hljs-params">(!slots.<span class="hljs-keyword">default</span>)</span> </span>{
+    <span class="hljs-keyword">return</span> <span class="hljs-keyword">null</span>
+  }
+  <span class="hljs-keyword">const</span> children = slots.<span class="hljs-keyword">default</span>()
+  let vnode = children[<span class="hljs-number">0</span>]
+  <span class="hljs-keyword">if</span> (children.length &gt; <span class="hljs-number">1</span>) {
+    <span class="hljs-keyword">if</span> ((process.env.NODE_ENV !== <span class="hljs-string">'production'</span>)) {
+      warn(\`KeepAlive should contain exactly one component child.\`)
+    }
+    current = <span class="hljs-keyword">null</span>
+    <span class="hljs-keyword">return</span> children
+  }
+  <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (!isVNode(vnode) ||
+    !(vnode.shapeFlag &amp; <span class="hljs-number">4</span> <span class="hljs-comment">/* STATEFUL_COMPONENT */</span>)) {
+    current = <span class="hljs-keyword">null</span>
+    <span class="hljs-keyword">return</span> vnode
+  }
+  <span class="hljs-keyword">const</span> comp = vnode.type
+  <span class="hljs-keyword">const</span> name = getName(comp)
+  <span class="hljs-keyword">const</span> { include, exclude, max } = <span class="hljs-function">props
+  <span class="hljs-title">if</span> <span class="hljs-params">((include &amp;&amp; (!name || !matches(include, name)</span>)) ||
+    <span class="hljs-params">(exclude &amp;&amp; name &amp;&amp; matches(exclude, name)</span>)) </span>{
+    <span class="hljs-keyword">return</span> (current = vnode)
+  }
+  <span class="hljs-keyword">const</span> key = vnode.key == <span class="hljs-keyword">null</span> ? comp : vnode.key
+  <span class="hljs-keyword">const</span> cachedVNode = cache.get(key)
+  <span class="hljs-keyword">if</span> (vnode.el) {
+    vnode = cloneVNode(vnode)
+  }
+  pendingCacheKey = <span class="hljs-function">key
+  <span class="hljs-title">if</span> <span class="hljs-params">(cachedVNode)</span> </span>{
+    vnode.el = cachedVNode.el
+    vnode.component = cachedVNode.component
+    <span class="hljs-comment">// 避免 vnode 节点作为新节点被挂载</span>
+    vnode.shapeFlag |= <span class="hljs-number">512</span> <span class="hljs-comment">/* COMPONENT_KEPT_ALIVE */</span>
+    <span class="hljs-comment">// 让这个 key 始终新鲜</span>
+    keys.delete(key)
+    keys.add(key)
+  }
+  <span class="hljs-keyword">else</span> {
+    keys.add(key)
+    <span class="hljs-comment">// 删除最久不用的 key，符合 LRU 思想</span>
+    <span class="hljs-keyword">if</span> (max &amp;&amp; keys.size &gt; parseInt(max, <span class="hljs-number">10</span>)) {
+      pruneCacheEntry(keys.values().next().value)
+    }
+  }
+  <span class="hljs-comment">// 避免 vnode 被卸载</span>
+  vnode.shapeFlag |= <span class="hljs-number">256</span> <span class="hljs-comment">/* COMPONENT_SHOULD_KEEP_ALIVE */</span>
+  current = vnode
+  <span class="hljs-keyword">return</span> vnode
+}
+</code></pre>
+<p data-nodeid="29958">函数先从 slots.default() 拿到子节点 children，它就是 KeepAlive 组件包裹的子组件，由于 KeepAlive 只能渲染单个子节点，所以当 children 长度大于 1 的时候会报警告。</p>
+<p data-nodeid="29959">我们先不考虑缓存部分，KeepAlive 渲染的 vnode 就是子节点 children 的第一个元素，它是函数的返回值。</p>
+<p data-nodeid="29960">因此我们说 KeepAlive 是抽象组件，它本身不渲染成实体节点，而是渲染它的第一个子节点。</p>
+<p data-nodeid="29961">当然，没有缓存的 KeepAlive 组件是没有灵魂的，这种抽象的封装也是没有任何意义的，所以接下来我们重点来看它的缓存是如何设计的。</p>
+<h3 data-nodeid="29962">缓存的设计</h3>
+<p data-nodeid="29963">我们先来思考一件事情，我们需要缓存什么？</p>
+<p data-nodeid="29964">组件的递归 patch 过程，主要就是为了渲染 DOM，显然这个递归过程是有一定的性能耗时的，既然目标是为了渲染 DOM，那么我们是不是可以把 DOM 缓存了，这样下一次渲染我们就可以直接从缓存里获取 DOM 并渲染，就不需要每次都重新递归渲染了。</p>
+<p data-nodeid="29965">实际上 KeepAlive 组件就是这么做的，它注入了两个钩子函数，onBeforeMount 和 onBeforeUpdate，在这两个钩子函数内部都执行了 cacheSubtree 函数来做缓存：</p>
+<pre class="lang-java hljs" data-nodeid="29966"><code data-language="java"><span class="hljs-keyword">const</span> cacheSubtree = () =&gt; {
+  <span class="hljs-keyword">if</span> (pendingCacheKey != <span class="hljs-keyword">null</span>) {
+    cache.set(pendingCacheKey, instance.subTree)
+  }
+}
+</code></pre>
+<p data-nodeid="29967">由于 pendingCacheKey 是在 KeepAlive 的 render 函数中才会被赋值，所以 KeepAlive 首次进入 onBeforeMount 钩子函数的时候是不会缓存的。</p>
+<p data-nodeid="29968">然后 KeepAlive 执行 render 的时候，pendingCacheKey 会被赋值为 vnode.key，我们回过头看一下示例渲染后的模板：</p>
+<pre class="lang-java hljs" data-nodeid="29969"><code data-language="java"><span class="hljs-keyword">import</span> { resolveComponent as _resolveComponent, createVNode as _createVNode, createCommentVNode as _createCommentVNode, KeepAlive as _KeepAlive, openBlock as _openBlock, createBlock as _createBlock } from <span class="hljs-string">"vue"</span>
+<span class="hljs-function">export function <span class="hljs-title">render</span><span class="hljs-params">(_ctx, _cache, $props, $setup, $data, $options)</span> </span>{
+  <span class="hljs-keyword">const</span> _component_comp_a = _resolveComponent(<span class="hljs-string">"comp-a"</span>)
+  <span class="hljs-keyword">const</span> _component_comp_b = _resolveComponent(<span class="hljs-string">"comp-b"</span>)
+  <span class="hljs-keyword">return</span> (_openBlock(), _createBlock(_KeepAlive, <span class="hljs-keyword">null</span>, [
+    (_ctx.flag)
+      ? _createVNode(_component_comp_a, { key: <span class="hljs-number">0</span> })
+      : _createVNode(_component_comp_b, { key: <span class="hljs-number">1</span> }),
+    _createVNode(<span class="hljs-string">"button"</span>, {
+      onClick: $event =&gt; (_ctx.flag=!_ctx.flag)
+    }, <span class="hljs-string">"toggle"</span>, <span class="hljs-number">8</span> <span class="hljs-comment">/* PROPS */</span>, [<span class="hljs-string">"onClick"</span>])
+  ], <span class="hljs-number">1024</span> <span class="hljs-comment">/* DYNAMIC_SLOTS */</span>))
+}
+</code></pre>
+<p data-nodeid="29970">我们注意到 KeepAlive 的子节点创建的时候都添加了一个 key 的 prop，它就是专门为 KeepAlive 的缓存设计的，这样每一个子节点都能有一个唯一的 key。</p>
+<p data-nodeid="29971">页面首先渲染 A 组件，接着当我们点击按钮的时候，修改了 flag 的值，会触发当前组件的重新渲染，进而也触发了 KeepAlvie 组件的重新渲染，在组件重新渲染前，会执行 onBeforeUpdate 对应的钩子函数，也就再次执行到 cacheSubtree 函数中。</p>
+<p data-nodeid="29972">这个时候 pendingCacheKey 对应的是 A 组件 vnode 的 key，instance.subTree 对应的也是 A 组件的渲染子树，所以 KeepAlive 每次在更新前，会缓存前一个组件的渲染子树。</p>
+<blockquote data-nodeid="29973">
+<p data-nodeid="29974">经过前面的分析，我认为 onBeforeMount 的钩子函数注入似乎并没有必要，我在源码中删除后再跑 Vue.js 3.0 的单测也能通过，如果你有不同意见，欢迎在留言区与我分享。</p>
+</blockquote>
+<p data-nodeid="29975">这个时候渲染了 B 组件，当我们再次点击按钮，修改 flag 值的时候，会再次触发KeepAlvie 组件的重新渲染，当然此时执行 onBeforeUpdate 钩子函数缓存的就是 B 组件的渲染子树了。</p>
+<p data-nodeid="29976">接着再次执行 KeepAlive 组件的 render 函数，此时就可以从缓存中根据 A 组件的 key 拿到对应的渲染子树 cachedVNode 的了，然后执行如下逻辑：</p>
+<pre class="lang-java hljs" data-nodeid="29977"><code data-language="java"><span class="hljs-keyword">if</span> (cachedVNode) {
+  vnode.el = cachedVNode.el
+  vnode.component = cachedVNode.component
+  <span class="hljs-comment">// 避免 vnode 节点作为新节点被挂载</span>
+  vnode.shapeFlag |= <span class="hljs-number">512</span> <span class="hljs-comment">/* COMPONENT_KEPT_ALIVE */</span>
+  <span class="hljs-comment">// 让这个 key 始终新鲜</span>
+  keys.delete(key)
+  keys.add(key)
+}
+<span class="hljs-keyword">else</span> {
+  keys.add(key)
+  <span class="hljs-comment">// 删除最久不用的 key，符合 LRU 思想</span>
+  <span class="hljs-keyword">if</span> (max &amp;&amp; keys.size &gt; parseInt(max, <span class="hljs-number">10</span>)) {
+    pruneCacheEntry(keys.values().next().value)
+  }
+}
+</code></pre>
+<p data-nodeid="29978">有了缓存的渲染子树后，我们就可以直接拿到它对应的 DOM 以及组件实例 component，赋值给 KeepAlive 的 vnode，并更新 vnode.shapeFlag，以便后续 patch 阶段使用。</p>
+<blockquote data-nodeid="29979">
+<p data-nodeid="29980">注意，这里有一个额外的缓存管理的逻辑，我们稍后讲 Props 设计的时候会详细说。</p>
+</blockquote>
+<p data-nodeid="29981">那么，对于 KeepAlive 组件的渲染来说，有缓存和没缓存在 patch 阶段有何区别呢，由于 KeepAlive 缓存的都是有状态的组件 vnode，我们再来回顾一下 patchComponent 函数的实现：</p>
+<pre class="lang-java hljs" data-nodeid="29982"><code data-language="java"><span class="hljs-keyword">const</span> processComponent = (n1, n2, container, anchor, parentComponent, parentSuspense, isSVG, optimized) =&gt; {
+  <span class="hljs-keyword">if</span> (n1 == <span class="hljs-keyword">null</span>) {
+    <span class="hljs-comment">// 处理 KeepAlive 组件</span>
+    <span class="hljs-keyword">if</span> (n2.shapeFlag &amp; <span class="hljs-number">512</span> <span class="hljs-comment">/* COMPONENT_KEPT_ALIVE */</span>) {
+      parentComponent.ctx.activate(n2, container, anchor, isSVG, optimized)
+    }
+    <span class="hljs-keyword">else</span> {
+      <span class="hljs-comment">// 挂载组件</span>
+      mountComponent(n2, container, anchor, parentComponent, parentSuspense, isSVG, optimized)
+    }
+  }
+  <span class="hljs-keyword">else</span> {
+    <span class="hljs-comment">// 更新组件</span>
+  }
+}
+</code></pre>
+<p data-nodeid="29983">KeepAlive 首次渲染某一个子节点时，和正常的组件节点渲染没有区别，但是有缓存后，由于标记了 shapeFlag，所以在执行processComponent函数时会走到处理 KeepAlive 组件的逻辑中，执行 KeepAlive 组件实例上下文中的 activate 函数，我们来看它的实现：</p>
+<pre class="lang-java hljs" data-nodeid="29984"><code data-language="java">sharedContext.activate = (vnode, container, anchor, isSVG, optimized) =&gt; {
+  <span class="hljs-keyword">const</span> instance = vnode.<span class="hljs-function">component
+  <span class="hljs-title">move</span><span class="hljs-params">(vnode, container, anchor, <span class="hljs-number">0</span> <span class="hljs-comment">/* ENTER */</span>, parentSuspense)</span>
+  <span class="hljs-title">patch</span><span class="hljs-params">(instance.vnode, vnode, container, anchor, instance, parentSuspense, isSVG, optimized)</span>
+  <span class="hljs-title">queuePostRenderEffect</span><span class="hljs-params">(()</span> </span>=&gt; {
+    instance.isDeactivated = <span class="hljs-function"><span class="hljs-keyword">false</span>
+    <span class="hljs-title">if</span> <span class="hljs-params">(instance.a)</span> </span>{
+      invokeArrayFns(instance.a)
+    }
+    <span class="hljs-keyword">const</span> vnodeHook = vnode.props &amp;&amp; vnode.props.<span class="hljs-function">onVnodeMounted
+    <span class="hljs-title">if</span> <span class="hljs-params">(vnodeHook)</span> </span>{
+      invokeVNodeHook(vnodeHook, instance.parent, vnode)
+    }
+  }, parentSuspense)
+}
+</code></pre>
+<p data-nodeid="29985">可以看到，由于此时已经能从 vnode.el 中拿到缓存的 DOM 了，所以可以直接调用 move 方法挂载节点，然后执行 patch 方法更新组件，以防止 props 发生变化的情况。</p>
+<p data-nodeid="29986">接下来，就是通过 queuePostRenderEffect 的方式，在组件渲染完毕后，执行子节点组件定义的 activated 钩子函数。</p>
+<p data-nodeid="29987">至此，我们就了解了 KeepAlive 的缓存设计，KeepAlive 包裹的子组件在其渲染后，下一次 KeepAlive 组件更新前会被缓存，缓存后的子组件在下一次渲染的时候直接从缓存中拿到子树 vnode 以及对应的 DOM 元素，直接渲染即可。</p>
+<p data-nodeid="29988">当然，光有缓存还不够灵活，有些时候我们想针对某些子组件缓存，某些子组件不缓存，另外，我们还想限制 KeepAlive 组件的最大缓存个数，怎么办呢？KeepAlive 设计了几个 Props，允许我们可以对上述需求做配置。</p>
+<h3 data-nodeid="29989">Props 设计</h3>
+<p data-nodeid="29990">KeepAlive 一共支持了三个 Props，分别是 include、exclude 和 max。</p>
+<pre class="lang-js hljs" data-nodeid="30437"><code data-language="js">props: {
+  <span class="hljs-attr">include</span>: [<span class="hljs-built_in">String</span>, <span class="hljs-built_in">RegExp</span>, <span class="hljs-built_in">Array</span>],
+  <span class="hljs-attr">exclude</span>: [<span class="hljs-built_in">String</span>, <span class="hljs-built_in">RegExp</span>, <span class="hljs-built_in">Array</span>],
+  <span class="hljs-attr">max</span>: [<span class="hljs-built_in">String</span>, <span class="hljs-built_in">Number</span>]
+}
+</code></pre>
+<p data-nodeid="30438">include 和 exclude 对应的实现逻辑如下：</p>
+<pre class="lang-java hljs" data-nodeid="30439"><code data-language="java"><span class="hljs-keyword">const</span> { include, exclude, max } = <span class="hljs-function">props
+<span class="hljs-title">if</span> <span class="hljs-params">((include &amp;&amp; (!name || !matches(include, name)</span>)) ||
+  <span class="hljs-params">(exclude &amp;&amp; name &amp;&amp; matches(exclude, name)</span>)) </span>{
+  <span class="hljs-keyword">return</span> (current = vnode)
+}
+</code></pre>
+<p data-nodeid="30440">很好理解，如果子组件名称不匹配 include 的 vnode ，以及子组件名称匹配 exclude 的 vnode 都不应该被缓存，而应该直接返回。</p>
+<p data-nodeid="30441">当然，由于 props 是响应式的，在 include 和 exclude props 发生变化的时候也应该有相关的处理逻辑，如下：</p>
+<pre class="lang-js hljs" data-nodeid="30831"><code data-language="js">watch(<span class="hljs-function">() =&gt;</span> [props.include, props.exclude], <span class="hljs-function">(<span class="hljs-params">[include, exclude]</span>) =&gt;</span> {
+  include &amp;&amp; pruneCache(<span class="hljs-function"><span class="hljs-params">name</span> =&gt;</span> matches(include, name))
+  exclude &amp;&amp; !pruneCache(<span class="hljs-function"><span class="hljs-params">name</span> =&gt;</span> matches(exclude, name))
+})
+</code></pre>
+<p data-nodeid="30832">监听的逻辑也很简单，当 include 发生变化的时候，从缓存中删除那些 name 不匹配 include 的 vnode 节点；当 exclude 发生变化的时候，从缓存中删除那些 name 匹配 exclude 的 vnode 节点。</p>
+<p data-nodeid="30833">除了 include 和 exclude 之外，KeepAlive 组件还支持了 max prop 来控制缓存的最大个数。</p>
+<p data-nodeid="30834">由于缓存本身就是占用了内存，所以有些场景我们希望限制 KeepAlive 缓存的个数，这时我们可以通过 max 属性来控制，当缓存新的 vnode 的时候，会做一定程度的缓存管理，如下：</p>
+<pre class="lang-java hljs" data-nodeid="30835"><code data-language="java">keys.add(key)
+<span class="hljs-comment">// 删除最久不用的 key，符合 LRU 思想</span>
+<span class="hljs-keyword">if</span> (max &amp;&amp; keys.size &gt; parseInt(max, <span class="hljs-number">10</span>)) {
+pruneCacheEntry(keys.values().next().value)
+}
+</code></pre>
+<p data-nodeid="30836">由于新的缓存 key 都是在 keys 的结尾添加的，所以当缓存的个数超过 max 的时候，就从最前面开始删除，符合 LRU 最近最少使用的算法思想。</p>
+<h3 data-nodeid="30837">组件的卸载</h3>
+<p data-nodeid="30838">了解完 KeepAlive 组件的渲染、缓存和 Props 设计后，我们接着来看 KeepAlive 组件的卸载过程。</p>
+<p data-nodeid="30839">我们先来分析 KeepAlive 内部包裹的子组件的卸载过程，前面我们提到 KeepAlive 渲染的过程实际上是渲染它的第一个子组件节点，并且会给渲染的 vnode 打上如下标记：</p>
+<pre class="lang-java hljs" data-nodeid="30840"><code data-language="java">vnode.shapeFlag |= <span class="hljs-number">256</span> <span class="hljs-comment">/* COMPONENT_SHOULD_KEEP_ALIVE */</span>
+</code></pre>
+<p data-nodeid="30841">加上这个 shapeFlag 有什么用呢，我们结合前面的示例来分析。</p>
+<pre class="lang-js hljs" data-nodeid="31217"><code data-language="js">&lt;keep-alive&gt;
+  <span class="xml"><span class="hljs-tag">&lt;<span class="hljs-name">comp-a</span> <span class="hljs-attr">v-if</span>=<span class="hljs-string">"flag"</span>&gt;</span><span class="hljs-tag">&lt;/<span class="hljs-name">comp-a</span>&gt;</span></span>
+  <span class="xml"><span class="hljs-tag">&lt;<span class="hljs-name">comp-b</span> <span class="hljs-attr">v-else</span>&gt;</span><span class="hljs-tag">&lt;/<span class="hljs-name">comp-b</span>&gt;</span></span>
+  <span class="xml"><span class="hljs-tag">&lt;<span class="hljs-name">button</span> @<span class="hljs-attr">click</span>=<span class="hljs-string">"flag=!flag"</span>&gt;</span>toggle<span class="hljs-tag">&lt;/<span class="hljs-name">button</span>&gt;</span></span>
+&lt;/keep-alive&gt;
+</code></pre>
+<p data-nodeid="31584">当 flag 为 true 的时候，渲染 A 组件，然后我们点击按钮修改 flag 的值，会触发 KeepAlive 组件的重新渲染，会先执行 BeforeUpdate 钩子函数缓存 A 组件对应的渲染子树 vnode，然后再执行 patch 更新子组件。</p>
+<p data-nodeid="31585">这个时候会执行 B 组件的渲染，以及 A 组件的卸载，我们知道组件的卸载会执行 unmount 方法，其中有一个关于 KeepAlive 组件的逻辑，如下：</p>
+
+<pre class="lang-java hljs" data-nodeid="31219"><code data-language="java"><span class="hljs-keyword">const</span> unmount = (vnode, parentComponent, parentSuspense, doRemove = <span class="hljs-keyword">false</span>) =&gt; {
+  <span class="hljs-keyword">const</span> { shapeFlag  } = <span class="hljs-function">vnode
+  <span class="hljs-title">if</span> <span class="hljs-params">(shapeFlag &amp; <span class="hljs-number">256</span> <span class="hljs-comment">/* COMPONENT_SHOULD_KEEP_ALIVE */</span>)</span> </span>{
+    parentComponent.ctx.deactivate(vnode)
+    <span class="hljs-keyword">return</span>
+  }
+  <span class="hljs-comment">// 卸载组件</span>
+}
+</code></pre>
+<p data-nodeid="31220">如果 shapeFlag 满足 KeepAlive 的条件，则执行相应的 deactivate 函数，它的定义如下：</p>
+<pre class="lang-java hljs" data-nodeid="31221"><code data-language="java">sharedContext.deactivate = (vnode) =&gt; {
+  <span class="hljs-keyword">const</span> instance = vnode.<span class="hljs-function">component
+  <span class="hljs-title">move</span><span class="hljs-params">(vnode, storageContainer, <span class="hljs-keyword">null</span>, <span class="hljs-number">1</span> <span class="hljs-comment">/* LEAVE */</span>, parentSuspense)</span>
+  <span class="hljs-title">queuePostRenderEffect</span><span class="hljs-params">(()</span> </span>=&gt; {
+    <span class="hljs-keyword">if</span> (instance.da) {
+      invokeArrayFns(instance.da)
+    }
+    <span class="hljs-keyword">const</span> vnodeHook = vnode.props &amp;&amp; vnode.props.<span class="hljs-function">onVnodeUnmounted
+    <span class="hljs-title">if</span> <span class="hljs-params">(vnodeHook)</span> </span>{
+      invokeVNodeHook(vnodeHook, instance.parent, vnode)
+    }
+    instance.isDeactivated = <span class="hljs-keyword">true</span>
+  }, parentSuspense)
+}
+</code></pre>
+<p data-nodeid="31222">函数首先通过 move 方法从 DOM 树中移除该节点，接着通过 queuePostRenderEffect 的方式执行定义的 deactivated 钩子函数。</p>
+<p data-nodeid="31223">注意，这里我们只是移除了 DOM，并没有真正意义上的执行子组件的整套卸载流程。</p>
+<p data-nodeid="31224">那么除了点击按钮引起子组件的卸载之外，当 KeepAlive 所在的组件卸载时，由于卸载的递归特性，也会触发 KeepAlive 组件的卸载，在卸载的过程中会执行 onBeforeUnmount 钩子函数，如下：</p>
+<pre class="lang-java hljs" data-nodeid="31225"><code data-language="java">onBeforeUnmount(() =&gt; {
+  cache.forEach(cached =&gt; {
+    <span class="hljs-keyword">const</span> { subTree, suspense } = <span class="hljs-function">instance
+    <span class="hljs-title">if</span> <span class="hljs-params">(cached.type === subTree.type)</span> </span>{
+      resetShapeFlag(subTree)
+      <span class="hljs-keyword">const</span> da = subTree.component.da
+      da &amp;&amp; queuePostRenderEffect(da, suspense)
+      <span class="hljs-keyword">return</span>
+    }
+    unmount(cached)
+  })
+})  
+</code></pre>
+<p data-nodeid="31226">它会遍历所有缓存的 vnode，并且比对缓存的 vnode 是不是当前 KeepAlive 组件渲染的 vnode。</p>
+<p data-nodeid="31227">如果是的话，则执行 resetShapeFlag 方法，它的作用是修改 vnode 的 shapeFlag，不让它再被当作一个 KeepAlive 的 vnode 了，这样就可以走正常的卸载逻辑。接着通过 queuePostRenderEffect 的方式执行子组件的 deactivated 钩子函数。</p>
+<p data-nodeid="31228">如果不是，则执行 unmount 方法重置 shapeFlag 以及执行缓存 vnode 的整套卸载流程。</p>
+<h3 data-nodeid="31229">总结</h3>
+<p data-nodeid="31230">好的，到这里我们这一节的学习也要结束啦，通过这节课的学习，你应该明白 KeepAlive 实际上是一个抽象节点，渲染的是它的第一个子节点，并了解它的缓存设计、Props 设计和卸载过程。</p>
+<p data-nodeid="31231">最后，给你留一道思考题，我们是如何给组件注册 activated 和 deactivated 钩子函数的，它们的执行和其他钩子函数比，有什么不同？欢迎你在留言区与我分享。</p>
+<blockquote data-nodeid="31232">
+<p data-nodeid="31233">本节课的相关代码在源代码中的位置如下：<br>
+packages/runtime-core/src/components/KeepAlive.ts<br>
+packages/runtime-core/src/renderer.ts</p>
+</blockquote></div>
+
+</body></html>

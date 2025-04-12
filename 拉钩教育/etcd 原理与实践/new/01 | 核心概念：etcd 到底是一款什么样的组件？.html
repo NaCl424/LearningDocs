@@ -1,0 +1,1210 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>01 | 核心概念：etcd 到底是一款什么样的组件？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>01 | 核心概念：etcd 到底是一款什么样的组件？</h1><p data-nodeid="8172" class="">近几年，云原生越来越火，你在各种大会或博客的标题里都可以见到“云原生”的字样，我们这次要学习的 etcd 也是云原生架构中重要的基础组件，因为etcd 项目是 Kubernetes 内部的一大关键组件，目前有很多项目都依赖 etcd 进行可靠的分布式数据存储。</p>
+<p data-nodeid="8173">etcd 是 CoreOS 团队于 2013 年 6 月发起的开源项目，2018 年底正式加入云原生计算基金会（CNCF）。etcd 组件基于 Go 语言实现，目前最新版本为 V3.4.9。</p>
+<h3 data-nodeid="8174">为什么需要 etcd</h3>
+<p data-nodeid="8175">在具体讲解 etcd 前，我们还是先谈谈分布式系统存在的问题。</p>
+<p data-nodeid="8176">从本质上来讲，云原生中的微服务应用属于分布式系统的一种落地实践。在分布式环境中，由于网络的复杂性、不确定性以及节点故障等情况，会产生一系列的问题。最常见的、最大的难点就是<strong data-nodeid="8277">数据存储不一致</strong>的问题，即多个服务实例自身的数据或者获取到的数据各不相同。因此我们需要基于一致性的存储组件构建可靠的分布式系统。</p>
+<h4 data-nodeid="8177">分布式中的 CAP 理论</h4>
+<p data-nodeid="8178">CAP 原理是描述分布式系统下节点数据同步的基本定理，分别指<strong data-nodeid="8284">Consistency（一致性）、Availability（可用性）和 Partition tolerance（分区容错性）</strong>，这三个要素最多只能同时实现两点，不能三者兼顾。</p>
+<p data-nodeid="8179">基于分布式系统的基本特质，P（分区容错性）是必须要满足的，所以接下来需要考虑满足 C（一致性）还是 A（可用性）。</p>
+<p data-nodeid="8180">在类似银行之类对金额数据要求强一致性的系统中，要优先考虑满足数据一致性；而在大众网页之类的系统中，用户对网页版本的新旧不会有特别的要求，在这种场景下服务可用性会高于数据一致性。</p>
+<p data-nodeid="8181">了解了分布式系统中的问题，接下来让我们结合官网中的定义，看看为什么在分布式系统中需要 etcd？</p>
+<h4 data-nodeid="8182">etcd 是什么</h4>
+<p data-nodeid="8183">根据 <a href="https://etcd.io/" data-nodeid="8292">etcd 官网</a>的介绍，我找到了如下定义：</p>
+<blockquote data-nodeid="8184">
+<p data-nodeid="8185">A highly-available key value store for shared configuration and service discovery.<br>
+即一个用于配置共享和服务发现的键值存储系统。</p>
+</blockquote>
+<p data-nodeid="8186"><img src="https://s0.lgstatic.com/i/image2/M01/0A/30/CgpVE2ARCbqAU6OoAADfCRp3xrM594.png" alt="Drawing 0.png" data-nodeid="8299"></p>
+<p data-nodeid="8187">从定义上你也可以发现，etcd 归根结底是一个存储组件，且可以实现配置共享和服务发现。</p>
+<p data-nodeid="8188">在分布式系统中，各种服务配置信息的管理共享和服务发现是一个很基本也是很重要的问题，无论你调用服务还是调度容器，都需要知道对应的服务实例和容器节点地址信息。etcd 就是这样一款<strong data-nodeid="8306">实现了元数据信息可靠存储的组件</strong>。</p>
+<p data-nodeid="8189"><strong data-nodeid="8311">etcd 可集中管理配置信息</strong>。服务端将配置信息存储于 etcd，客户端通过 etcd 得到服务配置信息，etcd 监听配置信息的改变，发现改变通知客户端。</p>
+<p data-nodeid="8190">而 etcd 满足 CAP 理论中的 CP（一致性和分区容错性） 指标，由此我们知道，etcd 解决了分布式系统中一致性存储的问题。</p>
+<h3 data-nodeid="8191">etcd 中常用的术语</h3>
+<p data-nodeid="8192">为了我们接下来更好地学习 etcd，我在这里给你列举了常用的 etcd 术语，尽快熟悉它们也会对接下来的学习有所助益。</p>
+<p data-nodeid="8193"><img src="https://s0.lgstatic.com/i/image/M00/92/44/CgqCHmARCcmANlKJAAHkVwh99Nk525.png" alt="Lark20210127-143306.png" data-nodeid="8317"></p>
+<p data-nodeid="8194">下面我们具体了解一下 etcd 的相关特性、架构和使用场景。</p>
+<h3 data-nodeid="8195">etcd 的特性</h3>
+<p data-nodeid="8196">etcd 可以用来构建高可用的分布式键值数据库，总结来说有如下特点。</p>
+<ul data-nodeid="8197">
+<li data-nodeid="8198">
+<p data-nodeid="8199"><strong data-nodeid="8325">简单</strong>：etcd 的安装简单，且为用户提供了 HTTP API，使用起来也很简单。</p>
+</li>
+<li data-nodeid="8200">
+<p data-nodeid="8201"><strong data-nodeid="8330">存储</strong>：etcd 的基本功能，数据分层存储在文件目录中，类似于我们日常使用的文件系统。</p>
+</li>
+<li data-nodeid="8202">
+<p data-nodeid="8203"><strong data-nodeid="8335">Watch 机制</strong>：Watch 指定的键、前缀目录的更改，并对更改时间进行通知。</p>
+</li>
+<li data-nodeid="8204">
+<p data-nodeid="8205"><strong data-nodeid="8340">安全通信</strong>：支持 SSL 证书验证。</p>
+</li>
+<li data-nodeid="8206">
+<p data-nodeid="8207"><strong data-nodeid="8345">高性能</strong>：etcd 单实例可以支持 2K/s 读操作，官方也有提供基准测试脚本。</p>
+</li>
+<li data-nodeid="8208">
+<p data-nodeid="8209"><strong data-nodeid="8350">一致可靠</strong>：基于 Raft 共识算法，实现分布式系统内部数据存储、服务调用的一致性和高可用性。</p>
+</li>
+</ul>
+<p data-nodeid="8210">etcd 是一个实现了分布式一致性键值对存储的中间件，支持跨平台，拥有活跃用户的技术社区。etcd 集群中的节点基于 Raft 算法进行通信，Raft 算法保证了微服务实例或机器集群所访问的数据的可靠一致性。</p>
+<p data-nodeid="8211">在分布式系统或者 Kubernetes 集群中，etcd 可以<strong data-nodeid="8357">作为服务注册与发现和键值对存储组件</strong>。不管是简单应用程序，还是复杂的容器集群，都可以很方便地从 etcd 中读取数据，满足了各种场景的需求。</p>
+<h3 data-nodeid="8212">etcd 的应用场景</h3>
+<p data-nodeid="8213">etcd 在稳定性、可靠性和可伸缩性上表现极佳，同时也为云原生应用系统提供了协调机制。etcd 经常用于服务注册与发现的场景，此外还有键值对存储、消息发布与订阅、分布式锁等场景。</p>
+<ul data-nodeid="8214">
+<li data-nodeid="8215">
+<p data-nodeid="8216"><strong data-nodeid="8363">键值对存储</strong></p>
+</li>
+</ul>
+<p data-nodeid="8217">etcd 是一个用于<strong data-nodeid="8369">键值存储</strong>的组件，存储是 etcd 最基本的功能，其他应用场景都建立在 etcd 的可靠存储上。比如 Kubernetes 将一些元数据存储在 etcd 中，将存储状态数据的复杂工作交给 etcd，Kubernetes 自身的功能和架构就能更加稳定。</p>
+<p data-nodeid="8218">etcd 基于 Raft 算法，能够有力地保证分布式场景中的一致性。各个服务启动时注册到 etcd 上，同时为这些服务配置键的 TTL 时间。注册到 etcd 上面的各个服务实例通过心跳的方式定期续租，实现服务实例的状态监控。</p>
+<ul data-nodeid="8219">
+<li data-nodeid="8220">
+<p data-nodeid="8221"><strong data-nodeid="8374">消息发布与订阅</strong></p>
+</li>
+</ul>
+<p data-nodeid="8222">在分布式系统中，服务之间还可以通过消息通信，即消息的发布与订阅，如下图所示：</p>
+<p data-nodeid="8223"><img src="https://s0.lgstatic.com/i/image/M00/92/44/CgqCHmARCdyAckB8AADPPIJvk8M166.png" alt="Lark20210127-143312.png" data-nodeid="8378"></p>
+<div data-nodeid="8224"><p style="text-align:center">消息发布与订阅流程图</p></div>
+<p data-nodeid="8225">通过构建 etcd 消息中间件，服务提供者发布对应主题的消息，消费者则订阅他们关心的主题，一旦对应的主题有消息发布，就会产生订阅事件，消息中间件就会通知该主题所有的订阅者。</p>
+<ul data-nodeid="8226">
+<li data-nodeid="8227">
+<p data-nodeid="8228"><strong data-nodeid="8383">分布式锁</strong></p>
+</li>
+</ul>
+<p data-nodeid="8229">分布式系统中涉及多个服务实例，存在跨进程之间资源调用，对于资源的协调分配，单体架构中的锁已经无法满足需要，需要引入分布式锁的概念。etcd 基于 Raft 算法，实现分布式集群的一致性，存储到 etcd 集群中的值必然是全局一致的，因此基于 etcd 很容易实现分布式锁。</p>
+<h3 data-nodeid="8230">etcd 的核心架构</h3>
+<p data-nodeid="8231">etcd 作为一个如此重要的部件，我们只有深入理解其架构设计才能更好地学习。下面还是先来看看 etcd 总体的架构图。</p>
+<p data-nodeid="8232"><img src="https://s0.lgstatic.com/i/image/M00/92/39/Ciqc1GARCeeAadU3AAAioFsPKBs142.png" alt="Drawing 2.png" data-nodeid="8389"></p>
+<div data-nodeid="8233"><p style="text-align:center">etcd 总体架构图</p></div>
+<p data-nodeid="8234">从上图可知，etcd 有 etcd Server、gRPC Server、存储相关的 MVCC 、Snapshot、WAL，以及 Raft 模块。</p>
+<p data-nodeid="8235">其中：</p>
+<ul data-nodeid="8236">
+<li data-nodeid="8237">
+<p data-nodeid="8238">etcd Server 用于对外接收和处理客户端的请求；</p>
+</li>
+<li data-nodeid="8239">
+<p data-nodeid="8240">gRPC Server 则是 etcd 与其他 etcd 节点之间的通信和信息同步；</p>
+</li>
+<li data-nodeid="8241">
+<p data-nodeid="8242">MVCC，即多版本控制，etcd 的存储模块，键值对的每一次操作行为都会被记录存储，这些数据底层存储在 BoltDB 数据库中；</p>
+</li>
+<li data-nodeid="8243">
+<p data-nodeid="8244">WAL，预写式日志，etcd 中的数据提交前都会记录到日志；</p>
+</li>
+<li data-nodeid="8245">
+<p data-nodeid="8246">Snapshot 快照，以防 WAL 日志过多，用于存储某一时刻 etcd 的所有数据；</p>
+</li>
+<li data-nodeid="8247">
+<p data-nodeid="8248">Snapshot 和 WAL 相结合，etcd 可以有效地进行数据存储和节点故障恢复等操作。</p>
+</li>
+</ul>
+<p data-nodeid="8249">虽然 etcd 内部实现机制复杂，但对外提供了简单的 API 接口，方便客户端调用。我们可以通过<strong data-nodeid="8407">etcdctl 客户端命令行</strong>操作和访问 etcd 中的数据，或者通过<strong data-nodeid="8408">HTTP API</strong>接口直接访问 etcd。</p>
+<p data-nodeid="8250">etcd 中的数据结构很简单，它的数据存储其实就是键值对的有序映射。etcd 还提供了一种键值对监测机制，即 Watch 机制，客户端通过订阅相关的键值对，获取其更改的事件信息。Watch 机制实时获取 etcd 中的增量数据更新，使数据与 etcd 同步。</p>
+<p data-nodeid="8251">etcd 目前有 V2.x 和 V3.x 两个大版本。etcd V2 和 V3 是在底层使用同一套 Raft 算法的两个独立应用，但相互之间实现原理和使用方法上差别很大，接口不一样、存储不一样，两个版本的数据互相隔离。</p>
+<p data-nodeid="8252">至于由 etcd V2 升级到 etcd V3 的情况，原有数据只能通过 etcd V2 接口访问，V3 接口创建的数据只能通过新的 V3 的接口访问。我们的专栏重点讲解<strong data-nodeid="8416">当前常用且主流的 V3 版本</strong>。</p>
+<h3 data-nodeid="8253">小结</h3>
+<p data-nodeid="8254">这一讲我主要介绍了 etcd 相关的概念。关于 etcd 你需要记住以下三点：</p>
+<ul data-nodeid="8255">
+<li data-nodeid="8256">
+<p data-nodeid="8257">etcd 是云原生架构中的存储基石，可以有效保证存储数据的一致性和可靠性；</p>
+</li>
+<li data-nodeid="8258">
+<p data-nodeid="8259">etcd 内部实现机制复杂，但是对外提供了简单直接的 API 接口；</p>
+</li>
+<li data-nodeid="8260">
+<p data-nodeid="8261">使用 etcd 的常见分布式场景包括键值对存储、服务注册与发现、消息订阅与发布、分布式锁等。</p>
+</li>
+</ul>
+<p data-nodeid="8262"><img src="https://s0.lgstatic.com/i/image2/M01/0A/30/CgpVE2ARCfKAXv9_AAHI9IPYpzA635.png" alt="Drawing 3.png" data-nodeid="8424"></p>
+<p data-nodeid="8263">下一讲我将开始讲解 etcd 的安装部署，手把手教你玩转 etcd 搭建。</p>
+<p data-nodeid="8264">在学习今天的内容之前，你有没有使用过 etcd，你理解的 etcd 功能是什么样的？欢迎你在留言区和我分享。</p>
+<hr data-nodeid="8265">
+<p data-nodeid="8266"><a href="https://shenceyun.lagou.com/t/Mka" data-nodeid="8433"><img src="https://s0.lgstatic.com/i/image/M00/8B/BD/Ciqc1F_gEFiAcnCNAAhXSgFweBY589.png" alt="java_高薪训练营.png" data-nodeid="8432"></a></p>
+<p data-nodeid="8267" class="te-preview-highlight"><a href="https://shenceyun.lagou.com/t/Mka" data-nodeid="8436">拉勾背书内推 + 硬核实战技术干货，帮助每位 Java 工程师达到阿里 P7 技术能力。点此链接，快来领取！</a></p></div>
+
+</body></html>

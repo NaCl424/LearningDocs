@@ -1,0 +1,1190 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>13 | Envoy 入门：最常用的数据面介绍</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>13 | Envoy 入门：最常用的数据面介绍</h1><p data-nodeid="8253" class="">今天我要跟你分享的内容是 Service Mesh 开源产品中最常用的数据面——Envoy 的知识。在上一讲中我们已经了解了各种 Service Mesh 的解决方案，也了解到了最流行的 Service Mesh 解决方案 Istio+Envoy，这一讲我们先来学习一下数据面——Envoy。</p>
+<p data-nodeid="8254">Envoy 是专为大型现代 SOA（面向服务架构）架构设计的 L7 代理和通信总线，它既可以作为 Service Mesh 中的<strong data-nodeid="8330">数据面</strong>使用，也可以作为<strong data-nodeid="8331">入口网关层</strong>使用，可以通过 xDS API 控制 Envoy 的监听、路由、负载均衡等行为。</p>
+<p data-nodeid="8255">下面我们先看一下 Envoy 有哪些核心功能。</p>
+<h3 data-nodeid="8256">核心功能</h3>
+<p data-nodeid="8257"><strong data-nodeid="8338">高性能设计</strong>：采用 C++ 编写，拥有良好的四层、七层代理性能，在 8 核的机器上，HTTP 代理可以达到 10w 的 QPS，gRPC 可以达到 15w QPS，完全满足了 Service Mesh 中 Sidecar 的应用场景。</p>
+<p data-nodeid="8258"><strong data-nodeid="8347">Filter 架构</strong>：可以在四、七层编写 Filter 以扩展 Envoy 的功能，比如监听过滤器、四层网络过滤器，以及七层过滤器。不过 Envoy 支持最完善的还是<strong data-nodeid="8348">HTTP 过滤器</strong>，支持了限流、路由转发、故障注入等多种服务治理功能，</p>
+<p data-nodeid="8259"><strong data-nodeid="8361">良好的 HTTP/2 支持</strong>：随着 gRPC 框架的流行以及边缘层网络性能的要求提升，HTTP/2 越来越被重视。Envoy 原生支持 HTTP/2，可以在 HTTP 和 HTTP/2 之间做转换。比如<strong data-nodeid="8362">在 Sidecar 模式中</strong>，无论应用协议是 HTTP 还是 HTTP/2，<strong data-nodeid="8363">Envoy 之间默认使用 HTTP/2 通信</strong>，这样极大提升了服务性能和稳定性，避免了 HTTP 频繁建立连接带来的消耗和不稳定性。</p>
+<p data-nodeid="8260"><strong data-nodeid="8368">多种协议支持</strong>：不仅支持 HTTP 和 HTTP/2，随着社区的发展，Thrift、gRPC、MongoDB、Redis、MySQL 等多种网络协议都被支持，甚至可以使用 Envoy 做 Redis 的 Mesh 方案，用来代替流行的 Redis 中间件。</p>
+<p data-nodeid="8261"><strong data-nodeid="8373">可观测性</strong>：支持强大的统计系统。日志、Metrics、链路追踪都有良好的支持。</p>
+<p data-nodeid="8262"><strong data-nodeid="8382">边缘网关</strong>：Envoy 本身就是一个高性能的网络代理组件，完全可以作为<strong data-nodeid="8383">入口网关层</strong>使用，在 Kubernetes 中，也可以作为 Egress 和 Ingress 使用。</p>
+<p data-nodeid="8263"><strong data-nodeid="8392">服务发现</strong>：和其他常见的网络代理软件不同，Envoy 默认支持服务发现组件。Envoy 使用了一套<strong data-nodeid="8393">xDS 的动态 API</strong>，获取服务的后端节点并实时更新，结合 Envoy 强大的负载均衡器，可以做到最终一致性。</p>
+<p data-nodeid="8264"><strong data-nodeid="8398">Wasm 扩展</strong>：Envoy 在最近的 1.17 版本增加了对 Wasm 的支持。Wasm 全称为 WebAssembly，最早用在浏览器端用来解决 JavaScript 性能问题和大型项目团队协作问题。近些年，它开始在一些后端技术上使用，用来代替 Lua，作为核心系统的扩展方式。因为 Wasm 可以使用多种语言进行开发，所以方便对核心系统进行扩展，不用担心语言问题。当然相对于原生的 C++ 扩展方式，它大概有 3 成的性能损耗。</p>
+<p data-nodeid="8265">了解完 Envoy 的核心特性，让我们来结合一张架构图具体看一下 Envoy 的代码架构。</p>
+<h3 data-nodeid="8266">架构设计</h3>
+<p data-nodeid="8267">下图是 Envoy 架构的设计图，从图中我们可以看到入流量经过 Iptables 劫持被转发到了 Envoy 的端口，Envoy 通过监听端口创建连接，提供七层代理服务。下面我们具体看看每部分内容都做了什么工作。</p>
+<p data-nodeid="8268"><img src="https://s0.lgstatic.com/i/image2/M01/0C/01/CgpVE2AXJaCAFUsQAAFL99sKyE0926.png" alt="1白底.png" data-nodeid="8404"></p>
+<p data-nodeid="8269"><strong data-nodeid="8409">Iptable</strong>：通过 Iptable 劫持，将入口和出口流量都转发到 Envoy 上，达到劫持流量的目的。</p>
+<p data-nodeid="8270"><strong data-nodeid="8418">Listener</strong>：Envoy 通过<strong data-nodeid="8419">建立多个监听器</strong>提供不同的服务。比如通过监听的两个端口分别负责 Sidecar 模式的出流量和入流量，Sidecar 多使用这种设计，这样可以简化编程逻辑，也可以增强 Filter 的通用性。如果提供不同协议，Envoy 也会建立不同的端口来提供服务。</p>
+<p data-nodeid="8271"><strong data-nodeid="8428">Worker</strong>：每个 Listener 维护一个对应的 Worker Pool，Envoy 为每个逻辑处理器创建一个 Worker 线程，当我们在一个新的端口启动一个新的 server 时，Envoy 也会根据 -concurrency 创建对应的 Worker 线程，要注意<strong data-nodeid="8429">启动太多的 worker 线程并不一定是好事</strong>，特别是在 Sidecar 模式，我们并不会分配过多的逻辑核心给到 Sidecar，创建过多的 Worker 线程可能导致每个 Worker 线程维护的连接变多，Upstream 压力过大。</p>
+<p data-nodeid="8272"><strong data-nodeid="8438">Filters</strong>：可以理解为<strong data-nodeid="8439">中间件</strong>，通过 Filter，可以做到四层和七层的流量过滤，支持服务治理需要的限流、熔断等功能。</p>
+<p data-nodeid="8273"><strong data-nodeid="8444">Cluster Manager</strong>：流量经过 Router，识别出需要转发的 Cluster，通过 Cluster Manager 进行服务发现和负载均衡等功能。</p>
+<p data-nodeid="8274"><strong data-nodeid="8449">Upstream</strong>：Upstream 维护了 EndPoint 的连接池，通过负载具衡器，将流量转发到合适的 EndPoint 上面。</p>
+<p data-nodeid="8275">聊完了 Envoy 的架构，我们一起看一下 Envoy 作为 Service Mesh 中的数据面，也就是 Sidecar 模式下，整个的数据流转过程。</p>
+<p data-nodeid="8276"><img src="https://s0.lgstatic.com/i/image2/M01/0B/FE/Cip5yGAXJcGAZ6mdAAMoOTjKasg148.png" alt="3.png" data-nodeid="8453"></p>
+<p data-nodeid="8277">如上图所示，Envoy 作为 Sidecar 使用时，需要和服务部署在同一台机器或者 Pod 中，用户访问其他服务时，流量会被自动劫持到 Envoy 中。</p>
+<p data-nodeid="8278">下面我们结合一个具体的例子来讲解。下图是 Productpage 服务通过 HTTP 协议，调用 review 服务的过程。</p>
+<p data-nodeid="8279"><img src="https://s0.lgstatic.com/i/image2/M01/0B/FE/Cip5yGAXJd2ATQjPAAD_zYyDRqQ802.png" alt="2白底.png" data-nodeid="8458"></p>
+<ul data-nodeid="8280">
+<li data-nodeid="8281">
+<p data-nodeid="8282">通过 Iptables 对流量进行劫持，将 Productpage 访问 Reviews 的流量转发到 Envoy 的出流量 15001 端口上。</p>
+</li>
+<li data-nodeid="8283">
+<p data-nodeid="8284">Envoy 先根据 virtual_hosts 进行匹配，再通过路由匹配，发现路由对应的 Cluster，通过服务发现找到 Cluster 对应的 EndPoint，将流量转发到 10.40.0.15:9080 的 Pod 上。</p>
+</li>
+<li data-nodeid="8285">
+<p data-nodeid="8286">Reviews 的 Pod 通过 Iptables 对流量进行劫持，将流量劫持到 Envoy 的入流量端口 15006 上。</p>
+</li>
+<li data-nodeid="8287">
+<p data-nodeid="8288">Envoy 将本地流量转发到对应的本地地址 127.0.0.1:9080，这里不需要对流量进行识别，因为流量被转发到入流量端口 15006 上，这个端口的配置用于本地流量的转发。</p>
+</li>
+<li data-nodeid="8289">
+<p data-nodeid="8290">到这里整个 Sidecar 的流量出入过程就结束了。出入流量都经由 Envoy，最终被正确的转发到了 Reviews 的 Pod 上面。</p>
+</li>
+</ul>
+<p data-nodeid="8291">看到这里，想必你已经理解了 Envoy 的架构设计，下面我们结合一些具体的配置来了解 Envoy 的数据结构。</p>
+<h3 data-nodeid="8292">静态配置</h3>
+<p data-nodeid="8293">Envoy 的配置分为<strong data-nodeid="8473">静态配置和动态配置</strong>，静态配置就是手动填写的配置，动态配置是指由 xDS API 获取的配置，在这一讲我们只对静态配置做讲解，在 15 讲我们会详细讲解 xDS 协议。</p>
+<p data-nodeid="8294">如下代码，这里定义了 Listener 监听器，监听端口为 10000。virtual_hosts 匹配所有域名，Routes 的匹配规则为所有 Path，也就是所有访问 10000 端口的请求都会被转发到 service_google 服务。</p>
+<pre class="lang-java hljs" data-nodeid="8295"><code data-language="java">listeners:
+- name: listener_0
+  address:
+    socket_address: { address: <span class="hljs-number">0.0</span><span class="hljs-number">.0</span><span class="hljs-number">.0</span>, port_value: <span class="hljs-number">10000</span> }
+  filter_chains:
+  - filters:
+    - name: envoy.http_connection_manager
+      config:
+        stat_prefix: ingress_http
+        codec_type: AUTO
+        route_config:
+          name: local_route
+          virtual_hosts:
+          - name: local_service
+            domains: [<span class="hljs-string">"*"</span>] <span class="hljs-comment">// 匹配所有域名</span>
+            routes:
+            - match: { prefix: <span class="hljs-string">"/"</span> }<span class="hljs-comment">// 匹配所有 path</span>
+              route: { host_rewrite: www.google.com, cluster: service_google } <span class="hljs-comment">// 将流量转发到 service_google 服务</span>
+        http_filters:
+        - name: envoy.router
+</code></pre>
+<p data-nodeid="8296">下面的配置是 service_google 服务的负载均衡器，连接超时时间，以及要转发的地址。</p>
+<pre class="lang-java hljs" data-nodeid="8297"><code data-language="java">clusters:
+- name: service_google
+  connect_timeout: 0.25s
+  type: LOGICAL_DNS
+  # Comment out the following line to test on v6 networks
+  dns_lookup_family: V4_ONLY
+  lb_policy: ROUND_ROBIN
+  hosts: [{ socket_address: { address: google.com, port_value: 443 }}]
+  tls_context: { sni: www.google.com }
+</code></pre>
+<h3 data-nodeid="8298">边缘代理模式</h3>
+<p data-nodeid="8299">Envoy 不仅可以用于 Sidecar 模式，也可以用作边缘网关，但是用作边缘网关层我们有一些注意事项，这些问题不仅在 Envoy 中存在，在其他的边缘网关中也应该处理。</p>
+<h4 data-nodeid="8300">HTTP 标头清理</h4>
+<p data-nodeid="8301">一些外部传入的 header 可能会影响内部行为，应该统一做出清理操作，比如我们经常会用到的 x-forward-for，在反向代理中，未经过一层代理，都应该将代理的 IP 追加在 x-forward-for 中，以保证通过 x-forward-for 可以获取最原始的 IP，<strong data-nodeid="8494">如果有客户端恶意传输 x-forward-for，不做清除操作可能会导致拿到错误的客户端 IP</strong>。在 Envoy 中可以通过 use_remote_address 设置为 true 来清理 HTTP 标头。</p>
+<h4 data-nodeid="8302">超时控制</h4>
+<p data-nodeid="8303">超时控制分为<strong data-nodeid="8501">连接超时、流超时和路由超时</strong>。这些超时控制不仅在边缘网关模式中需要注意，在 Sidecar 模式也需要注意，一些不合理的超时可能会引起服务的雪崩。虽然在内网服务调用时一般都会设置默认超时，但 Sidecar 应该设置一个默认的超时时间，避免服务没有设置有效超时的情况引起的问题。</p>
+<p data-nodeid="8304"><strong data-nodeid="8505">连接超时</strong></p>
+<p data-nodeid="8305">Envoy 为 HTTP 服务提供了<strong data-nodeid="8511">空闲连接超时时间</strong>的设置，空闲超时是指一个连接在接收到请求后，会设置 TCP 的 idle Timeout 的参数，一段时间内没有收到代理服务的响应请求，则会断开连接。Envoy 默认的空闲超时是 1 小时。连接超时对所有流生效，连接一旦断开，所有流处理也会中断。</p>
+<p data-nodeid="8306"><strong data-nodeid="8515">流超时</strong></p>
+<p data-nodeid="8307">流是 HTTP/2 中的概念，在 HTTP/1 中没有流的概念，Envoy 通过将 HTTP 连接对应到流模式，统一进行处理。</p>
+<p data-nodeid="8308">HTTP 连接管理器 stream_idle_timeout 默认超时时间为 5 分钟，推荐对所有流设置合理的超时时间，这个时间就是<strong data-nodeid="8530">接收请求到返回数据的处理时间</strong>，<strong data-nodeid="8531">如果没有特殊需求，建议设置为 10s，默认超时时间偏长</strong>。如果触发此超时时间，则会出发 504 Gateway Timeout 的错误码。</p>
+<p data-nodeid="8309"><strong data-nodeid="8535">路由超时</strong></p>
+<p data-nodeid="8310">除了设置全局的流超时外，还可以设置路由层面的超时，为某些请求设置特殊的配置，一些请求可能需要更快的响应速度，所以要设置较短的超时时间，这个时候只要在路由层面设置即可，比如针对某些 Path 设置更短的超时时间。</p>
+<h4 data-nodeid="8311">连接限制</h4>
+<p data-nodeid="8312">Envoy 可以针对全局或者监听器设置连接限制。一般单一服务器可承载的并发连接数有限，根据线上的峰值连接运行情况，设置合理的连接设置，可以<strong data-nodeid="8543">避免因服务出问题时响应过慢，大量新建 HTTP 连接击垮 Envoy 的情况</strong>。</p>
+<h3 data-nodeid="8313">总结</h3>
+<p data-nodeid="8314">这一讲我主要介绍了 Service Mesh 中最流行的解决方案——Istio中的数据面 Envoy，通过今天的内容，相信你已经了解了 Envoy 的基本知识，以及 Envoy 具体的功能。</p>
+<p data-nodeid="8315">Envoy 不仅可以作为 Service Mesh 中的 Sidecar 使用，也可以作为边缘网关使用，它的本质就是一个反向代理服务器，Nginx、HAProxy 能做的事情 Envoy 也可以做得很好。</p>
+<p data-nodeid="8316">本讲主要内容如下：</p>
+<p data-nodeid="8317"><img src="https://s0.lgstatic.com/i/image/M00/93/11/Ciqc1GATuziAP5fFAAH-wz7cloQ948.png" alt="Drawing 4.png" data-nodeid="8550"></p>
+<p data-nodeid="8318">本讲内容到这里就结束了，下一讲我会讲解最常用的 Service Mesh 解决方案——Istio 的基本知识，以及 Istio 的部署实战。</p>
+<p data-nodeid="8319" class="te-preview-highlight">通过今天讲解的内容，如果让你设计一个 Sidecar，对于出入流量你会采用双端口还是单端口方案呢？如果要支持不同协议，你会在单端口上支持，还是在多端口上分别支持不同的协议呢? 欢迎在留言区和我分享你的观点，我们下一讲再见！</p></div>
+
+</body></html>

@@ -1,0 +1,1204 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>10 | 全链路日志：这个请求到底经历了什么？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>10 | 全链路日志：这个请求到底经历了什么？</h1><p data-nodeid="1613" class="">09 讲我们介绍了服务的注册发现，本节课我们就来谈谈所有微服务都会遇到的一个问题——全链路日志。</p>
+<p data-nodeid="1614">为了便于你理解下面的内容，我们还是先从一个真实的业务场景入手。</p>
+<h3 data-nodeid="1615">业务场景（架构经历九）</h3>
+<p data-nodeid="1616">当时我们的公司的微服务刚刚迁移到 Spring Cloud，服务的注册发现基于 Spring Cloud ZooKeeper 实现，不过组件方面只使用了 Spring Cloud 的服务间调用（Feign）。</p>
+<p data-nodeid="1617">迁移到微服务后，我们就得考虑日志跟踪的事情了。</p>
+<p data-nodeid="1618">之前我们只是简单地把日志打印到本地文件上，然后使用 ELK 进行日志收集、分析，因此日志记录比较随意且没有形成一个统一的规范。</p>
+<p data-nodeid="1619">与同事商量后，我们决定把日志进一步规范化，于是提出了如下 3 点需求。</p>
+<ol data-nodeid="1620">
+<li data-nodeid="1621">
+<p data-nodeid="1622">记录什么时候调用了缓存/MQ/ES 等中间件，在哪个类的哪个方法中耗时多久？</p>
+</li>
+<li data-nodeid="1623">
+<p data-nodeid="1624">记录什么时候调用了数据库，执行了什么 SQL，耗时多久？</p>
+</li>
+<li data-nodeid="1625">
+<p data-nodeid="1626">记录什么时候调用了另一个服务，服务名是什么？方法名是什么？耗时多久？</p>
+</li>
+</ol>
+<p data-nodeid="1627">一般来说，一个请求会跨多个服务节点，针对这种情况我们又梳理了 2 条重要需求。</p>
+<ol data-nodeid="1628">
+<li data-nodeid="1629">
+<p data-nodeid="1630">把同一个请求在全部服务的以上所有记录进行串联，最终实现一个树状的记录。</p>
+</li>
+<li data-nodeid="1631">
+<p data-nodeid="1632">设计一个基于这些基础数据的查询统计功能。</p>
+</li>
+</ol>
+<p data-nodeid="1633">通过以上需求梳理并将日志规范后，我们就可以在一个页面上看到每个请求的树状结构日志了，如下图所示，仅供参考。</p>
+<p data-nodeid="1634"><img src="https://s0.lgstatic.com/i/image/M00/8C/D4/Ciqc1F_1ToyAEOtrAACu5rWPQXM480.png" alt="Drawing 0.png" data-nodeid="1816"></p>
+<p data-nodeid="1635">通过这样的操作，如果后期线上环境出现问题需要进一步调查，我们就有了更多的依据。</p>
+<p data-nodeid="1636">需求提完后，我们就需要选择一款真正适合的开源技术进行方案实现，这就涉及技术选型过程。</p>
+<h3 data-nodeid="1637">技术选型</h3>
+<p data-nodeid="1638">在技术选型时，你可以对照下方我给出的一个知名框架的对比表，如下表所示：</p>
+<p data-nodeid="2015" class=""><img src="https://s0.lgstatic.com/i/image2/M01/04/CA/Cip5yF_2aW2AXKbKAAC-nfhmBYI575.png" alt="Lark20210107-094844.png" data-nodeid="2018"></p>
+
+<div data-nodeid="2465" class="te-preview-highlight"><p style="text-align:center">技术选型对比表</p></div>
+
+<p data-nodeid="1732" class="">在上表中我们发现，可供选择的系统太多了，我们该如何选择呢？于是我们几个同事又坐在一起讨论，最终商量出了如下标准。</p>
+<h4 data-nodeid="1733">1.日志数据结构支持 OpenTracing</h4>
+<p data-nodeid="1734">平时日志行都是独立记录的，我们只能通过线程 id 把它们关联起来。因此我们需要一个数据结构把每个请求在全部服务的相关日志关联起来。</p>
+<p data-nodeid="1735">而目前市面上已经有 1 个比较通用的全链路数据格式—— OpenTracing，它的标准和 API 是由一个开源的组织（Cloud Native Computing Foundation 云原生计算基金会孵化）进行维护，这个开源组织也包含了一些全链路日志系统的维护者。</p>
+<p data-nodeid="1736"><img src="https://s0.lgstatic.com/i/image/M00/8C/E0/CgqCHl_1TseAI9O7AACm7vLXv_4068.png" alt="Drawing 1.png" data-nodeid="1919"></p>
+<p data-nodeid="1737">OpenTracing 通过提供一个与平台/厂商无关的 API，使得开发人员能够更方便地添加（或更换）追踪系统。这样就算我们之前引入的全链路日志不好用，以后想再换掉也是超级方便。</p>
+<p data-nodeid="1738">接下来我们解释下 OpenTracing 标准，它主要包含两个概念：一个是 Trace，一个是 Span。</p>
+<p data-nodeid="1739">我们先来看看下面的例子，如下图所示。</p>
+<p data-nodeid="1740"><img src="https://s0.lgstatic.com/i/image/M00/8C/E0/CgqCHl_1TtGAfQdgAABuj0p0xJM830.png" alt="Drawing 2.png" data-nodeid="1925"></p>
+<p data-nodeid="1741">在上图中，我们看到一个客户端调用 Order API 的请求时经历的整个流程（1 到 10），即 1 个 Trace，之后它又调用了 Product Service 的整个过程（2 到 5），这就是 1 个 Span，每个 Span 代表 Trace 中被命名且被计时的连续性执行片段。</p>
+<p data-nodeid="1742">通过上图我们还发现，Span 中又包含了一个子 Span，比如调用 Product Service 的过程中，Product Service 会访问一次数据库（3 到 4），这也是一个 Span。因此，我们可以得出一个 Span 可以包含多个子 Span，而 Span 与 Span 之间的关系就叫 Reference。</p>
+<p data-nodeid="1743">**在技术选型时，大家都认可：必须保证系统的可替代性，尽量别在一项开源技术上绑死。**因为以前我们吃过一次大亏，强依赖了一个框架，结果那个框架不维护了，后面维护相关代码的人就非常痛苦。但是如果全部迁移掉，代价又太大且工作量也很大，付出与回报产出比不足以说服领导进行决策。要是不迁移，我们就只能一直用着上个年代的技术，<strong data-nodeid="1937">所以这次选型我们坚决使用基于 OpenTracing 的日志系统。</strong></p>
+<h4 data-nodeid="1744">2.支持 Elasticsearch 作为存储系统</h4>
+<p data-nodeid="1745">诚然，因为流量大的原因，导致我们记录的日志数据量也很大，这就要求存储这些日志的系统必须支持海量数据且保证查询高效。</p>
+<p data-nodeid="1746">最终，因为公司运维同事对 Elasticsearch 比较熟悉，所以我们提出可以使用 Elasticsearch 对日志进行存储。</p>
+<h4 data-nodeid="1747">3.保证日志的收集对性能无影响**</h4>
+<p data-nodeid="1748">当服务正在记录日志，我们需要确保日志的记录与收集对服务器的性能不会产生影响。</p>
+<p data-nodeid="1749">比如之前我们调研过 Pinpoint，当服务正在记录日志，Pinpoint 的并发数达到了一定数量且整体吞吐量少了一半，对服务器的性能影响很大，这肯定不行。</p>
+<h4 data-nodeid="1750">4.查询统计功能的丰富程度</h4>
+<p data-nodeid="1751">一般来说，查询统计的功能越丰富越好，但必须首先满足一个基础功能：支持每个请求树状结构的全链路日志（如下图所示），比如 SkyWalking 的功能就非常适用。</p>
+<p data-nodeid="1752"><img src="https://s0.lgstatic.com/i/image2/M01/04/B6/Cip5yF_1TuOAc8B3AACyFw4UXIo036.png" alt="Drawing 4.png" data-nodeid="1950"></p>
+<p data-nodeid="1753"><img src="https://s0.lgstatic.com/i/image2/M01/04/B6/Cip5yF_1TumABWHvAABjPNghJgQ765.png" alt="Drawing 5.png" data-nodeid="1953"></p>
+<p data-nodeid="1754">查询系统除了满足基本功能以外，我们也想实现监控报警、指标统计等功能，以此帮助我们减轻一堆二次开发的工作量。</p>
+<h4 data-nodeid="1755">5.如何以最小的业务代码侵入性引入系统</h4>
+<p data-nodeid="1756">我们希望日志数据的收集过程对写业务代码的人保持透明，因此，最理想的解决方案是使用 Java 的探针，通过字节码加强的方式进行埋点。不过，这种方式对系统性能也会产生一定影响。</p>
+<p data-nodeid="1757">而且在实际业务中，公司都会把对数据库、Redis、MQ 访问的代码进行封装，我们无法通过字节码加强的方式实现埋点，只能尝试在封装的代码中实现埋点了，这样对开发业务代码的人来说同样透明。</p>
+<h4 data-nodeid="1758">6.客户案例</h4>
+<p data-nodeid="1759">技术选型时，我们往往还需要了解哪些知名公司使用了这个技术，因为大公司的业务场景相对复杂些，提前踩的坑较多，一个技术如果被很多公司都使用过了，那我们使用起来也就会平稳很多。</p>
+<p data-nodeid="1760">以上就是技术选型的几个判断标准，希望对你有所帮助。</p>
+<h4 data-nodeid="1761">7.最终选择</h4>
+<p data-nodeid="1762">根据以上问题的剖析及性能测试结果的分析，<strong data-nodeid="1966">我们发现 SkyWalking 比较符合我们的需求。</strong></p>
+<p data-nodeid="1763">不过，做性能测试时，我们发现 500 线程压力以下的服务是否使用 SkyWalking 对服务的吞吐量影响不大，差别一般不超过 10%。</p>
+<p data-nodeid="1764">在 SkyWalking 官方测试报告中也提道：假如有 500 个并发用户，每个用户的每次请求间隔是 10ms，TPS 基本没什么变化，如下图所示。</p>
+<p data-nodeid="1765"><img src="https://s0.lgstatic.com/i/image/M00/8C/D5/Ciqc1F_1T06AfHytAABRju59zLs239.png" alt="Drawing 6.png" data-nodeid="1971"></p>
+<p data-nodeid="1766">技术选型时我们经常提到，不仅仅需要关注需求本身，还需要考虑组织或个人主观上的因素。</p>
+<p data-nodeid="1767">最后，我发表下个人主观的看法：以前我们总觉得国外的框架很好，其实现在的技术环境变了，随着中国互联网的崛起，如今中国人出品的开源框架质量一点不比国外差，反而更贴近我们的需求了，比如 VUE、 Dubbo，这也是我选择 SkyWalking 的原因之一。</p>
+<h3 data-nodeid="1768">注意事项</h3>
+<p data-nodeid="1769">在安心使用 SkyWalking 之前，我们还需要注意如下 5 大注意事项。</p>
+<h4 data-nodeid="1770">1. SkyWalking 的数据收集机制</h4>
+<p data-nodeid="1771">SkyWalking 数据收集机制是这样的：服务中有一个本地缓存，我们把收集的所有日志数据先存放在这个缓存中，然后后台线程通过异步的方式将缓存中的日志发送给 SkyWalking 服务端。通过这种机制，在日志埋点的地方，我们无须等待服务端接收受数据，也就不影响系统性能。</p>
+<h4 data-nodeid="1772">2. 如果 SkyWalking 服务端宕机了，会出现什么情况？</h4>
+<p data-nodeid="1773">如果服务端宕机了，理论上日志缓存中的数据会出现没人消费的情况，这样会不会导致数据越积越多，最终撑爆内存呢？</p>
+<p data-nodeid="1774"><strong data-nodeid="1987">在 SkyWalking 中，我们会设置缓存的 size，如果这部分数据超出了缓存 size，Trace 不会保存，我们也就知道内存会不会撑爆了。</strong></p>
+<h4 data-nodeid="1775">3. 流量较大时，如何控制日志的数据量？</h4>
+<p data-nodeid="1776">流量大时，我们不可能收集每个请求的日志，这样数据量太大了。那 SkyWalking 如何控制采样比例呢？</p>
+<p data-nodeid="1777">SkyWalking 会在每个服务器上配置采样比例，比如设置为 100，代表 1% 的请求数据会被收集，如下代码所示。</p>
+<pre class="lang-java hljs" data-nodeid="1778"><code data-language="java">agent-analyzer:
+  default:
+    ...
+    sampleRate: \${SW_TracE_SAMPLE_RATE:1000} # The sample rate precision is 1/10000. 10000 means 100% sample in default.
+    forceSampleErrorSegment: \${SW_FORCE_SAMPLE_ERROR_SEGMENT:true} # When sampling mechanism activated, this config would make the error status segment sampled, ignoring the sampling rate.
+</code></pre>
+<p data-nodeid="1779">这样，我们就可以通过 sampleRate 控制采样比率了，一般而言，流量越大，采样比例越小。</p>
+<p data-nodeid="1780">不过，这里有 2 点你需要特别注意。</p>
+<ul data-nodeid="1781">
+<li data-nodeid="1782">
+<p data-nodeid="1783">一旦启用 forceSampleErrorSegment ，出现错误时所有的数据全部会收集，此时 sampleRate 对出错的请求不再适用。</p>
+</li>
+<li data-nodeid="1784">
+<p data-nodeid="1785">所有相关联服务的 sampleRate 最好保持一致，如果 A 调用 B，然后 A、B 的采样率不一样，就会出现一个 Trace 串不起来的情况。</p>
+</li>
+</ul>
+<h4 data-nodeid="1786">4. 日志的保存时间</h4>
+<p data-nodeid="1787">一般来说，日志不需要永久保存，通常我们是保存 3 个月的数据，关于这点大家结合公司的实际情况进行配置即可，如果你是土豪那请随意。</p>
+<p data-nodeid="1788">按照以前的设计方案，我们需要自己设计一个工具将数据进行定时清理，不过此时我们可以直接使用 SkyWalking 进行配置，如下代码所示：</p>
+<pre class="lang-java hljs" data-nodeid="1789"><code data-language="java">    # Set a timeout on metrics data. After the timeout has expired, the metrics data will automatically be deleted.
+    recordDataTTL: \${SW_CORE_RECORD_DATA_TTL:3} # Unit is day
+    metricsDataTTL: \${SW_CORE_METRICS_DATA_TTL:7} # Unit is day
+</code></pre>
+<h4 data-nodeid="1790">5. 集群配置：如何确保高可用？</h4>
+<p data-nodeid="1791">我们先来看看 SkyWalking 的架构：</p>
+<p data-nodeid="1792"><img src="https://s0.lgstatic.com/i/image/M00/8C/E0/CgqCHl_1T0SAcycdAAQz64QSxEg772.png" alt="Drawing 7.png" data-nodeid="2008"></p>
+<div data-nodeid="1793"><p style="text-align:center">SkyWalking 的架构（来源于 SkyWalking 官方文档）</p></div>
+<p data-nodeid="1794">在以上架构中，我们需要关注 SkyWalking 的收集服务（Receiver）和聚合服务（Aggregator），它们支持集群模式。同时呢，在集群服务里，多个服务节点又需要一些协调服务来协调服务间的关系，它们支持 Kubernetes-ZooKeeper、Consul、Etcd、Nacos（开源的协调服务基本支持）。</p>
+<p data-nodeid="1795">前面的课时我们提及 ZooKeeper 太多次了，此时你应该猜得到我们最终的选型了吧。</p>
+<h3 data-nodeid="1796">总结</h3>
+<p data-nodeid="1797">在我们的方案中使用了 SkyWalking 后，在问题排查这个方面帮助非常大，但是 SkyWalking 也存在不足，比如之前的版本存在很多兼容性问题，不过现在好多了。</p>
+<p data-nodeid="1798">这次的架构经历不涉及太多的架构设计，主要是技术选型和注意事项的内容。希望通过本节课内容的讲解，希望能帮助你对快速理解全链路日志并针对技术选型问题快速做出决策。</p>
+<p data-nodeid="1799" class="">这节课中讲解的方案，肯定还存在一些遗漏的问题没有考虑，如果你有更好的方案，欢迎在评论区留言与我交流、互动。另外，如果你喜欢本专栏，欢迎与更多好友分享哦。</p></div>
+
+</body></html>

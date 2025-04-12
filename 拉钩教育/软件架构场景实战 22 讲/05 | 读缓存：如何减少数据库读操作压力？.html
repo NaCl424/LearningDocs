@@ -1,0 +1,928 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>05 | 读缓存：如何减少数据库读操作压力？</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>05 | 读缓存：如何减少数据库读操作压力？</h1><p data-nodeid="1165" class="">第一模块中，我们已经把数据持久化层相关的架构方案讲完了，05 讲我们正式进入第二个模块——缓存层场景实战的讲解。这一讲，我们主要围绕数据库读取操作频繁的问题深入探讨。</p>
+<h3 data-nodeid="1166">业务场景（架构经历四）</h3>
+<p data-nodeid="1167">在我曾经负责的一个电商系统中，存放了 50000 多条商品数据，每次用户浏览商品详情页时，需要先从数据库中读取数据，再进行数据拼装和计算，耗费的时间有时长达 1 秒。</p>
+<p data-nodeid="1168">这就导致用户每次点击商品详情页时，页面打开速度慢，此时该如何减少数据库读操作压力呢？</p>
+<p data-nodeid="1169">之前因为项目时间紧张，为了赶进度，我们并没有从系统性能角度进行深入考量。而现在整个系统流量起来了，我们就不得不考虑这个问题了。</p>
+<p data-nodeid="1170">此时我们采取的方案也很通用，把所有的商品数据缓存起来就行。</p>
+<p data-nodeid="1171">关于缓存问题，最简单的实现方法是使用本地缓存。在 Google Guava 中有一个 cache 内存缓存模块，它把所有商品的 ID 与商品详情信息一对一缓存至 JVM 内存中，用户获取商品详情数据时，系统会根据商品 ID 直接从缓存中读取数据，大大提升了用户页面访问速度。</p>
+<p data-nodeid="1172">不过，通过简单换算后，我们发现这个方法明显不合理，先来举个例子。</p>
+<p data-nodeid="1173">1 条商品数据中，往往包含品牌、分类、参数、规格、服务、描述等字段，光存储这些商品数据就得占用 500K 左右内存，再将这些数据缓存到本地的话，差不多还需占用 500 K*50000=25G 内存。此时，假设商品服务有 30 个服务器节点，光缓存商品数据就需要额外准备 750G 内存空间，这种方法显然不可取。</p>
+<p data-nodeid="1174">为此，我们想到了另外一个解决办法——分布式缓存，先将所有的缓存数据集中存储在同一个地方，而并非保存到各个服务器节点中，然后所有的服务器节点从这个地方读取数据。</p>
+<p data-nodeid="1175"><img src="https://s0.lgstatic.com/i/image/M00/8B/DB/CgqCHl_hW06AbWPhAAAxNrARBII744.png" alt="image (2).png" data-nodeid="1308"></p>
+<p data-nodeid="1176">那么这个统一存储缓存的地方需要使用什么技术呢？这就涉及接下来我们要讲的缓存中间件的技术选型问题。</p>
+<p data-nodeid="1177"><strong data-nodeid="1313">缓存中间件技术选型</strong></p>
+<p data-nodeid="1178">我们先将市面上比较流行的缓存中间件（Memcached、MongoDB、Redis）进行简单对比，这样你就不必再深入进行选型调研了。</p>
+<p data-nodeid="1179"><img src="https://s0.lgstatic.com/i/image/M00/8B/DB/CgqCHl_hW1WAfXDxAABWj9rr-kA205.png" alt="image (3).png" data-nodeid="1317"></p>
+<p data-nodeid="1180">据我了解，以上三种技术中，目前市面上通用的缓存中间件技术是 Redis，使用 MongoDB 的公司最少，因为它只是一个数据库，由于它的读写速度与其他数据库相比较快，所以人们才把它当作类似缓存的存储。</p>
+<p data-nodeid="1181">在这里，我们总结了下 Redis 之所以比 Memcached 流行的三种原因。</p>
+<p data-nodeid="1182"><strong data-nodeid="1323">（1）数据结构</strong></p>
+<p data-nodeid="1183">举个例子，在使用 Memcached 保存 List 缓存对象的过程中，如果我们往 List 增加一条数据，首先需要读取整个 List ，再反序列化塞入数据，接着再序列化存储回 Memcached。而对于 Redis 而言，它仅仅是一个 Redis 请求，会直接帮我们塞入数据并存储，简单快捷。</p>
+<p data-nodeid="1184"><strong data-nodeid="1328">（2）持久化</strong></p>
+<p data-nodeid="1185">对于 Memcached 来说，一旦系统宕机数据就会丢失。通过 Memcached 的官方文档得知，1.5.18 以后 Memcached 支持 restartable cache，其实现原理是重启时 CLI 先发信号给守护进程，然后守护进程将内存持久化至一个文件中，系统重启时再从那个文件恢复数据。不过，这个设计仅在正常重启情况下使用，意外情况还是不处理。</p>
+<p data-nodeid="1186"><strong data-nodeid="1333">（3）集群（这点尤为重要）</strong></p>
+<p data-nodeid="1187">Memcached 的集群设计非常简单，客户端根据 Hash 值直接判断存取的 Memcached 节点。而 Redis 的集群因在高可用、主从、冗余、failover 等方面都有所考虑，所以集群设计相对复杂些，属于较常规的分布式高可用架构。</p>
+<p data-nodeid="1188">因此，经过一番“慎重”的思考，我们最终决定使用 Redis 作为缓存的中间件。</p>
+<p data-nodeid="1189">技术选型完，我们开始考虑缓存的一些具体问题，先从缓存何时存储数据入手。</p>
+<h3 data-nodeid="1190">缓存何时存储数据</h3>
+<p data-nodeid="1191">使用缓存的逻辑是这样的：</p>
+<ol data-nodeid="1192">
+<li data-nodeid="1193">
+<p data-nodeid="1194">先尝试从缓存中读取数据；</p>
+</li>
+<li data-nodeid="1195">
+<p data-nodeid="1196">缓存中没有数据或者数据过期，再从数据库中读取数据保存到缓存中；</p>
+</li>
+<li data-nodeid="1197">
+<p data-nodeid="1198">最终把缓存数据返回给调用方。</p>
+</li>
+</ol>
+<p data-nodeid="1199"><strong data-nodeid="1345">这种逻辑唯一麻烦的地方：当用户发来大量的并发请求，且所有请求同时挤在上面第 2 步，此时如果这些请求全部从数据库读取数据，会直接挤爆数据库。</strong></p>
+<p data-nodeid="1200">上面所说的挤爆可以分为三种情况，我们单独展开说明一下。</p>
+<p data-nodeid="1201"><strong data-nodeid="1352">1. 单一数据过期或者不存在，这种情况称为缓存击穿。</strong></p>
+<p data-nodeid="10800" class="te-preview-highlight">此时解决方案：第一个线程如果发现 key 不存在，先给 key 加锁，再从数据库读取数据保存到缓存中，最后释放锁。如果其他线程正在读取同一个 key 值，它必须等到锁释放后才行。（关于锁的问题 01 讲中我们已经讲过，就不重复展开了。）</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<p data-nodeid="1203"><strong data-nodeid="1359">2. 数据大面积过期或者 Redis 宕机，这种情况称为缓存雪崩。</strong></p>
+<p data-nodeid="1204">此时，我们设置缓存的过期时间随机分布或永不过期即可。</p>
+<p data-nodeid="1205"><strong data-nodeid="1366">3. 一个恶意请求获取的 key 不在数据库中，这种情况称为缓存穿透。</strong></p>
+<p data-nodeid="1206">这种情况如果不作处理，恶意请求每次都会查询数据库，无疑给数据库增加了压力。</p>
+<p data-nodeid="1207">这里我分享 2 种解决办法：① 在业务逻辑上直接校验，在数据库不被访问的前提下过滤掉不存在的 key；② 将恶意请求的 key 存放一个空值在缓存中，防止恶意请求骚扰数据库。</p>
+<p data-nodeid="1208"><strong data-nodeid="1372">最后，关于缓存预热我想说明下：在深夜无人或访问量小的时候，我们可以考虑将预热的热数据保存到缓存中，这样流量大的时候，用户查询无须再从数据库读取数据，大大减少了数据读压力。</strong></p>
+<p data-nodeid="1209">关于缓存何时存数据的问题我们就讨论完了，接下来开始讨论更新缓存的问题，这部分内容因涉及双写（缓存+数据库），所以学起来估计会有点难度，不过我相信你们可以的。</p>
+<h3 data-nodeid="1210">如何更新缓存？</h3>
+<p data-nodeid="1211">更新缓存的步骤特别简单，总共就两步：更新数据库和更新缓存。但就这么简单的两步，我们需要考虑好几个问题。</p>
+<ul data-nodeid="1212">
+<li data-nodeid="1213">
+<p data-nodeid="1214">先更新数据库还是先更新缓存？更新缓存时先删除还是直接更新？</p>
+</li>
+<li data-nodeid="1215">
+<p data-nodeid="1216">假设第一步成功了，第二步失败了怎么办？</p>
+</li>
+<li data-nodeid="1217">
+<p data-nodeid="1218">假设 2 个线程同时更新同一个数据，A 线程先完成第一步，B 线程先完成第二步，此时该怎么办？</p>
+</li>
+</ul>
+<p data-nodeid="1219">其中，第一个问题就存在 4 种组合问题，我们先针对第 1 种组合问题给出对应的解决方案。（以上几个问题因为紧密关联，没法单独考虑，下面我们就一起说明。）</p>
+<h4 data-nodeid="1220">组合一：先更新缓存，再更新数据库</h4>
+<p data-nodeid="1221">对于这个组合，会遇到这种情况：假设第 2 步数据库更新失败了，要求回滚缓存的更新，这时该怎么办呢？我们知道 Redis 不支持事务回滚，除非我们采用手工回滚的方式，先保存原有数据，然后再将缓存更新回原来的数据，这种解决方案就有点尴尬了。</p>
+<p data-nodeid="1222">这里我简单举个例子，比如：</p>
+<ol data-nodeid="1223">
+<li data-nodeid="1224">
+<p data-nodeid="1225">原来缓存中的值是 a，两个线程同时更新库存；</p>
+</li>
+<li data-nodeid="1226">
+<p data-nodeid="1227">线程 A 将缓存中的值更新成 b，且保存了原来的值 a，然后更新数据库；</p>
+</li>
+<li data-nodeid="1228">
+<p data-nodeid="1229">线程 B 将缓存中的值更新成 c，且保存了原来的值 b，然后更新数据库；</p>
+</li>
+<li data-nodeid="1230">
+<p data-nodeid="1231">线程 A 更新数据库时失败了，它必须回滚了，那现在缓存中的值更新回什么呢？</p>
+</li>
+</ol>
+<p data-nodeid="1232">要不这样吧，我们在 A 线程更新缓存与数据库的整个过程中，先把缓存及数据库都锁上，确保别人不能更新，这种方法可不可行呢？当然是可行的，但是别人能不能读呢？</p>
+<p data-nodeid="1233">假设 A 更新数据库失败回滚缓存时，线程 C 也来参一腿，它需要先读取缓存中的值，这时又返回什么值呢？</p>
+<p data-nodeid="1234">看到这个场景，你是不是有点儿印象？不错，这就是典型的事务隔离级别场景。我们只是使用一下缓存而已，你让我自己实现事务隔离级别，这个要求会不会有点高？我们还是考虑别的吧。</p>
+<h4 data-nodeid="1235">组合二：先删除缓存，再更新数据库</h4>
+<p data-nodeid="1236">使用这种方案，就算我们更新数据库失败了也不需要回滚缓存。这种做法虽然巧妙规避了失败回滚的问题，却引来了 2 个更大的问题。</p>
+<ul data-nodeid="1237">
+<li data-nodeid="1238">
+<p data-nodeid="1239">假设 A 线程先删除缓存，再更新数据库。在 A 线程完成更新数据库之前，后执行的 B 线程反而超前完成了操作，读取 key 发现没数据后，将数据库中的旧值存放到了缓存中。A 线程在 B 线程都完成后再更新数据库，这样就会出现缓存（旧值）与数据库的值（新值）不一致的问题。</p>
+</li>
+<li data-nodeid="1240">
+<p data-nodeid="1241">为了解决一致性问题，我们可以让 A 线程给 key 加锁，因为写操作特别耗时，这种处理方法会导致大量的读请求卡在锁中。</p>
+</li>
+</ul>
+<p data-nodeid="1242">以上描述的是典型的高可用和一致性难以两全的问题，要再加上分区容错就是 CAP 了，这里我们就不展开讨论了，继续讨论另外两种组合吧。</p>
+<h4 data-nodeid="1243">组合三：先更新数据库，再更新缓存</h4>
+<p data-nodeid="1244">对于组合三，我们同样需要考虑 2 个问题。</p>
+<ul data-nodeid="1245">
+<li data-nodeid="1246">
+<p data-nodeid="1247">假设第一步成功，第二步失败了怎么办？因为缓存不是主流程，数据库才是，所以我们不会因为更新缓存失败而回滚第一步对数据库的更新。此时，我们一般采取的做法是做重试机制，但重试机制如果存在延时还是会出现数据库与缓存不一致的情况，非常不好处理啊。</p>
+</li>
+<li data-nodeid="1248">
+<p data-nodeid="1249">假设 2 个线程同时更新同一个数据，A 线程先完成了第一步，B 线程先完成了第二步怎么办？</p>
+</li>
+<li data-nodeid="1250">
+<p data-nodeid="1251">假设 2 个线程同时更新同一个数据，A 线程先完成了第一步，B 线程先完成了第二步怎么办？这个你先好好想一下。我们接着推演整个过程：A 线程把值更新成 a，B 线程把值更新成 b，此时数据库中的最新值是 b，因为 A 线程先完成了第一步，后完成第二步，所以缓存中的最新值是 a，数据库与缓存的值还是不一致，还是不好处理啊。</p>
+</li>
+</ul>
+<p data-nodeid="1252">因此，我不建议采用以上这个方案。</p>
+<h4 data-nodeid="1253">组合四：先更新数据库，再删除缓存</h4>
+<p data-nodeid="1254">针对组合四，我们看看到底会存在哪些问题。</p>
+<ul data-nodeid="1255">
+<li data-nodeid="1256">
+<p data-nodeid="1257">假设第一步成功了，第二步失败了怎么办？这种情况的出现概率与上个组合相比明显少不少，因为删除比更新容易多了。此时虽然它不完美，但出现一致性的问题概率少。</p>
+</li>
+<li data-nodeid="1258">
+<p data-nodeid="1259">假设 2 个线程同时更新同一个数据，A 线程先完成第一步，B 线程先完成第二步怎么办？这块你也先好好想一下。我们接着推演整个过程：A 线程把值更新成 a，B 线程把值更新成 b，此时数据库中的最新值是 b，因为 A 线程先完成第一步，至于第二步谁先完成已经无所谓了，反正是直接删除缓存数据。</p>
+</li>
+</ul>
+<p data-nodeid="1260"><strong data-nodeid="1408">看到这，我们发现组合四完美地解决了以上难题，所以我建议更新缓存时，先更新数据库再删除缓存。</strong></p>
+<p data-nodeid="1261"><strong data-nodeid="1413">不过，这个解决方案也会</strong>引发另外 3个问题。</p>
+<ul data-nodeid="1262">
+<li data-nodeid="1263">
+<p data-nodeid="1264">删除缓存数据后变相出现缓存击穿，此时该怎么办？此问题在前面我们已经给出了方案。</p>
+</li>
+<li data-nodeid="1265">
+<p data-nodeid="1266">删除缓存失败如何重试？你可以参考之前的查询分离使用重试的方案解决。</p>
+</li>
+<li data-nodeid="1267">
+<p data-nodeid="1268">删除缓存失败，重试成功前出现脏数据。这个需要与业务商量，毕竟这种情况还是少见，我们可以根据实际业务情况判断是否需要解决这个瑕疵。毕竟任何一个方案都不是完美的，但如果剩下 1% 的问题需要我们花好几倍的代价去解决，从技术上来讲得不偿失，这就要求架构师去说服业务方。毕竟作为一名好的架构师，需要具备极强的说服力。（佩服作者的脸皮。）</p>
+</li>
+</ul>
+<p data-nodeid="1269">前面我们花了太长的篇幅讨论更新缓存的逻辑，接下来我们好好讨论缓存的高可用设计。</p>
+<h3 data-nodeid="1270">缓存的高可用设计</h3>
+<p data-nodeid="1271">关于缓存高可用设计的问题，其实我们可以单独开一个课时来讲，但是考虑到 Redis 的用法介绍偏理论，而我们的课程偏实战，所以本专栏我们不详细展开了。</p>
+<p data-nodeid="1272">因我属于实用派的，我还是想跟大家分享一些个人的方法论。设计高可用方案时，我们需要考虑 5 个要点。</p>
+<ul data-nodeid="1273">
+<li data-nodeid="1274">
+<p data-nodeid="1275"><strong data-nodeid="1425">负载均衡：</strong> 是否可以通过加节点的方式水平分担读请求压力。</p>
+</li>
+<li data-nodeid="1276">
+<p data-nodeid="1277"><strong data-nodeid="1430">分片：</strong> 是否可以通过划分到不同的节点的方式水平分担写压力。</p>
+</li>
+<li data-nodeid="1278">
+<p data-nodeid="1279"><strong data-nodeid="1435">数据冗余：</strong> 一个节点的数据如果挂掉了，其他节点的数据是否可以直接备份挂掉节点的职责。</p>
+</li>
+<li data-nodeid="1280">
+<p data-nodeid="1281"><strong data-nodeid="1440">Fail-over：</strong> 任何节点挂掉后，集群的职责是否可以重新分配，以此保障集群正常工作。</p>
+</li>
+<li data-nodeid="1282">
+<p data-nodeid="1283"><strong data-nodeid="1445">一致性保证：</strong> 在数据冗余、failover、分片机制的数据转移过程中，如果某个地方出幺蛾子，能否保证所有的节点数据或节点与数据库之间数据的一致性。（依靠 Redis 本身是不行的。）</p>
+</li>
+</ul>
+<p data-nodeid="1284">如果对缓存高可用有需求，我们可以使用 Redis 的 Cluster 模式，关于我前面提的那些点它都涉及。至于 Cluster 怎么配置，我们就不详细展开了，Redis 官方文档或网上都有很多教程，你可以自己查找相关资料去学习。</p>
+<h3 data-nodeid="1285">缓存的监控</h3>
+<p data-nodeid="1286">缓存上线以后，我们还需要定时查看缓存使用情况，再判断业务逻辑是否需要优化，也就是所谓的缓存的监控。</p>
+<p data-nodeid="1287">在查看缓存使用情况时，一般我们会监控缓存命中率、内存利用率、慢日志、延迟、客户端连接数等数据。当然，随着问题的深入我们还增加了其他的指标，这里就不详细说明了。</p>
+<p data-nodeid="1288">至于最终使用哪种监控工具，需要根据你们的实际情况而定。当初我们公司采用的是一套自研的管理工具，这套管理工具里包含了监控功能。现如今，市面上也有很多开源的监控工具，比如 RedisLive、Redis-monitor，我就不单独展开了。</p>
+<h3 data-nodeid="1289">此方案的价值和不足</h3>
+<p data-nodeid="1290">以上方案可以顺利解决读数据请求压垮数据库的问题，目前互联网架构也基本是采取这个方案。但这个方案还在一个不足，无法解决写数据请求量大的问题，也就是说写请求多时，数据库还是会扛不住。针对这个问题，06 讲中我们会给出对应解决方案。</p>
+<h3 data-nodeid="1291">小结</h3>
+<p data-nodeid="1292">各位亲爱的同学，今天的课程就讲到这里。05 讲中的解决方案肯定还有一些遗漏的问题没有考虑到，如果你有更好的解决方案，欢迎在评论区留言与我互动哦。</p>
+<p data-nodeid="1293" class="">另外，喜欢本专栏的同学欢迎将本文分享给更多的好友看到哦。</p></div>
+
+</body></html>

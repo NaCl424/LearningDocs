@@ -1,0 +1,1449 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>06 | 负载均衡：Ribbon 如何保证微服务的高可用</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>06 | 负载均衡：Ribbon 如何保证微服务的高可用</h1><p data-nodeid="1341" class="">上一讲我们对 Nacos 的集群环境与实现原理进行了讲解，我们已经可以轻松将单个微服务接入到 Nacos 进行注册，但是微服务本不是孤岛，如何实现有效的服务间稳定通信是本文即将介绍的主要内容，本次我们将主要学习三方面知识：</p>
+<ol data-nodeid="1342">
+<li data-nodeid="1343">
+<p data-nodeid="1344">介绍 Ribbon 负载均衡器；</p>
+</li>
+<li data-nodeid="1345">
+<p data-nodeid="1346">讲解 Ribbon+RestTemplate 两种实现方式；</p>
+</li>
+<li data-nodeid="1347">
+<p data-nodeid="1348">讲解 Ribbon 的负载均衡策略。</p>
+</li>
+</ol>
+<h3 data-nodeid="1349">Ribbon 负载均衡器</h3>
+<p data-nodeid="1350">在介绍 Ribbon 之前，咱们先来认识下负载均衡以及它的两种实现方式。</p>
+<p data-nodeid="1351">负载均衡顾名思义，是指通过软件或者硬件措施。它将来自客户端的请求按照某种策略平均的分配到集群的每一个节点上，保证这些节点的 CPU、内存等设备负载情况大致在一条水平线，避免由于局部节点负载过高产生宕机，再将这些处理压力传递到其他节点上产生系统性崩溃。</p>
+<p data-nodeid="1676" class=""><img src="https://s0.lgstatic.com/i/image6/M01/19/1E/CioPOWBJwsuATx9NAAG5-vZf3ac538.png" alt="图片1.png" data-nodeid="1679"></p>
+
+<p data-nodeid="1353">负载均衡按实现方式分类可区分为：<strong data-nodeid="1514">服务端负载均衡</strong>与<strong data-nodeid="1515">客户端负载均衡</strong>。</p>
+<p data-nodeid="1354">服务端负载均衡顾名思义，在架构中会提供专用的负载均衡器，由负载均衡器持有后端节点的信息，服务消费者发来的请求经由专用的负载均衡器分发给服务提供者，进而实现负载均衡的作用。目前常用的负载均衡器软硬件有：F5、Nginx、HaProxy 等。</p>
+<p data-nodeid="2350" class=""><img src="https://s0.lgstatic.com/i/image6/M01/19/21/Cgp9HWBJwtuAQzndAAESYZX7dBg295.png" alt="图片2.png" data-nodeid="2353"></p>
+
+<p data-nodeid="1356" class="">客户端负载均衡是指，在架构中不再部署额外的负载均衡器，在每个服务消费者内部持有客户端负载均衡器，由内置的负载均衡策略决定向哪个服务提供者发起请求。说到这，我们的主角登场了，Netfilx Ribbon 是 Netflix 公司开源的一个负载均衡组件，是属于客户端负载均衡器。目前Ribbon 已被 Spring Cloud 官方技术生态整合，运行时以 SDK 形式内嵌到每一个微服务实例中，为微服务间通信提供负载均衡与高可用支持。为了更容易理解，我们通过应用场景说明 Ribbon 的执行流程。假设订单服务在查询订单时需要附带对应商品详情，这就意味着订单服务依赖于商品服务，两者必然产生服务间通信，此时 Ribbon 的执行过程如下图所示：</p>
+<p data-nodeid="3024" class=""><img src="https://s0.lgstatic.com/i/image6/M01/19/21/Cgp9HWBJwuWAHSngAAF5Aq9Kc40749.png" alt="图片3.png" data-nodeid="3027"></p>
+
+<ol data-nodeid="1358">
+<li data-nodeid="1359">
+<p data-nodeid="1360">订单服务（order-service）与商品服务（goods-service）实例在启动时向 Nacos 注册；</p>
+</li>
+<li data-nodeid="1361">
+<p data-nodeid="1362">订单服务向商品服务发起通信前，Ribbon 向 Nacos 查询商品服务的可用实例列表；</p>
+</li>
+<li data-nodeid="1363">
+<p data-nodeid="1364">Ribbon 根据设置的负载策略从商品服务可用实例列表中选择实例；</p>
+</li>
+<li data-nodeid="1365">
+<p data-nodeid="1366">订单服务实例向商品服务实例发起请求，完成 RESTful 通信；</p>
+</li>
+</ol>
+<p data-nodeid="1367">了解了 Ribbon 执行流程后，咱们通过代码方式体现这个完整流程。</p>
+<h3 data-nodeid="1368">Ribbon+RestTemplate 实现服务间高可用通信</h3>
+<p data-nodeid="1369">开始前，我们首先介绍下 Spring Cloud 自带的 RestTemplate 对象，RestTemplate 对象是Spring Cloud 封装的 RESTful 通信对象，它封装了基于 HTTP 协议的操作，通过简单的API便可发起 HTTP 请求并自动处理响应。RestTemplate 天然与 Ribbon 兼容，两者配合可以极大简化服务间通信过程。Ribbon + RestTemplate 提供了两种开发模式：代码模式，注解模式。</p>
+<h4 data-nodeid="1370">代码模式</h4>
+<p data-nodeid="1371">第一种代码模式是指通过纯 Java 代码实现微服务间通信，虽然工作中代码模式很少使用，但它却是理解 Ribbon+RestTemplate 最直观的途径，所以我对它首先进行讲解。该模式使用主要分为两个阶段：</p>
+<p data-nodeid="1372"><strong data-nodeid="1537">第一阶段</strong>，创建服务提供者，服务提供者是请求的实际处理者，也是标准的 Spring Boot 工程，利用 Controller 对外暴露 RESTful API 供服务消费者调用。</p>
+<p data-nodeid="1373">第一步，利用 Spring Initializr 向导创建 provider-service 微服务。</p>
+<p data-nodeid="3698" class=""><img src="https://s0.lgstatic.com/i/image6/M01/19/1E/CioPOWBJwvSAG8EXAAF2iTbEk7Q110.png" alt="图片4.png" data-nodeid="3701"></p>
+
+<p data-nodeid="1375">其中 pom.xml 要确保引入 web 与 nacos-discovery 两个依赖。</p>
+<pre class="lang-xml hljs" data-nodeid="1376"><code data-language="xml"><span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-starter-web<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>com.alibaba.cloud<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-cloud-starter-alibaba-nacos-discovery<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+</code></pre>
+<p data-nodeid="1377">第二步，在 application.yml 中调整微服务与 Nacos 的通信配置。</p>
+<pre class="lang-yaml hljs" data-nodeid="1378"><code data-language="yaml"><span class="hljs-attr">spring:</span>
+  <span class="hljs-attr">application:</span>
+    <span class="hljs-attr">name:</span> <span class="hljs-string">provider-service</span> <span class="hljs-comment">#应用/微服务名字</span>
+  <span class="hljs-attr">cloud:</span>
+    <span class="hljs-attr">nacos:</span>
+      <span class="hljs-attr">discovery:</span>
+        <span class="hljs-attr">server-addr:</span> <span class="hljs-number">192.168</span><span class="hljs-number">.31</span><span class="hljs-number">.102</span><span class="hljs-string">:8848</span> <span class="hljs-comment">#nacos服务器地址</span>
+        <span class="hljs-attr">username:</span> <span class="hljs-string">nacos</span> <span class="hljs-comment">#用户名密码</span>
+        <span class="hljs-attr">password:</span> <span class="hljs-string">nacos</span>
+<span class="hljs-attr">server:</span>
+  <span class="hljs-attr">port:</span> <span class="hljs-number">80</span>
+</code></pre>
+<p data-nodeid="1379">第三步，创建 ProviderController，通过 Controller 控制器对外暴露接口。</p>
+<pre class="lang-java hljs" data-nodeid="1380"><code data-language="java"><span class="hljs-keyword">package</span> com.lagou.providerservice.controller;
+<span class="hljs-keyword">import</span> org.springframework.web.bind.annotation.GetMapping;
+<span class="hljs-keyword">import</span> org.springframework.web.bind.annotation.RestController;
+<span class="hljs-meta">@RestController</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">ProviderController</span> </span>{
+    <span class="hljs-meta">@GetMapping("/provider/msg")</span>
+    <span class="hljs-function"><span class="hljs-keyword">public</span> String <span class="hljs-title">sendMessage</span><span class="hljs-params">()</span></span>{
+        <span class="hljs-keyword">return</span> <span class="hljs-string">"This is the message from provider service!"</span>;
+    }
+}
+</code></pre>
+<p data-nodeid="1381">到这里服务提供者 provider-service 已经开发完毕，细心的你应该已注意到，服务提供者就是标准的 Spring Cloud 微服务，向 Nacos 进行注册的同时对外暴露 msg 接口并返回一段静态文本，并没有任何与 Ribbon 相关的内容。确实，Ribbon 与 RestTemplate 应出现在服务消费者，而非提供者一端。</p>
+<p data-nodeid="1382">下面为了演示需要，我们需要准备五台虚拟机：</p>
+<p data-nodeid="4372" class=""><img src="https://s0.lgstatic.com/i/image6/M01/19/21/Cgp9HWBJwwCAWQTEAAGYqp_ImI0708.png" alt="图片5.png" data-nodeid="4375"></p>
+
+<p data-nodeid="1410">在 provider-service 工程中利用 maven package 命令生成 provider-service-0.0.1-SNAPSHOT.jar。</p>
+<p data-nodeid="5891"><img src="https://s0.lgstatic.com/i/image6/M01/19/1E/CioPOWBJww2AQjzgAAPudFa5w-0816.png" alt="图片6.png" data-nodeid="5894"></p>
+
+
+
+<p data-nodeid="1412">分别上传至到 111 至 113 节点后执行 Java 命令启动微服务实例。</p>
+<pre class="lang-java hljs" data-nodeid="1413"><code data-language="java">java -jar provider-service-<span class="hljs-number">0.0</span><span class="hljs-number">.1</span>-SNAPSHOT.jar
+</code></pre>
+<p data-nodeid="1414">三个节点启动成功，在 Nacos 控制台应见到三个健康实例。</p>
+<p data-nodeid="7410"><img src="https://s0.lgstatic.com/i/image6/M01/19/21/Cgp9HWBJwxuAcxOcAAH-s7vW8jY536.png" alt="图片7.png" data-nodeid="7413"></p>
+
+
+
+<p data-nodeid="1416">单独访问任意节点，都能看到相同的返回文本。</p>
+<pre class="lang-java hljs" data-nodeid="1417"><code data-language="java">http:<span class="hljs-comment">//192.168.31.111/provider/msg</span>
+http:<span class="hljs-comment">//192.168.31.112/provider/msg</span>
+http:<span class="hljs-comment">//192.168.31.113/provider/msg</span>
+</code></pre>
+<p data-nodeid="11050" class=""><img src="https://s0.lgstatic.com/i/image6/M00/19/1E/CioPOWBJw2uAAYFIAAC7fTlBxfE550.png" alt="图片8.png" data-nodeid="11053"></p>
+
+<p data-nodeid="1419">到这里，第一阶段开发服务提供者 provider-service 告一段落。</p>
+<p data-nodeid="1420"><strong data-nodeid="1578">第二阶段</strong>，开发服务消费者 consumer-service，服务消费者说白了就是服务的使用方，我们需要在服务消费者内置 Ribbon+RestTemplate 实现服务间高可用通信。</p>
+<p data-nodeid="1421">第一步，利用 Spring Initializr 创建 consumer-service微服务。</p>
+<p data-nodeid="10448"><img src="https://s0.lgstatic.com/i/image6/M00/19/1E/CioPOWBJw12AWGgvAAPhdgyUzII247.png" alt="图片9.png" data-nodeid="10451"></p>
+
+
+
+
+
+
+<p data-nodeid="1423">pom.xml 确保引入以下三个依赖。</p>
+<pre class="lang-xml hljs" data-nodeid="1424"><code data-language="xml"><span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-starter-web<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>com.alibaba.cloud<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-cloud-starter-alibaba-nacos-discovery<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.cloud<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-cloud-starter-netflix-ribbon<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>\${spring-cloud-alibaba.version}<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+</code></pre>
+<p data-nodeid="1425">这里需要重点说明，starter-netflix-ribbon 就是通过 Spring Boot Starter 向当前微服务工程集成 Ribbon，无须做其他额外配置。与此同时，用于 RESTful 通信的 RestTemplate 对象已被集成到 starter-web 模块，无须额外依赖。</p>
+<p data-nodeid="1426">第二步，配置 application.yml，与 provider-service 除微服务 id 外并无其他变化。</p>
+<pre class="lang-yaml hljs" data-nodeid="1427"><code data-language="yaml"><span class="hljs-attr">spring:</span>
+  <span class="hljs-attr">application:</span>
+    <span class="hljs-attr">name:</span> <span class="hljs-string">customer-service</span> <span class="hljs-comment">#应用/微服务名字</span>
+  <span class="hljs-attr">cloud:</span>
+    <span class="hljs-attr">nacos:</span>
+      <span class="hljs-attr">discovery:</span>
+        <span class="hljs-attr">server-addr:</span> <span class="hljs-number">192.168</span><span class="hljs-number">.31</span><span class="hljs-number">.102</span><span class="hljs-string">:8848</span> <span class="hljs-comment">#nacos服务器地址</span>
+        <span class="hljs-attr">username:</span> <span class="hljs-string">nacos</span> <span class="hljs-comment">#用户名密码</span>
+        <span class="hljs-attr">password:</span> <span class="hljs-string">nacos</span>
+<span class="hljs-attr">server:</span>
+  <span class="hljs-attr">port:</span> <span class="hljs-number">80</span>
+</code></pre>
+<p data-nodeid="1428">第三步，利用 Spring Java Config 方式声明 RestTemplate。在 ConsumerServiceApplication 类中新增以下声明代码。</p>
+<pre class="lang-java hljs" data-nodeid="1429"><code data-language="java"><span class="hljs-meta">@SpringBootApplication</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">ConsumerServiceApplication</span> </span>{
+    <span class="hljs-comment">//Java Config声明RestTemplate对象</span>
+    <span class="hljs-comment">//在应用启动时自动执行restTemplate()方法创建RestTemplate对象，其BeanId为restTemplate。</span>
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-function"><span class="hljs-keyword">public</span> RestTemplate <span class="hljs-title">restTemplate</span><span class="hljs-params">()</span></span>{
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> RestTemplate();
+    }
+    <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">main</span><span class="hljs-params">(String[] args)</span> </span>{
+        SpringApplication.run(ConsumerServiceApplication.class, args);
+    }
+}
+</code></pre>
+<p data-nodeid="1430">第四步，创建 ConsumerController，通过 Ribbon+RestTemplate 实现负载均衡通信，重要的代码我通过注释进行说明。</p>
+<pre class="lang-java hljs" data-nodeid="1431"><code data-language="java"><span class="hljs-keyword">package</span> com.lagou.consumerservice.controller;
+...
+<span class="hljs-meta">@RestController</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">ConsumerController</span> </span>{
+    <span class="hljs-keyword">private</span> Logger logger = LoggerFactory.getLogger(ConsumerController.class);
+    //注入 Ribbon 负载均衡器对象
+    //在引入 starter-netflix-ribbo n后在 SpringBoot 启动时会自动实例化 LoadBalancerClient 对象。
+    //在 Controlle 使用 <span class="hljs-meta">@Resource</span> 注解进行注入即可。
+    <span class="hljs-meta">@Resource</span>
+    <span class="hljs-keyword">private</span> LoadBalancerClient loadBalancerClient;
+    <span class="hljs-meta">@Resource</span>
+    <span class="hljs-comment">//将应用启动时创建的 RestTemplate 对象注入 ConsumerController</span>
+    <span class="hljs-keyword">private</span> RestTemplate restTemplate;
+    <span class="hljs-meta">@GetMapping("/consumer/msg")</span>
+    <span class="hljs-function"><span class="hljs-keyword">public</span> String <span class="hljs-title">getProviderMessage</span><span class="hljs-params">()</span> </span>{
+        <span class="hljs-comment">//loadBalancerClient.choose()方法会从 Nacos 获取 provider-service 所有可用实例，</span>
+        <span class="hljs-comment">//并按负载均衡策略从中选择一个可用实例，封装为 ServiceInstance（服务实例）对象</span>
+        <span class="hljs-comment">//结合现有环境既是从192.168.31.111:80、192.168.31.112:80、192.168.31.113:80三个实例中选择一个包装为ServiceInstance</span>
+        ServiceInstance serviceInstance = loadBalancerClient.choose(<span class="hljs-string">"provider-service"</span>);
+        <span class="hljs-comment">//获取服务实例的 IP 地址</span>
+        String host = serviceInstance.getHost();
+        <span class="hljs-comment">//获取服务实例的端口</span>
+        <span class="hljs-keyword">int</span> port = serviceInstance.getPort();
+        <span class="hljs-comment">//在日志中打印服务实例信息</span>
+        logger.info(<span class="hljs-string">"本次调用由provider-service的"</span> + host + <span class="hljs-string">":"</span> + port + <span class="hljs-string">" 实例节点负责处理"</span> );
+        <span class="hljs-comment">//通过 RestTemplate 对象的 getForObject() 方法向指定 URL 发送请求，并接收响应。</span>
+        <span class="hljs-comment">//getForObject()方法有两个参数：</span>
+        <span class="hljs-comment">//1. 具体发送的 URL，结合当前环境发送地址为：http://192.168.31.111:80/provider/msg</span>
+        <span class="hljs-comment">//2. String.class说明 URL 返回的是纯字符串，如果第二参数是实体类， RestTemplate 会自动进行反序列化，为实体属性赋值</span>
+        String result = restTemplate.getForObject(<span class="hljs-string">"http://"</span> + host + <span class="hljs-string">":"</span> + port + <span class="hljs-string">"/provider/msg"</span>, String.class);
+        //输出响应内容
+        logger.info("provider-service 响应数据:" + result);
+        //向浏览器返回响应
+        <span class="hljs-keyword">return</span> <span class="hljs-string">"consumer-service 响应数据:"</span> + result;
+    }
+}
+</code></pre>
+<p data-nodeid="1432">第五步，利用 Maven Package 打包生成 Jar。</p>
+<p data-nodeid="12569"><img src="https://s0.lgstatic.com/i/image6/M00/19/22/Cgp9HWBJw32AP6Q-AAISw1hZuVw034.png" alt="图片10.png" data-nodeid="12572"></p>
+
+
+
+<p data-nodeid="1434">部署至 120 虚拟机，执行启动命令：</p>
+<pre class="lang-java hljs" data-nodeid="1435"><code data-language="java">java -jar consumer-service-<span class="hljs-number">0.0</span><span class="hljs-number">.1</span>-SNAPSHOT.jar
+</code></pre>
+<p data-nodeid="1436">启动成功后，在 Nacos 中确认 consumer-service 已注册。<br>
+在浏览器输入<a href="http://192.168.31.120/consumer/msg" data-nodeid="1598">http://192.168.31.120/consumer/msg</a>，F5 多次刷新，看日志会得到以下结果。</p>
+<pre class="lang-java hljs" data-nodeid="1437"><code data-language="java">本次调用由 provider-service 的 <span class="hljs-number">192.168</span><span class="hljs-number">.31</span><span class="hljs-number">.111</span>:<span class="hljs-number">80</span> 实例节点负责处理
+consumer-service 获得数据:This is the message from provider service!
+本次调用由 provider-service 的 <span class="hljs-number">192.168</span><span class="hljs-number">.31</span><span class="hljs-number">.112</span>:<span class="hljs-number">80</span> 实例节点负责处理
+consumer-service 获得数据:This is the message from provider service!
+本次调用由 provider-service 的 <span class="hljs-number">192.168</span><span class="hljs-number">.31</span><span class="hljs-number">.113</span>:<span class="hljs-number">80</span> 实例节点负责处理
+consumer-service 获得数据:This is the message from provider service!
+本次调用由 provider-service 的 <span class="hljs-number">192.168</span><span class="hljs-number">.31</span><span class="hljs-number">.111</span>:<span class="hljs-number">80</span> 实例节点负责处理
+consumer-service 获得数据:This is the message from provider service!
+本次调用由 provider-service 的 <span class="hljs-number">192.168</span><span class="hljs-number">.31</span><span class="hljs-number">.112</span>:<span class="hljs-number">80</span> 实例节点负责处理
+consumer-service 获得数据:This is the message from provider service!
+</code></pre>
+<p data-nodeid="1438">不难看出，因为在 Nacos 中存在 3 个 provider-service 的可用实例，默认 Ribbon 是以轮询方式按顺序逐次发送。如果遇到某个 provider-service 实例宕机，Nacos 心跳机制会检测到并将其剔除，同时通知所有 consumer-service 实例，服务提供者节点状态发生变化，之后 consumer-service 便不会向宕机节点发出请求。</p>
+<p data-nodeid="1439">以上便是代码模式的处理过程。它清晰的说明了 Ribbon 的执行过程，先从 Nacos 获取可用服务提供者实例信息，再通过 RestTemplate.getForObject() 向该实例发起 RESTful 请求完成处理。但可能你也感觉到了，代码模式使用复杂，需要自己获取可用实例 IP、端口信息，再拼接 URL 实现服务间通信，那有没有更简单的办法呢？答案是肯定的，利用 @LoadBalanced 注解可自动化实现这一过程。</p>
+<h4 data-nodeid="1440">注解模式</h4>
+<p data-nodeid="1441">注解模式仍然分为两阶段：</p>
+<p data-nodeid="1442"><strong data-nodeid="1608">第一阶段</strong>，创建服务提供者 provider-service，因服务提供者并不涉及 Ribbon，所以与代码模式一阶段代码完全相同，这里不再复述。</p>
+<p data-nodeid="1443"><strong data-nodeid="1613">第二阶段</strong>，创建新的服务消费者 consumer-service。</p>
+<p data-nodeid="1444">第一步，利用 Spring Initializr 创建 consumer-service 微服务。</p>
+<p data-nodeid="14088"><img src="https://s0.lgstatic.com/i/image6/M00/19/22/Cgp9HWBJw5GAfy0KAAF_d0YMb9M817.png" alt="图片11.png" data-nodeid="14091"></p>
+
+
+
+<p data-nodeid="1446">同样引用 3 个依赖。</p>
+<pre class="lang-xml hljs" data-nodeid="1447"><code data-language="xml"><span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-starter-web<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>com.alibaba.cloud<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-cloud-starter-alibaba-nacos-discovery<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.cloud<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-cloud-starter-netflix-ribbon<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>\${spring-cloud-alibaba.version}<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+</code></pre>
+<p data-nodeid="1448">第二步，配置 application.yml。在原有代码模式基础上，将 Debug 级别日志输出，这样便可看到负载均衡实例信息。</p>
+<pre class="lang-yaml hljs" data-nodeid="1449"><code data-language="yaml"><span class="hljs-attr">spring:</span>
+  <span class="hljs-attr">application:</span>
+    <span class="hljs-attr">name:</span> <span class="hljs-string">consumer-service</span> <span class="hljs-comment">#应用/微服务名字</span>
+  <span class="hljs-attr">cloud:</span>
+    <span class="hljs-attr">nacos:</span>
+      <span class="hljs-attr">discovery:</span>
+        <span class="hljs-attr">server-addr:</span> <span class="hljs-string">localhost:8848</span> <span class="hljs-comment">#nacos服务器地址</span>
+        <span class="hljs-attr">username:</span> <span class="hljs-string">nacos</span> <span class="hljs-comment">#用户名密码</span>
+        <span class="hljs-attr">password:</span> <span class="hljs-string">nacos</span>
+<span class="hljs-attr">logging:</span>
+  <span class="hljs-attr">level:</span>
+    <span class="hljs-attr">root:</span> <span class="hljs-string">debug</span>
+</code></pre>
+<p data-nodeid="1450">第三步，关键点来了，在 Spring 初始化 RestTemplate 实例时增加 @LoadBalanced 注解，使 RestTemplate 进行服务通信时自动与 Ribbon 整合，自动实现负载均衡。</p>
+<pre class="lang-java hljs" data-nodeid="1451"><code data-language="java"><span class="hljs-meta">@SpringBootApplication</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">ConsumerServiceApplication</span> </span>{
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-meta">@LoadBalanced</span> <span class="hljs-comment">//使RestTemplate对象自动支持Ribbon负载均衡</span>
+    <span class="hljs-function"><span class="hljs-keyword">public</span> RestTemplate <span class="hljs-title">restTemplate</span><span class="hljs-params">()</span></span>{
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> RestTemplate();
+    }
+    <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">main</span><span class="hljs-params">(String[] args)</span> </span>{
+        SpringApplication.run(ConsumerServiceApplication.class, args);
+    }
+}
+</code></pre>
+<p data-nodeid="1452">第四步，在 Controller 发起通信时，原有 RestTemplate.getForObject() 方法书写 URL 时，将 IP 端口部分要替换为服务名，如下所示：</p>
+<pre class="lang-java hljs" data-nodeid="1453"><code data-language="java"><span class="hljs-meta">@RestController</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">ConsumerController</span> </span>{
+    <span class="hljs-keyword">private</span> Logger logger = LoggerFactory.getLogger(ConsumerController.class); 
+    <span class="hljs-meta">@Resource</span>
+    <span class="hljs-keyword">private</span> RestTemplate restTemplate;
+    <span class="hljs-meta">@GetMapping("/consumer/msg")</span>
+    <span class="hljs-function"><span class="hljs-keyword">public</span> String <span class="hljs-title">getProviderMessage</span><span class="hljs-params">()</span> </span>{
+        <span class="hljs-comment">//关键点：将原有IP:端口替换为服务名，RestTemplate便会在通信前自动利用Ribbon查询可用provider-service实例列表</span>
+        <span class="hljs-comment">//再根据负载均衡策略选择节点实例</span>
+        String result = restTemplate.getForObject(<span class="hljs-string">"http://provider-service/provider/msg"</span>, String.class);
+        logger.info("consumer-service获得数据:" + result);
+        <span class="hljs-keyword">return</span>   <span class="hljs-string">"consumer-service获得数据:"</span> + result;
+    }
+}
+</code></pre>
+<p data-nodeid="1454">在新的 getProviderMessage 代码中，不再出现 LoadBalancerClient 与 ServiceInstance 对象，这一切都被 @LoadBalanced 进行封装，在 RestTemplate 查询前自动处理。</p>
+<p data-nodeid="1455">第五步，重新部署 consumer-service，多次访问地址<a href="http://192.168.31.120/consumer/msg" data-nodeid="1626">http://192.168.31.120/consumer/msg</a>，在控制台会看到 Debug 级别日志，通过实际IP地址也同样印证 Ribbon 默认采用轮询策略进行分配。</p>
+<pre class="lang-java hljs" data-nodeid="1456"><code data-language="java">s.n.www.protocol.http.HttpURLConnection : {GET /provider/msg ...}{Accept: ...}{User-Agent: ...}{Host: <span class="hljs-number">192.168</span><span class="hljs-number">.31</span><span class="hljs-number">.111</span>:<span class="hljs-number">80</span>}
+...
+s.n.www.protocol.http.HttpURLConnection : {GET /provider/msg ...}{Accept: ...}{User-Agent: ...}{Host: <span class="hljs-number">192.168</span><span class="hljs-number">.31</span><span class="hljs-number">.112</span>:<span class="hljs-number">80</span>}
+...
+s.n.www.protocol.http.HttpURLConnection : {GET /provider/msg ...}{Accept: ...}{User-Agent: ...}{Host: <span class="hljs-number">192.168</span><span class="hljs-number">.31</span><span class="hljs-number">.113</span>:<span class="hljs-number">80</span>}
+</code></pre>
+<p data-nodeid="1457">以上便是注解模式的使用办法，相比代码模式是不是简单很多啊。对了，你注意到了吗？无论注解模式还是代码模式，默认的负载均衡策略都是轮询，即按顺序依次访问，作为 Ribbon 还支持哪些其他负载均衡策略呢?我们又该如何设置呢？本次最后一小节，我将带领你学习这块知识。</p>
+<h3 data-nodeid="1458">如何配置 Ribbon 负载均衡策略</h3>
+<p data-nodeid="1459">Ribbon 内置多种负载均衡策略，常用的分为以下几种。</p>
+<ul data-nodeid="1460">
+<li data-nodeid="1461">
+<p data-nodeid="1462"><strong data-nodeid="1634">RoundRobinRule：</strong></p>
+</li>
+</ul>
+<p data-nodeid="1463">轮询策略，Ribbon 默认策略。默认超过 10 次获取到的 server 都不可用，会返回⼀个空的 server。</p>
+<ul data-nodeid="1464">
+<li data-nodeid="1465">
+<p data-nodeid="1466"><strong data-nodeid="1639">RandomRule：</strong></p>
+</li>
+</ul>
+<p data-nodeid="1467">随机策略，如果随机到的 server 为 null 或者不可用的话。会不停地循环选取。</p>
+<ul data-nodeid="1468">
+<li data-nodeid="1469">
+<p data-nodeid="1470"><strong data-nodeid="1645">RetryRule</strong>：</p>
+</li>
+</ul>
+<p data-nodeid="1471">重试策略，⼀定时限内循环重试。默认继承 RoundRobinRule，也⽀持自定义注⼊，RetryRule 会在每次选取之后，对选举的 server 进⾏判断，是否为 null，是否 alive，并且在 500ms 内会不停地选取判断。而 RoundRobinRule 失效的策略是超过 10 次，RandomRule 没有失效时间的概念，只要 serverList 没都挂。</p>
+<ul data-nodeid="1472">
+<li data-nodeid="1473">
+<p data-nodeid="1474"><strong data-nodeid="1651">BestAvailableRule</strong>：</p>
+</li>
+</ul>
+<p data-nodeid="1475">最小连接数策略，遍历 serverList，选取出可⽤的且连接数最小的⼀个 server。那么会调用 RoundRobinRule 重新选取。</p>
+<ul data-nodeid="1476">
+<li data-nodeid="1477">
+<p data-nodeid="1478"><strong data-nodeid="1657">AvailabilityFilteringRule</strong>：</p>
+</li>
+</ul>
+<p data-nodeid="1479">可用过滤策略。扩展了轮询策略，会先通过默认的轮询选取⼀个 server，再去判断该 server 是否超时可用、当前连接数是否超限，都成功再返回。</p>
+<ul data-nodeid="1480">
+<li data-nodeid="1481">
+<p data-nodeid="1482"><strong data-nodeid="1663">ZoneAvoidanceRule</strong>：</p>
+</li>
+</ul>
+<p data-nodeid="1483">区域权衡策略。扩展了轮询策略，除了过滤超时和链接数过多的 server，还会过滤掉不符合要求的 zone 区域⾥⾯的所有节点，始终保证在⼀个区域/机房内的服务实例进行轮询。</p>
+<p data-nodeid="1484">这里所有负载均衡策略名本质都是 com.netflix.loadbalancer 包下的类：</p>
+<p data-nodeid="15607"><img src="https://s0.lgstatic.com/i/image6/M00/19/1E/CioPOWBJw6SAKOB6AAXujVzqsIs554.png" alt="图片12.png" data-nodeid="15610"></p>
+
+
+
+<p data-nodeid="1486">要更改微服务通信时采用的负载均衡策略也很简单，在 application.yml 中采用下面格式书写即可。</p>
+<pre class="lang-yaml hljs" data-nodeid="1487"><code data-language="yaml"><span class="hljs-attr">provider-service:</span> <span class="hljs-comment">#服务提供者的微服务id</span>
+  <span class="hljs-attr">ribbon:</span>
+    <span class="hljs-attr">NFLoadBalancerRuleClassName:</span> <span class="hljs-string">com.netflix.loadbalancer.RandomRule</span> <span class="hljs-comment">#设置对应的负载均衡类</span>
+</code></pre>
+<p data-nodeid="1488">当采用随机策略，运行时得到如下日志，杂乱的顺序说明随机策略已生效。</p>
+<pre class="lang-java hljs" data-nodeid="1489"><code data-language="java">本次调用由 provider-service的<span class="hljs-number">192.168</span><span class="hljs-number">.31</span><span class="hljs-number">.112</span>:<span class="hljs-number">80</span> 实例节点负责处理
+consumer-service 获得数据:This is the message from provider service!
+本次调用由 provider-service 的 <span class="hljs-number">192.168</span><span class="hljs-number">.31</span><span class="hljs-number">.112</span>:<span class="hljs-number">80</span> 实例节点负责处理
+consumer-service 获得数据:This is the message from provider service!
+本次调用由 provider-service 的 <span class="hljs-number">192.168</span><span class="hljs-number">.31</span><span class="hljs-number">.113</span>:<span class="hljs-number">80</span> 实例节点负责处理
+consumer-service 获得数据:This is the message from provider service!
+本次调用由 provider-service 的 <span class="hljs-number">192.168</span><span class="hljs-number">.31</span><span class="hljs-number">.111</span>:<span class="hljs-number">80</span> 实例节点负责处理
+consumer-service 获得数据:This is the message from provider service!
+本次调用由 provider-service 的 <span class="hljs-number">192.168</span><span class="hljs-number">.31</span><span class="hljs-number">.113</span>:<span class="hljs-number">80</span> 实例节点负责处理
+consumer-service 获得数据:This is the message from provider service!
+</code></pre>
+<p data-nodeid="1490">讲到这里，想必你对 Ribbon 已经有了直观的认识，在项目中合理的使用 Ribbon 负载均衡可以使系统性能有显著的提升，最后我们来做下总结。</p>
+<h3 data-nodeid="1491">小结与预告</h3>
+<p data-nodeid="1492">本文我们介绍了三方面知识，开始介绍了 Ribbon 负载均衡器的作用，之后讲解了 Ribbon 的两种开发模式，最后讲解了 Ribbon 的负载均衡策略与设置办法。</p>
+<p data-nodeid="1493">这里给你留一道课外题：如果 Ribbon 自带的负载均衡策略不能满足实际项目的需要，我们如何自定义 Ribbon 负载均衡策略呢？你可以自行查阅资料，将学到的知识分享在评论区中。</p>
+<p data-nodeid="1494" class="">下一节课，我们将学习除 RestTemplate 之外另一项重要的服务间通信技术 OpenFeign，看它又提供了哪些高级特性。</p></div>
+
+</body></html>

@@ -1,0 +1,1308 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>07 | 案例分析：无处不在的缓存，高并发系统的法宝</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>07 | 案例分析：无处不在的缓存，高并发系统的法宝</h1><p data-nodeid="24704" class="">在上一课时，我们介绍了“缓冲”，这一课时我将介绍“缓冲”的孪生兄弟“缓存”。</p>
+<p data-nodeid="24705">和缓冲类似，缓存可能是软件中使用最多的优化技术了，比如：在最核心的 CPU 中，就存在着多级缓存；为了消除内存和存储之间的差异，各种类似 Redis 的缓存框架更是层出不穷。</p>
+<p data-nodeid="24706">缓存的优化效果是非常好的，它既可以让原本载入非常缓慢的页面，瞬间秒开，也能让本是压力山大的数据库，瞬间清闲下来。</p>
+<p data-nodeid="24707"><strong data-nodeid="24859">缓存</strong>，<strong data-nodeid="24860">本质</strong>上是为了协调两个速度差异非常大的组件，如下图所示，通过加入一个中间层，将常用的数据存放在相对高速的设备中。</p>
+<p data-nodeid="24708"><img src="https://s0.lgstatic.com/i/image/M00/3C/6B/CgqCHl8nuCKAad7oAAAk6v90xvo900.png" alt="Drawing 1.png" data-nodeid="24863"></p>
+<p data-nodeid="24709">在我们平常的应用开发中，根据缓存所处的物理位置，一般分为<strong data-nodeid="24873">进程内</strong>缓存和<strong data-nodeid="24874">进程外</strong>缓存。</p>
+<p data-nodeid="24710">本课时我们主要聚焦在进程内缓存上，在 Java 中，进程内缓存，就是我们常说的堆内缓存。Spring 的默认实现里，就包含 Ehcache、JCache、Caffeine、Guava Cache 等。</p>
+<h3 data-nodeid="24711">Guava 的 LoadingCache</h3>
+<p data-nodeid="24712">Guava 是一个常用的工具包，其中的 <strong data-nodeid="24886">LoadingCache</strong>（下面简称 LC），是非常好用的<strong data-nodeid="24887">堆内缓存工具</strong>。通过学习 LC 的结构，即可了解堆内缓存设计的一般思路。</p>
+<p data-nodeid="24713">缓存一般是比较昂贵的组件，容量是有限制的，设置得过小，或者过大，都会影响缓存性能：</p>
+<ul data-nodeid="24714">
+<li data-nodeid="24715">
+<p data-nodeid="24716">缓存空间过小，就会造成高命中率的元素被频繁移出，失去了缓存的意义；</p>
+</li>
+<li data-nodeid="24717">
+<p data-nodeid="24718">缓存空间过大，不仅浪费宝贵的缓存资源，还会对垃圾回收产生一定的压力。</p>
+</li>
+</ul>
+<p data-nodeid="24719">通过 Maven，即可引入 guava 的 jar 包：</p>
+<pre class="lang-dart hljs" data-nodeid="24720"><code data-language="dart">&lt;dependency&gt; 
+ &nbsp; &nbsp;&lt;groupId&gt;com.google.guava&lt;/groupId&gt; 
+ &nbsp; &nbsp;&lt;artifactId&gt;guava&lt;/artifactId&gt; 
+ &nbsp; &nbsp;&lt;version&gt;<span class="hljs-number">29.0</span>-jre&lt;/version&gt; 
+&lt;/dependency&gt;
+</code></pre>
+<p data-nodeid="24721">下面介绍一下 LC 的常用操作：</p>
+<p data-nodeid="24722"><img src="https://s0.lgstatic.com/i/image/M00/3C/60/Ciqc1F8nuDmAJcstAABnG73x05M360.png" alt="Drawing 3.png" data-nodeid="24895"></p>
+<h4 data-nodeid="24723">1.缓存初始化</h4>
+<p data-nodeid="24724">首先，我们可以通过下面的参数设置一下 LC 的大小。一般，我们只需给缓存提供一个上限。</p>
+<ul data-nodeid="24725">
+<li data-nodeid="24726">
+<p data-nodeid="24727"><strong data-nodeid="24902">maximumSize</strong> 这个参数用来设置缓存池的最大容量，达到此容量将会清理其他元素；</p>
+</li>
+<li data-nodeid="24728">
+<p data-nodeid="24729"><strong data-nodeid="24907">initialCapacity</strong> 默认值是 16，表示初始化大小；</p>
+</li>
+<li data-nodeid="24730">
+<p data-nodeid="24731"><strong data-nodeid="24912">concurrencyLevel</strong> 默认值是 4，和初始化大小配合使用，表示会将缓存的内存划分成 4 个 segment，用来支持高并发的存取。</p>
+</li>
+</ul>
+<h4 data-nodeid="24732">2.缓存操作</h4>
+<p data-nodeid="24733">那么缓存数据是怎么放进去的呢？有两种模式：</p>
+<ul data-nodeid="24734">
+<li data-nodeid="24735">
+<p data-nodeid="24736">使用 put 方法手动处理，比如，我从数据库里查询出一个 User 对象，然后手动调用代码进去；</p>
+</li>
+<li data-nodeid="24737">
+<p data-nodeid="24738">主动触发（ 这也是 Loading 这个词的由来），通过提供一个 CacheLoader 的实现，就可以在用到这个对象的时候，进行延迟加载。</p>
+</li>
+</ul>
+<pre class="lang-java hljs" data-nodeid="24739"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">main</span><span class="hljs-params">(String[] args)</span> </span>{ 
+ &nbsp; &nbsp;LoadingCache&lt;String, String&gt; lc = CacheBuilder 
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  .newBuilder() 
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  .build(<span class="hljs-keyword">new</span> CacheLoader&lt;String, String&gt;() { 
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-meta">@Override</span> 
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-function"><span class="hljs-keyword">public</span> String <span class="hljs-title">load</span><span class="hljs-params">(String key)</span> <span class="hljs-keyword">throws</span> Exception </span>{ 
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">return</span> slowMethod(key); 
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  } 
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;  }); 
+} 
+ 
+<span class="hljs-function"><span class="hljs-keyword">static</span> String <span class="hljs-title">slowMethod</span><span class="hljs-params">(String key)</span> <span class="hljs-keyword">throws</span> Exception </span>{ 
+ &nbsp; &nbsp;Thread.sleep(<span class="hljs-number">1000</span>); 
+ &nbsp; &nbsp;<span class="hljs-keyword">return</span> key + <span class="hljs-string">".result"</span>; 
+}
+</code></pre>
+<p data-nodeid="24740">上面是主动触发的示例代码，你可以使用 <strong data-nodeid="24930">get</strong> 方法<strong data-nodeid="24931">获取</strong>缓存的值。比如，当我们执行 lc.get("a") 时，第一次会比较缓慢，因为它需要到数据源进行获取；第二次就瞬间返回了，也就是缓存命中了。具体时序可以参见下面这张图。</p>
+<p data-nodeid="24741"><img src="https://s0.lgstatic.com/i/image/M00/3C/6C/CgqCHl8nuFGACX8vAABYHt8o1wc201.png" alt="Drawing 5.png" data-nodeid="24934"></p>
+<p data-nodeid="24742">除了靠 LC 自带的回收策略，我们也可以<strong data-nodeid="24944">手动删除</strong>某一个元素，这就是 <strong data-nodeid="24945">invalidate</strong> 方法。当然，数据的这些删除操作，也是可以监听到的，只需要设置一个监听器就可以了，代码如下：</p>
+<pre class="lang-java hljs" data-nodeid="24743"><code data-language="java">.removalListener(notification -&gt; System.out.println(notification))
+</code></pre>
+<h4 data-nodeid="24744">3.回收策略</h4>
+<p data-nodeid="24745">缓存的大小是有限的，满了以后怎么办？这就需要回收策略进行处理，接下来我会向你介绍三种回收策略。</p>
+<p data-nodeid="24746">（1）第一种回收策略<strong data-nodeid="24952">基于容量</strong></p>
+<p data-nodeid="24747">这个比较好理解，也就是说如果缓存满了，就会按照 LRU 算法来移除其他元素。</p>
+<p data-nodeid="24748">（2）第二种回收策略<strong data-nodeid="24958">基于时间</strong></p>
+<ul data-nodeid="24749">
+<li data-nodeid="24750">
+<p data-nodeid="24751">一种方式是，通过 expireAfterWrite 方法设置数据写入以后在某个时间失效；</p>
+</li>
+<li data-nodeid="24752">
+<p data-nodeid="24753">另一种是，通过 expireAfterAccess 方法设置最早访问的元素，并优先将其删除。</p>
+</li>
+</ul>
+<p data-nodeid="24754">（3）第三种回收策略<strong data-nodeid="24965">基于 JVM 的垃圾回收</strong></p>
+<p data-nodeid="24755">我们都知道对象的引用有强、软、弱、虚等四个级别，通过 weakKeys 等函数即可设置相应的引用级别。当 JVM 垃圾回收的时候，会主动清理这些数据。</p>
+<p data-nodeid="24756">关于第三种回收策略，有一个<strong data-nodeid="24971">高频面试题：如果你同时设置了 weakKeys 和 weakValues函数，LC 会有什么反应？</strong></p>
+<p data-nodeid="24757">答案：如果同时设置了这两个函数，它代表的意思是，当没有任何强引用，与 key <strong data-nodeid="24977">或者</strong> value 有关系时，就删掉整个缓存项。这两个函数经常被误解。</p>
+<h4 data-nodeid="24758">4.缓存造成内存故障</h4>
+<p data-nodeid="24759">LC 可以通过 recordStats 函数，对缓存加载和命中率等情况进行监控。</p>
+<p data-nodeid="24760"><strong data-nodeid="24983">值得注意的是：LC 是基于数据条数而不是基于缓存物理大小的，所以如果你缓存的对象特别大，就会造成不可预料的内存占用。</strong></p>
+<p data-nodeid="24761">围绕这点，我分享一个由于不正确使用缓存导致的常见内存故障。</p>
+<p data-nodeid="24762">大多数堆内缓存，都会将对象的引用设置成弱引用或软引用，这样内存不足时，可以优先释放缓存占用的空间，给其他对象腾出地方。这种做法的初衷是好的，但容易出现问题。</p>
+<p data-nodeid="24763">当你的缓存使用非常频繁，数据量又比较大的情况下，缓存会占用大量内存，如果此时发生了垃圾回收（GC），缓存空间会被释放掉，但又被迅速占满，从而会再次触发垃圾回收。如此往返，GC 线程会耗费大量的 CPU 资源，缓存也就失去了它的意义。</p>
+<p data-nodeid="24764">所以在这种情况下，把缓存设置的小一些，减轻 JVM 的负担，是一个很好的方法。</p>
+<h3 data-nodeid="24765">缓存算法</h3>
+<h4 data-nodeid="24766">1.算法介绍</h4>
+<p data-nodeid="24767">堆内缓存最常用的有 FIFO、LRU、LFU 这三种算法。</p>
+<ul data-nodeid="24768">
+<li data-nodeid="24769">
+<p data-nodeid="24770"><strong data-nodeid="24994">FIFO</strong></p>
+</li>
+</ul>
+<p data-nodeid="24771">这是一种先进先出的模式。如果缓存容量满了，将会<strong data-nodeid="25000">移除最先加入的元素</strong>。这种缓存实现方式简单，但符合先进先出的队列模式场景的功能不多，应用场景较少。</p>
+<ul data-nodeid="24772">
+<li data-nodeid="24773">
+<p data-nodeid="24774"><strong data-nodeid="25004">LRU</strong></p>
+</li>
+</ul>
+<p data-nodeid="24775">LRU 是最近最少使用的意思，当缓存容量达到上限，它会<strong data-nodeid="25014">优先移除那些最久未被使用的数据</strong>，LRU是目前<strong data-nodeid="25015">最常用</strong>的缓存算法，稍后我们会使用 Java 的 API 简单实现一个。</p>
+<ul data-nodeid="24776">
+<li data-nodeid="24777">
+<p data-nodeid="24778"><strong data-nodeid="25019">LFU</strong></p>
+</li>
+</ul>
+<p data-nodeid="24779">LFU 是最近最不常用的意思。相对于 LRU 的时间维度，LFU 增加了访问次数的维度。如果缓存满的时候，将<strong data-nodeid="25029">优先移除访问次数最少的元素</strong>；而当有多个访问次数相同的元素时，则<strong data-nodeid="25030">优先移除最久未被使用的元素</strong>。</p>
+<h4 data-nodeid="24780">2.实现一个 LRU 算法</h4>
+<p data-nodeid="24781">Java 里面实现 LRU 算法可以有多种方式，其中最常用的就是 <strong data-nodeid="25042">LinkedHashMap，<strong data-nodeid="25041">这也是一个需要你注意的</strong>面试高频考点</strong>。</p>
+<p data-nodeid="24782">首先，我们来看一下 LinkedHashMap 的构造方法：</p>
+<pre class="lang-java hljs" data-nodeid="24783"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-title">LinkedHashMap</span><span class="hljs-params">(<span class="hljs-keyword">int</span> initialCapacity, 
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">float</span> loadFactor, 
+ &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">boolean</span> accessOrder)</span>
+</span></code></pre>
+<p data-nodeid="24784">accessOrder 参数是实现 LRU 的关键。当 accessOrder 的值为 true 时，将按照对象的访问顺序排序；当 accessOrder 的值为 false 时，将按照对象的插入顺序排序。我们上面提到过，按照访问顺序排序，其实就是 LRU。</p>
+<p data-nodeid="24785"><img src="https://s0.lgstatic.com/i/image/M00/3C/6C/CgqCHl8nuJeAQCW4AABgBDKI74g880.png" alt="Drawing 7.png" data-nodeid="25047"></p>
+<p data-nodeid="24786">如上图，按照缓存的一般设计方式，和 LC 类似，当你向 LinkedHashMap 中添加新对象的时候，就会调用 removeEldestEntry 方法。这个方法默认返回 false，表示永不过期。我们只需要覆盖这个方法，当超出容量的时候返回 true，触发移除动作就可以了。关键代码如下：</p>
+<pre class="lang-java hljs" data-nodeid="24787"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">LRU</span> <span class="hljs-keyword">extends</span> <span class="hljs-title">LinkedHashMap</span> </span>{ 
+ &nbsp; &nbsp;<span class="hljs-keyword">int</span> capacity; 
+ &nbsp; &nbsp;<span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-title">LRU</span><span class="hljs-params">(<span class="hljs-keyword">int</span> capacity)</span> </span>{ 
+ &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">super</span>(<span class="hljs-number">16</span>, <span class="hljs-number">0.75f</span>, <span class="hljs-keyword">true</span>); 
+ &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">this</span>.capacity = capacity; 
+ &nbsp;  } 
+ &nbsp; &nbsp;<span class="hljs-meta">@Override</span> 
+ &nbsp; &nbsp;<span class="hljs-function"><span class="hljs-keyword">protected</span> <span class="hljs-keyword">boolean</span> <span class="hljs-title">removeEldestEntry</span><span class="hljs-params">(Map.Entry eldest)</span> </span>{ 
+ &nbsp; &nbsp; &nbsp; &nbsp;<span class="hljs-keyword">return</span> size() &gt; capacity; 
+ &nbsp;  } 
+}
+</code></pre>
+<p data-nodeid="24788">相比较 LC，这段代码实现的功能是比较简陋的，它甚至不是线程安全的，但它体现了缓存设计的一般思路，是 Java 中最简单的 LRU 实现方式。</p>
+<h3 data-nodeid="24789">进一步加速</h3>
+<p data-nodeid="24790">在 Linux 系统中，通过 free 命令，能够看到系统内存的使用状态。其中，有一块叫作 <strong data-nodeid="25056">cached</strong> 的区域，占用了大量的内存空间。</p>
+<p data-nodeid="24791"><img src="https://s0.lgstatic.com/i/image/M00/3C/61/Ciqc1F8nuKqAJaGZAAF4FboRD9E367.png" alt="Drawing 8.png" data-nodeid="25059"></p>
+<p data-nodeid="24792">如图所示，这个区域，其实就是存放了操作系统的文件缓存，当应用再次用到它的时候，就不用再到磁盘里走一圈，能够从内存里快速载入。</p>
+<p data-nodeid="24793">在文件读取的缓存方面，操作系统做得更多。由于磁盘擅长顺序读写，在随机读写的时候，效率很低，所以，操作系统使用了智能的<strong data-nodeid="25066">预读算法</strong>（readahead），将数据从硬盘中加载到缓存中。</p>
+<p data-nodeid="24794">预读算法有三个关键点：</p>
+<ul data-nodeid="24795">
+<li data-nodeid="24796">
+<p data-nodeid="24797"><strong data-nodeid="25072">预测性</strong>，能够根据应用的使用数据，提前预测应用后续的操作目标；</p>
+</li>
+<li data-nodeid="24798">
+<p data-nodeid="24799"><strong data-nodeid="25077">提前</strong>，能够将这些数据提前加载到缓存中，保证命中率；</p>
+</li>
+<li data-nodeid="24800">
+<p data-nodeid="24801"><strong data-nodeid="25082">批量</strong>，将小块的、频繁的读取操作，合并成顺序的批量读取，提高性能。</p>
+</li>
+</ul>
+<p data-nodeid="24802">预读技术一般都是比较智能的，能够覆盖大多数后续的读取操作。举个极端的例子，如果我们的数据集合比较小，访问频率又非常高，就可以使用完全载入的方式，来替换懒加载的方式。在系统启动的时候，将数据加载到缓存中。</p>
+<h3 data-nodeid="24803">缓存优化的一般思路</h3>
+<p data-nodeid="24804">一般，缓存针对的主要是读操作。<strong data-nodeid="25090">当你的功能遇到下面的场景时</strong>，就可以选择使用缓存组件进行性能优化：</p>
+<ul data-nodeid="24805">
+<li data-nodeid="24806">
+<p data-nodeid="24807">存在数据热点，缓存的数据能够被频繁使用；</p>
+</li>
+<li data-nodeid="24808">
+<p data-nodeid="24809">读操作明显比写操作要多；</p>
+</li>
+<li data-nodeid="24810">
+<p data-nodeid="24811">下游功能存在着比较悬殊的性能差异，下游服务能力有限；</p>
+</li>
+<li data-nodeid="24812">
+<p data-nodeid="24813">加入缓存以后，不会影响程序的正确性，或者引入不可预料的复杂性。</p>
+</li>
+</ul>
+<p data-nodeid="24814">缓存组件和缓冲类似，也是在两个组件速度严重不匹配的时候，引入的一个中间层，但<strong data-nodeid="25099">它们服务的目标是不同的：</strong></p>
+<ul data-nodeid="24815">
+<li data-nodeid="24816">
+<p data-nodeid="24817">缓冲，数据一般只使用一次，等待缓冲区满了，就执行 flush 操作；</p>
+</li>
+<li data-nodeid="24818">
+<p data-nodeid="24819">缓存，数据被载入之后，可以多次使用，数据将会共享多次。</p>
+</li>
+</ul>
+<p data-nodeid="24820"><strong data-nodeid="25106">缓存最重要的指标就是命中率</strong>，有以下几个因素会影响命中率。</p>
+<p data-nodeid="24821"><strong data-nodeid="25110">（1）缓存容量</strong></p>
+<p data-nodeid="24822">缓存的容量总是有限制的，所以就存在一些冷数据的逐出问题。但缓存也不是越大越好，它不能明显挤占业务的内存。</p>
+<p data-nodeid="24823"><strong data-nodeid="25115">（2）数据集类型</strong></p>
+<p data-nodeid="24824">如果缓存的数据是非热点数据，或者是操作几次就不再使用的冷数据，那命中率肯定会低，缓存也会失去了它的作用。</p>
+<p data-nodeid="24825"><strong data-nodeid="25120">（3）缓存失效策略</strong></p>
+<p data-nodeid="24826">缓存算法也会影响命中率和性能，目前效率最高的算法是 Caffeine 使用的 <strong data-nodeid="25126">W-TinyLFU 算法</strong>，它的命中率非常高，内存占用也更小。新版本的 spring-cache，已经默认支持 Caffeine。</p>
+<p data-nodeid="24827">下图展示了这个算法的性能，<a href="https://github.com/ben-manes/caffeine" data-nodeid="25130">从官网的 github 仓库</a>就可以找到 JMH 的测试代码。</p>
+<p data-nodeid="24828"><img src="https://s0.lgstatic.com/i/image/M00/3C/6C/CgqCHl8nuQWAKsjIAAG1hzHS76Q255.png" alt="Drawing 9.png" data-nodeid="25134"></p>
+<p data-nodeid="24829">推荐使用 Guava Cache 或者 Caffeine 作为堆内缓存解决方案，然后通过它们提供的一系列监控指标，来调整缓存的大小和内容，一般来说：</p>
+<ul data-nodeid="24830">
+<li data-nodeid="24831">
+<p data-nodeid="24832">缓存命中率达到 50% 以上，作用就开始变得显著；</p>
+</li>
+<li data-nodeid="24833">
+<p data-nodeid="24834">缓存命中率低于 10%，那就需要考虑缓存组件的必要性了。</p>
+</li>
+</ul>
+<p data-nodeid="24835">引入缓存组件，能够显著提升系统性能，但也会引入新的问题。其中，最典型的也是面试高频问题：如何保证缓存与源数据的同步？关于这点，我们会在下一课时进行讲解。</p>
+<h3 data-nodeid="24836">小结</h3>
+<p data-nodeid="24837">最后，我来总结一下本课时的知识要点。</p>
+<p data-nodeid="24838">我们先以 Guava 的 LoadingCache 为例，讲解了堆内缓存设计的一些思路；同时，介绍了一个因为缓存不合理利用所造成的内存故障，这些都是面试中的高频问题；然后又讲解了，三个常用的缓存算法 LRU、LFU、FIFO，并以 LinkedHashMap 为基础，实现了一个最简单的 LRU 缓存。</p>
+<p data-nodeid="24839">本课时还提到了使用预读或者提前载入等方式，来进一步加速应用的方法，readahead技术，在操作系统、数据库中使用非常多，性能提升也比较显著。</p>
+<p data-nodeid="24840">最后，我们提到可以通过利用缓存框架的一些监控数据，来调整缓存的命中率，要达到50% 的命中率才算有较好的效果。</p>
+<p data-nodeid="24841">接下来，我再简单举两个<strong data-nodeid="25149">缓存应用</strong>的例子。</p>
+<ul data-nodeid="26074">
+<li data-nodeid="26075">
+<p data-nodeid="26076">第一个是 HTTP 304 状态码，它是 Not Modified 的意思。<br>
+浏览器客户端会发送一个条件性的请求，服务端可以通过 If-Modified-Since 头信息判断缓冲的文件是否是最新的。如果是，那么客户端就直接使用缓存，不用进行再读取了。</p>
+</li>
+<li data-nodeid="26077">
+<p data-nodeid="26078" class="">另一个是关于 CDN，这是一种变相的缓存。<br>
+用户会从离它最近最快的节点，读取文件内容。如果这个节点没有缓存这个文件，那么 CDN 节点就会从源站拉取一份，下次有相同的读取请求时，就可以快速返回。</p>
+</li>
+</ul>
+
+
+<p data-nodeid="24847" class="">缓存的应用非常广泛，大家在平常的工作中，也可以尝试进行总结、类比。</p></div>
+
+</body></html>

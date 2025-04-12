@@ -1,0 +1,1032 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>12 | WebClient：如何实现非阻塞式的跨服务远程调用？</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>12 | WebClient：如何实现非阻塞式的跨服务远程调用？</h1><p data-nodeid="187894">在上一讲中，我已经带你在 ReactiveSpringCSS 案例系统中通过 WebFlux 创建了响应式 Web 服务，并给你留下了一道思考题：如何实现非阻塞式的跨服务调用？</p>
+<p data-nodeid="187895">我们知道在 Spring 中存在一个功能强大的工具类 RestTemplate，专门用来实现基于 HTTP 协议的远程请求和响应处理。RestTemplate 的主要问题在于不支持响应式流规范，也就无法提供非阻塞式的流式操作。Spring 5 全面引入响应式编程模型，同时也提供了 RestTemplate 的响应式版本，这就是 WebClient 工具类。</p>
+<p data-nodeid="187896">这一讲我们就针对 WebClient 展开详细的探讨。首先我会带你创建和配置 WebClient对象；然后使用 WebClient 来访问远程 Web 服务，并介绍该组件的一些使用技巧；最后我依然会结合 ReactiveSpringCSS 案例来给出与现有服务之间的集成过程。</p>
+<h3 data-nodeid="187897">创建和配置 WebClient</h3>
+<p data-nodeid="187898">WebClient 类位于 org.springframework.web.reactive.function.client 包中，要想在项目中集成 WebClient 类，只需要引入 WebFlux 依赖即可。</p>
+<h4 data-nodeid="187899">创建 WebClient</h4>
+<p data-nodeid="187900">创建 WebClient 有两种方法，一种是通过它所提供的 create() 工厂方法，另一种则是使用 WebClient Builder 构造器工具类。</p>
+<p data-nodeid="187901">我们可以直接使用 create() 工厂方法来创建 WebClient 的实例，示例代码如下所示。</p>
+<pre class="lang-java" data-nodeid="187902"><code data-language="java">WebClient webClient = WebClient.create();
+</code></pre>
+<p data-nodeid="187903">如果我们创建 WebClient 的目的是针对某一个特定服务进行操作，那么就可以使用该服务的地址作为 baseUrl 来初始化 WebClient，示例代码如下所示。</p>
+<pre class="lang-java" data-nodeid="187904"><code data-language="java">WebClient webClient = 
+	WebClient.create(<span class="hljs-string">"https://localhost:8081/accounts"</span>);
+</code></pre>
+<p data-nodeid="187905">WebClient 还附带了一个构造器类 Builder，使用方法也很简单，示例代码如下所示。</p>
+<pre class="lang-java" data-nodeid="187906"><code data-language="java">WebClient webClient = WebClient.builder().build();
+</code></pre>
+<h4 data-nodeid="187907">配置 WebClient</h4>
+<p data-nodeid="187908">创建完 WebClient 实例之后，我们还可以在 WebClient.builder() 方法中添加相关的配置项，来对 WebClient 的行为做一些控制，通常用来设置消息头信息等，示例代码如下所示。</p>
+<pre class="lang-java" data-nodeid="187909"><code data-language="java">WebClient webClient = WebClient.builder()
+	.baseUrl(<span class="hljs-string">"https://localhost:8081/accounts"</span>)
+    .defaultHeader(HttpHeaders.CONTENT_TYPE, <span class="hljs-string">"application/json"</span>)
+	.defaultHeader(HttpHeaders.USER_AGENT, <span class="hljs-string">"Reactive WebClient"</span>)
+	.build();
+</code></pre>
+<p data-nodeid="187910">上述代码展示了 defaultHeader 的使用方法，WebClient.builder() 还包含 defaultCookie、defaultRequest 等多个配置项可供使用。</p>
+<p data-nodeid="187911">现在，我们已经成功创建了 WebClient 对象，接下来就可以使用该对象来访问远程服务了。</p>
+<h3 data-nodeid="187912">使用 WebClient 访问服务</h3>
+<p data-nodeid="187913">在远程服务访问上，WebClient 有几种常见的使用方式，包括非常实用的 retrieve() 和 exchange() 方法、用于封装请求数据的 RequestBody，以及表单和文件的提交。接下来我就对这些使用方式进行详细介绍并给出相关示例。</p>
+<h4 data-nodeid="187914">构造 URL</h4>
+<p data-nodeid="187915">Web 请求中通过请求路径可以携带参数，在使用 WebClient 时也可以在它提供的 uri() 方法中添加路径变量和参数值。如果我们定义一个包含路径变量名为 id 的 URL，然后将 id 值设置为 100，那么就可以使用如下示例代码。</p>
+<pre class="lang-java" data-nodeid="187916"><code data-language="java">webClient.get().uri(<span class="hljs-string">"http://localhost:8081/accounts/{id}"</span>, <span class="hljs-number">100</span>);
+</code></pre>
+<p data-nodeid="187917">当然，URL 中也可以使用多个路径变量以及多个参数值。如下所示的代码中就定义了 URL 中拥有路径变量 param1 和 param2，实际访问的时候将被替换为 value1 和 value2。如果有很多的参数，只要按照需求对请求地址进行拼装即可。</p>
+<pre class="lang-java" data-nodeid="187918"><code data-language="java">webClient.get().uri(<span class="hljs-string">"http://localhost:8081/account/{param1}/{ param2}"</span>, <span class="hljs-string">"value1"</span>, <span class="hljs-string">"value12"</span>);
+</code></pre>
+<p data-nodeid="187919">同时，我们也可以事先把这些路径变量和参数值拼装成一个 Map 对象，然后赋值给当前 URL。如下所示的代码就定义了 Key 为 param1 和 param2 的 HashMap，实际访问时会从这个 HashMap 中获取参数值进行替换，从而得到最终的请求路径为<a href="http://localhost:8081/accounts/value1/value2?fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="188002">http://localhost:8081/accounts/value1/value2</a>，如下所示。</p>
+<pre class="lang-java" data-nodeid="187920"><code data-language="java">Map&lt;String, Object&gt; uriVariables = <span class="hljs-keyword">new</span> HashMap&lt;&gt;();
+uriVariables.put(<span class="hljs-string">"param1"</span>, <span class="hljs-string">"value1"</span>);
+uriVariables.put(<span class="hljs-string">"param2"</span>, <span class="hljs-string">"value2"</span>);
+webClient.get().uri(<span class="hljs-string">"http://localhost:8081/accounts/{param1}/{param2}"</span>, variables);
+</code></pre>
+<p data-nodeid="187921">我们还可以通过使用 URIBuilder 来获取对请求信息的完全控制，示例代码如下所示。</p>
+<pre class="lang-java" data-nodeid="187922"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">public</span> Flux&lt;Account&gt; <span class="hljs-title">getAccounts</span><span class="hljs-params">(String username, String token)</span> </span>{
+&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> webClient.get()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .uri(uriBuilder -&gt; uriBuilder.path(<span class="hljs-string">"/accounts"</span>).build())
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .header(<span class="hljs-string">"Authorization"</span>, <span class="hljs-string">"Basic "</span> + Base64Utils
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .encodeToString((username + <span class="hljs-string">":"</span> + token).getBytes(UTF_8)))
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .retrieve()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .bodyToFlux(Account.class);
+}
+</code></pre>
+<p data-nodeid="187923">这里我们为每次请求添加了包含授权信息的“Authorization”消息头，用来传递用户名和访问令牌。一旦我们准备好请求信息，就可以使用 WebClient 提供的一系列工具方法完成远程服务的访问，例如上面示例中的 retrieve() 方法。</p>
+<h4 data-nodeid="187924">retrieve() 方法</h4>
+<p data-nodeid="187925">retrieve() 方法是获取响应主体并对其进行解码的最简单方法，我们再看一个示例，如下所示。</p>
+<pre class="lang-java" data-nodeid="187926"><code data-language="java">WebClient webClient = WebClient.create(<span class="hljs-string">"http://localhost:8081"</span>);
+&nbsp;
+Mono&lt;Account&gt; result = webClient.get()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .uri(<span class="hljs-string">"/accounts/{id}"</span>, id)
+	    .accept(MediaType.APPLICATION_JSON)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .retrieve()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .bodyToMono(Account.class);
+</code></pre>
+<p data-nodeid="187927">上述代码使用 JSON 作为序列化方式，我们也可以根据需要设置其他方式，例如采用 MediaType.TEXT_EVENT_STREAM 以实现基于流的处理，示例如下。</p>
+<pre class="lang-java" data-nodeid="187928"><code data-language="java">Flux&lt;Order&gt; result = webClient.get()
+  .uri(<span class="hljs-string">"/accounts"</span>).accept(MediaType.TEXT_EVENT_STREAM)
+  .retrieve()
+  .bodyToFlux(Account.class);
+</code></pre>
+<h4 data-nodeid="187929">exchange() 方法</h4>
+<p data-nodeid="187930">如果希望对响应拥有更多的控制权，retrieve() 方法就显得无能为力，这时候我们可以使用 exchange() 方法来访问整个响应结果，该响应结果是一个 ClientResponse 对象，包含了响应的状态码、Cookie 等信息，示例代码如下所示。</p>
+<pre class="lang-java" data-nodeid="187931"><code data-language="java">Mono&lt;Account&gt; result = webClient.get()
+ .uri(<span class="hljs-string">"/accounts/{id}"</span>, id)
+ .accept(MediaType.APPLICATION_JSON)
+ .exchange() 
+ .flatMap(response -&gt; response.bodyToMono(Account.class));
+</code></pre>
+<p data-nodeid="187932">以上代码演示了如何对结果执行 flatMap() 操作符的实现方式，通过这一操作符调用 ClientResponse 的 bodyToMono() 方法以获取目标 Account 对象。</p>
+<h4 data-nodeid="187933">使用 RequestBody</h4>
+<p data-nodeid="187934">如果你有一个 Mono 或 Flux 类型的请求体，那么可以使用 WebClient 的 body() 方法来进行编码，使用示例如下所示。</p>
+<pre class="lang-java" data-nodeid="187935"><code data-language="java">Mono&lt;Account&gt; accountMono = ... ;
+&nbsp;
+Mono&lt;Void&gt; result = webClient.post()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .uri(<span class="hljs-string">"/accounts"</span>)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .contentType(MediaType.APPLICATION_JSON)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .body(accountMono, Account.class)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .retrieve()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .bodyToMono(Void.class);
+</code></pre>
+<p data-nodeid="187936">如果请求对象是一个普通的 POJO 而不是 Flux/Mono，则可以使用 syncBody() 方法作为一种快捷方式来传递请求，示例代码如下所示。</p>
+<pre class="lang-java" data-nodeid="187937"><code data-language="java">Account account = ... ;
+&nbsp;
+Mono&lt;Void&gt; result = webClient.post()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .uri(<span class="hljs-string">"/accounts"</span>)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .contentType(MediaType.APPLICATION_JSON)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .syncBody(account)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .retrieve()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .bodyToMono(Void.class);
+</code></pre>
+<h4 data-nodeid="187938">表单和文件提交</h4>
+<p data-nodeid="187939">当传递的请求体是一个 MultiValueMap 对象时，WebClient 默认发起的是表单提交。例如，针对用户登录场景，我们可以构建一个 MultiValueMap 对象，并传入参数 username 和 password 进行提交，代码如下所示。</p>
+<pre class="lang-java" data-nodeid="187940"><code data-language="java">String baseUrl = <span class="hljs-string">"http://localhost:8081"</span>;
+WebClient webClient = WebClient.create(baseUrl);
+&nbsp;
+MultiValueMap&lt;String, String&gt; map = <span class="hljs-keyword">new</span> LinkedMultiValueMap&lt;&gt;();
+map.add(<span class="hljs-string">"username"</span>, <span class="hljs-string">"jianxiang"</span>);
+map.add(<span class="hljs-string">"password"</span>, <span class="hljs-string">"password"</span>);
+&nbsp;
+Mono&lt;String&gt; mono = webClient.post()
+	.uri(<span class="hljs-string">"/login"</span>)
+	.syncBody(map)
+	.retrieve()
+	.bodyToMono(String.class);
+</code></pre>
+<p data-nodeid="187941">如果想提交 Multipart Data，我们可以使用 MultipartBodyBuilder 工具类来简化请求的构建过程。MultipartBodyBuilder 的使用方法如下所示，最终我们也将得到一个 MultiValueMap 对象。</p>
+<pre class="lang-java" data-nodeid="187942"><code data-language="java">MultipartBodyBuilder builder = <span class="hljs-keyword">new</span> MultipartBodyBuilder();
+builder.part(<span class="hljs-string">"paramPart"</span>, <span class="hljs-string">"value"</span>);
+builder.part(<span class="hljs-string">"filePart"</span>, <span class="hljs-keyword">new</span> FileSystemResource(<span class="hljs-string">"jianxiang.png"</span>));
+builder.part(<span class="hljs-string">"accountPart"</span>, <span class="hljs-keyword">new</span> Account(<span class="hljs-string">"jianxiang"</span>));
+&nbsp;
+MultiValueMap&lt;String, HttpEntity&lt;?&gt;&gt; parts = builder.build();
+</code></pre>
+<p data-nodeid="187943">一旦 MultiValueMap 构建完成，通过 WebClient 的 syncBody() 方法就可以实现请求提交，我已经在上文中提到过这种实现方法。</p>
+<p data-nodeid="187944">以上介绍的都是 WebClient 所提供的基础方法，我们可以使用这些方法来满足面向业务处理的常规请求。但如果你希望对远程调用过程有更多的控制，那么就需要使用 WebClient 所提供的的一些其他使用技巧了。让我们一起来看一下。</p>
+<h3 data-nodeid="187945">WebClient 的其他使用技巧</h3>
+<p data-nodeid="187946">除了实现常规的 HTTP 请求之外，WebClient 还有一些高级用法，包括请求拦截和异常处理等。</p>
+<h4 data-nodeid="187947">请求拦截</h4>
+<p data-nodeid="187948" class="">和传统 RestTemplate 一样，WebClient 也支持使用过滤器函数。让我们回顾 WebClient 的构造器 Builder，你会发现 Builder 实际上是一个接口，它内置了一批初始化 Builder 和 WebClient 的方法定义。DefaultWebClientBuilder 就是该接口的默认实现，截取该类的部分核心代码如下。</p>
+<pre class="lang-java" data-nodeid="187949"><code data-language="java"><span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">DefaultWebClientBuilder</span> <span class="hljs-keyword">implements</span> <span class="hljs-title">WebClient</span>.<span class="hljs-title">Builder</span> </span>{
+	&nbsp;
+<span class="hljs-meta">@Override</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">public</span> WebClient.<span class="hljs-function">Builder <span class="hljs-title">filter</span><span class="hljs-params">(ExchangeFilterFunction filter)</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Assert.notNull(filter, <span class="hljs-string">"ExchangeFilterFunction must not be null"</span>);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; initFilters().add(filter);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>;
+	 }
+	&nbsp;
+	…
+	&nbsp;
+<span class="hljs-meta">@Override</span>
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> WebClient <span class="hljs-title">build</span><span class="hljs-params">()</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ExchangeFunction exchange = initExchangeFunction();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ExchangeFunction filteredExchange = (<span class="hljs-keyword">this</span>.filters != <span class="hljs-keyword">null</span> ? <span class="hljs-keyword">this</span>.filters.stream()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .reduce(ExchangeFilterFunction::andThen)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .map(filter -&gt; filter.apply(exchange))
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .orElse(exchange) : exchange);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> DefaultWebClient(filteredExchange, initUriBuilderFactory(),
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; unmodifiableCopy(<span class="hljs-keyword">this</span>.defaultHeaders), unmodifiableCopy(<span class="hljs-keyword">this</span>.defaultCookies),
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">new</span> DefaultWebClientBuilder(<span class="hljs-keyword">this</span>));
+	 }
+	&nbsp;
+	…
+}
+</code></pre>
+<p data-nodeid="187950">可以看到 build() 方法的目的是构建出一个 DefaultWebClient，而 DefaultWebClient 的构造函数中依赖于 ExchangeFunction 接口。我们来看一下 ExchangeFunction 接口的定义，其中的 filter() 方法传入并执行 ExchangeFilterFunction，如下所示。</p>
+<pre class="lang-java" data-nodeid="187951"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">interface</span> <span class="hljs-title">ExchangeFunction</span> </span>{
+	&nbsp;&nbsp;&nbsp; …
+	&nbsp;
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">default</span> ExchangeFunction <span class="hljs-title">filter</span><span class="hljs-params">(ExchangeFilterFunction filter)</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Assert.notNull(filter, <span class="hljs-string">"'filter' must not be null"</span>);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> filter.apply(<span class="hljs-keyword">this</span>);
+&nbsp;&nbsp;&nbsp; }
+}
+</code></pre>
+<p data-nodeid="187952">当我们看到 Filter（过滤器）这个单词时，思路上就可以触类旁通了。在 Web 应用程序中，Filter 体现的就是一种拦截器作用，而多个 Filter 组合起来构成一种过滤器链。ExchangeFilterFunction 也是一个接口，其部分核心代码如下所示。</p>
+<pre class="lang-java" data-nodeid="187953"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">interface</span> <span class="hljs-title">ExchangeFilterFunction</span> </span>{
+&nbsp;
+<span class="hljs-function">Mono&lt;ClientResponse&gt; <span class="hljs-title">filter</span><span class="hljs-params">(ClientRequest request, ExchangeFunction next)</span></span>;
+&nbsp;
+<span class="hljs-function"><span class="hljs-keyword">default</span> ExchangeFilterFunction <span class="hljs-title">andThen</span><span class="hljs-params">(ExchangeFilterFunction after)</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Assert.notNull(after, <span class="hljs-string">"'after' must not be null"</span>);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> (request, next) -&gt; {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ExchangeFunction nextExchange = exchangeRequest -&gt; after.filter(exchangeRequest, next);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> filter(request, nextExchange);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; };
+&nbsp;&nbsp;&nbsp; }
+	&nbsp;
+<span class="hljs-function"><span class="hljs-keyword">default</span> ExchangeFunction <span class="hljs-title">apply</span><span class="hljs-params">(ExchangeFunction exchange)</span> </span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Assert.notNull(exchange, <span class="hljs-string">"'exchange' must not be null"</span>);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> request -&gt; <span class="hljs-keyword">this</span>.filter(request, exchange);
+	}
+	&nbsp;
+	…
+}
+</code></pre>
+<p data-nodeid="187954">显然，ExchangeFilterFunction 通过 andThen() 方法将自身添加到过滤器链并实现 filter() 这个函数式方法。我们可以使用过滤器函数以任何方式拦截和修改请求，例如通过修改 ClientRequest 来调用 ExchangeFilterFucntion 过滤器链中的下一个过滤器，或者让 ClientRequest 直接返回以阻止过滤器链的进一步执行。</p>
+<p data-nodeid="187955">作为示例，如下代码演示了如何使用过滤器功能添加 HTTP 基础认证机制。</p>
+<pre class="lang-java" data-nodeid="187956"><code data-language="java">WebClient client = WebClient.builder()
+  .filter(basicAuthentication(<span class="hljs-string">"username"</span>, <span class="hljs-string">"password"</span>))
+  .build();
+</code></pre>
+<p data-nodeid="187957">这样，基于客户端过滤机制，我们不需要在每个请求中添加 Authorization 消息头，过滤器将拦截每个 WebClient 请求并自动添加该消息头。再来看一个例子，我们将编写一个自定义的过滤器函数 logFilter()，代码如下所示。</p>
+<pre class="lang-java" data-nodeid="187958"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">private</span> ExchangeFilterFunction <span class="hljs-title">logFilter</span><span class="hljs-params">()</span> </span>{
+&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> (clientRequest, next) -&gt; {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; logger.info(<span class="hljs-string">"Request: {} {}"</span>, clientRequest.method(), clientRequest.url());
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; clientRequest.headers()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .forEach((name, values) -&gt; values.forEach(value -&gt; logger.info(<span class="hljs-string">"{}={}"</span>, name, value)));
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> next.exchange(clientRequest);
+&nbsp;&nbsp;&nbsp; };
+}
+</code></pre>
+<p data-nodeid="187959">显然，logFilter() 方法的作用是对每个请求做详细的日志记录。我们同样可以通过 filter() 方法把该过滤器添加到请求链路中，代码如下所示。</p>
+<pre class="lang-java" data-nodeid="187960"><code data-language="java">WebClient webClient = WebClient.builder()
+  .filter(logFilter())
+  .build();
+</code></pre>
+<h4 data-nodeid="187961">异常处理</h4>
+<p data-nodeid="187962">当发起一个请求所得到的响应状态码为 4XX 或 5XX 时，WebClient 就会抛出一个 WebClientResponseException 异常，我们可以使用 onStatus() 方法来自定义对异常的处理方式，示例代码如下所示。</p>
+<pre class="lang-java" data-nodeid="187963"><code data-language="java">public Flux&lt;Account&gt; listAccounts() {
+&nbsp;&nbsp;&nbsp; return webClient.get()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .uri("/accounts)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .retrieve()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .onStatus(HttpStatus::is4xxClientError, clientResponse -&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Mono.error(new MyCustomClientException())
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; )
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .onStatus(HttpStatus::is5xxServerError, clientResponse -&gt;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Mono.error(new MyCustomServerException())
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; )
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .bodyToFlux(Account.class);
+}
+</code></pre>
+<p data-nodeid="187964">这里我们构建了一个 MyCustomServerException 来返回自定义异常信息。需要注意的是，这种处理方式只适用于使用 retrieve() 方法进行远程请求的场景，exchange() 方法在获取 4XX 或 5XX 响应的情况下不会引发异常。因此，当使用 exchange() 方法时，我们需要自行检查状态码并以合适的方式处理它们。</p>
+<h3 data-nodeid="187965">案例集成：基于 WebClient 的非阻塞式跨服务通信</h3>
+<p data-nodeid="187966">介绍完 WebClient 类的使用方式之后，让我们回到 ReactiveSpringCSS 案例。在上一讲中，我已经给出了位于 customer-service 的 CustomerService 类中的 generateCustomerTicket 方法的代码结构，该方法用于完成与 account-service 和 order-service 进行集成，我们来回顾一下。</p>
+<pre class="lang-java" data-nodeid="187967"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">public</span> Mono&lt;CustomerTicket&gt; <span class="hljs-title">generateCustomerTicket</span><span class="hljs-params">(String accountId, String orderNumber)</span> </span>{
+&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-comment">// 创建 CustomerTicket 对象</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CustomerTicket customerTicket = <span class="hljs-keyword">new</span> CustomerTicket();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; customerTicket.setId(<span class="hljs-string">"C_"</span> + UUID.randomUUID().toString());
+&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-comment">// 从远程 account-service 获取 Account 对象</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Mono&lt;AccountMapper&gt; accountMapper = getRemoteAccountByAccountId(accountId);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-comment">// 从远程 order-service 中获取 Order 对象</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Mono&lt;OrderMapper&gt; orderMapper = getRemoteOrderByOrderNumber(orderNumber);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Mono&lt;CustomerTicket&gt; monoCustomerTicket = 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Mono.zip(accountMapper, orderMapper).flatMap(tuple -&gt; {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; AccountMapper account = tuple.getT1();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; OrderMapper order = tuple.getT2();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-comment">// 设置 CustomerTicket 对象属性</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; …
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> Mono.just(customerTicket);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; });
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-comment">// 保存 CustomerTicket 对象并返回</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> monoCustomerTicket.flatMap(customerTicketRepository::save);
+}
+</code></pre>
+<p data-nodeid="187968">另一方面，上一讲中我也给出了在 order-service 中基于函数式编程模型构建 Web 服务的实现过程。同样的，这里也以 getRemoteOrderByOrderNumber 方法为例来和你讨论如何完成与 Web 服务之间的远程调用。getRemoteOrderByOrderNumber 方法定义如下。</p>
+<pre class="lang-java" data-nodeid="187969"><code data-language="java"><span class="hljs-function"><span class="hljs-keyword">private</span> Mono&lt;OrderMapper&gt; <span class="hljs-title">getRemoteOrderByOrderNumber</span><span class="hljs-params">(String orderNumber)</span> </span>{
+&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> orderClient.getOrderByOrderNumber(orderNumber);
+}
+</code></pre>
+<p data-nodeid="187970">这里，我们会构建一个 ReactiveOrderClient 类来完成对 order-service 的远程访问，如下所示。</p>
+<pre class="lang-java" data-nodeid="187971"><code data-language="java"><span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">ReactiveOrderClient</span> </span>{ 
+&nbsp;&nbsp;&nbsp; 
+&nbsp;&nbsp;&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> Mono&lt;OrderMapper&gt; <span class="hljs-title">getOrderByOrderNumber</span><span class="hljs-params">(String orderNumber)</span> </span>{&nbsp;&nbsp;&nbsp;  &nbsp;&nbsp;&nbsp;&nbsp; 
+&nbsp;&nbsp;&nbsp;  Mono&lt;OrderMapper&gt; orderMono = WebClient.create()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .get()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .uri(<span class="hljs-string">"localhost:8081/orders/{orderNumber}"</span>, orderNumber)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .retrieve()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; .bodyToMono(OrderMapper.class).log("getOrderFromRemote");
+&nbsp;&nbsp;&nbsp;  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="hljs-keyword">return</span> orderMono;
+&nbsp;&nbsp;&nbsp; }
+}
+</code></pre>
+<p data-nodeid="189025" class="te-preview-highlight">你可以注意到，这里基于 WebClient.create() 工厂方法构建了一个 WebClient 对象，并通过它的 retrieve 方法来完成对远程 order-serivce 的请求过程。同时，我们看到这里的返回对象是一个 Mono<code data-backticks="1" data-nodeid="189027">&lt;OrderMapper&gt;</code>，而不是一个 Mono<code data-backticks="1" data-nodeid="189029">&lt;Order&gt;</code> 对象。事实上，它们的内部字段都是一一对应的，只是位于两个不同的代码工程中，所以故意从命名上做了区分。WebClient 会自动完成 OrderMapper 与 Order 之间的自动映射。</p>
+
+
+<h3 data-nodeid="187973">小结与预告</h3>
+<p data-nodeid="187974">在上一讲的基础上，这一讲我为你引入了 WebClient 模板类来完成对远程 HTTP 端点的响应式访问。WebClient 为开发人员提供了一大批有用的工具方法来实现 HTTP 请求的发送以及响应的获取。同时，该模板类还提供了一批定制化的入口供开发人员嵌入对 HTTP 请求过程进行精细化管理的处理逻辑。</p>
+<p data-nodeid="187975">这里给你留一道思考题：在使用 WebClient 时，如何实现对请求异常等控制逻辑的定制化处理？</p>
+<p data-nodeid="187976">关于远程调用，业界也存在一些协议，在网络通信层面提供非阻塞式的交互体验。RSocket 就是这一领域的主流实现，下一讲我将针对该协议和你一起展开讨论，到时候见。</p>
+<blockquote data-nodeid="187977">
+<p data-nodeid="187978">点击链接，获取课程相关代码↓↓↓<br>
+<a href="https://github.com/lagoueduCol/ReactiveProgramming-jianxiang.git?fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="188054">https://github.com/lagoueduCol/ReactiveProgramming-jianxiang.git</a></p>
+</blockquote></div>
+
+</body></html>

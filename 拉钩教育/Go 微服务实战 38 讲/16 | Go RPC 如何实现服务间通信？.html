@@ -1,0 +1,1049 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>16 | Go RPC 如何实现服务间通信？</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>16 | Go RPC 如何实现服务间通信？</h1><p data-nodeid="21688">在上一课时，我们讲解了 RPC 的相关概念和常见的 RPC 框架。其中， Go RPC 是指 Go 语言原生支持的 RPC 框架，它虽然简单但却十分经典，非常适合作为你后续深入了解 RPC 框架时的研究对象。</p>
+<p data-nodeid="21689">在本课时，我们将先通过一个字符串服务为案例简单讲解 Go RPC 是如何进行通信的，然后再具体剖析 Go RPC 的底层原理和实现，对以服务端注册服务、接收并处理客户端请求和客户端发起请求等步骤分别进行详细介绍，相信你学习后，一定会对 Go RPC 有更加全面的了解和认识。</p>
+<h3 data-nodeid="21690">Go 语言 RPC 过程调用实践</h3>
+<p data-nodeid="21691">Go 语言原生的 RPC 过程调用实现起来非常简单。服务端只需实现对外提供的远程过程方法和结构体，然后将其注册到 RPC 服务中，客户端就可以通过其服务名称和方法名称进行 RPC 方法调用。</p>
+<p data-nodeid="21692">本课时我们就使用字符串操作的服务来展示如何使用 Go 语言原生的 RPC 来进行过程调用。</p>
+<p data-nodeid="21693">第一步，定义远程过程调用相关接口传入参数和返回参数的数据结构。如下代码所示，调用字符串操作的请求包括两个参数：字符串 A 和字符串 B。</p>
+<pre class="lang-go" data-nodeid="21694"><code data-language="go"><span class="hljs-keyword">type</span> StringRequest <span class="hljs-keyword">struct</span> {
+  A <span class="hljs-keyword">string</span>
+  B <span class="hljs-keyword">string</span>
+}
+</code></pre>
+<p data-nodeid="21695">第二步，定义一个服务对象。这个服务对象可以很简单，比如类型是 int 或者是 interface{}，重要的是它输出的方法。这里我们定义一个字符串服务类型的 interface，其名称为 Service，它有一个字符串拼接函数 Concat；然后定义一个名为 StringService 的结构体，实现 Service 接口，并给出 Concat 具体实现。代码如下：</p>
+<pre class="lang-go" data-nodeid="21696"><code data-language="go"><span class="hljs-keyword">type</span> Service <span class="hljs-keyword">interface</span> {
+ <span class="hljs-comment">// Concat a and b</span>
+ Concat(req StringRequest, ret *<span class="hljs-keyword">string</span>) error
+}
+<span class="hljs-keyword">type</span> StringService <span class="hljs-keyword">struct</span> {
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(s StringService)</span> <span class="hljs-title">Concat</span><span class="hljs-params">(req StringRequest, ret *<span class="hljs-keyword">string</span>)</span> <span class="hljs-title">error</span></span> {
+ <span class="hljs-comment">// test for length overflow</span>
+ <span class="hljs-keyword">if</span> <span class="hljs-built_in">len</span>(req.A)+<span class="hljs-built_in">len</span>(req.B) &gt; StrMaxSize {
+   *ret = <span class="hljs-string">""</span>
+   <span class="hljs-keyword">return</span> ErrMaxSize
+ }
+ *ret = req.A + req.B
+ <span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>
+}
+</code></pre>
+<p data-nodeid="21697">第三步，实现 RPC 服务器。这里我们生成了一个 StringSevice 结构体，并使用 rpc.Register 注册这个服务，然后通过 net.Listen 监听对应 socket 并对外提供服务。客户端可以访问服务 StringService 以及它的方法 Concat，代码如下：</p>
+<pre class="lang-go" data-nodeid="21698"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span> {
+ stringService := <span class="hljs-built_in">new</span>(service.StringService)
+ rpc.Register(stringService)
+ rpc.HandleHTTP()
+ l, e := net.Listen(<span class="hljs-string">"tcp"</span>, <span class="hljs-string">"127.0.0.1:1234"</span>)
+ <span class="hljs-keyword">if</span> e != <span class="hljs-literal">nil</span> {
+   log.Fatal(<span class="hljs-string">"listen error:"</span>, e)
+ }
+ http.Serve(l, <span class="hljs-literal">nil</span>)
+}
+</code></pre>
+<p data-nodeid="21699">第四步，建立 HTTP 客户端，然后通过 Call 方法调用远程 StringService 的对应方法，比如使用同步的方式，代码如下所示。这时客户端就可以进行远程调用了。</p>
+<pre class="lang-go" data-nodeid="21700"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span> {
+ client, err := rpc.DialHTTP(<span class="hljs-string">"tcp"</span>, <span class="hljs-string">"127.0.0.1:1234"</span>)
+ <span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> {
+   log.Fatal(<span class="hljs-string">"dialing:"</span>, err)
+ }
+ stringReq := &amp;service.StringRequest{<span class="hljs-string">"A"</span>, <span class="hljs-string">"B"</span>}
+ <span class="hljs-keyword">var</span> reply <span class="hljs-keyword">string</span>
+ err = client.Call(<span class="hljs-string">"StringService.Concat"</span>, stringReq, &amp;reply)
+ <span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> {
+   log.Fatal(<span class="hljs-string">"Concat error:"</span>, err)
+ }
+ <span class="hljs-comment">// 异步的调用方式 </span>
+ call := client.Call(<span class="hljs-string">"StringService.Concat"</span>, stringReq, &amp;reply)
+ _ := &lt;-call.Done
+}
+</code></pre>
+<p data-nodeid="21701">通过上述代码的编写就可以实现两个 Go 服务之间的 RPC 调用了。那 Go RPC 又是如何实现的呢？</p>
+<h3 data-nodeid="21702">Go RPC 原理解析</h3>
+<p data-nodeid="21703">接下来我们将对 Go 语言的 RPC 原生实现进行源码分析，细致讲解其具体实现和原理。首先我们会对 RPC 的服务（Server）端代码进行分析，包括注册服务、反射处理和存根保存，然后讲解服务端处理 RPC 请求的流程，最后讲解客户（Client）端的 RPC 请求处理。</p>
+<h4 data-nodeid="24272" class="">1. Go RPC 服务端原理</h4>
+
+<p data-nodeid="21707">服务端的 RPC 代码主要分为两个部分：①服务方法注册，包括调用注册接口，通过反射处理将方法取出，并存到 map 中；②处理网络调用，主要是监听端口、读取数据包、解码请求和调用反射处理后的方法，将返回值编码，返回给客户端。</p>
+<p data-nodeid="22362">在上面的示例代码中，我们使用 rpc.Register 对 StringService 进行了注册，Register 是进行 RPC 服务注册的入口方法，其参数 interface{} 类型的 rcvr 就是要注册的 RPC 服务类型，该注册过程的流程如下图所示。</p>
+<p data-nodeid="24538"><img src="https://s0.lgstatic.com/i/image/M00/44/E9/CgqCHl8_if-AUnxAAAAfdOrTNHw006.png" alt="Drawing 0.png" data-nodeid="24542"></p>
+<div data-nodeid="25851" class=""><p style="text-align:center">服务端注册 RPC 服务示意图</p></div>
+
+
+
+
+
+
+<p data-nodeid="21711">Register 方法中通过反射获取接口类型和值，并通过 suitableMethods 函数判断注册的 RPC 是否符合规范，最后调用 serviceMap 的 LoadOrStore(sname, s) 方法将对应 RPC 存根存放于 map 中，供之后查找。</p>
+<pre class="lang-go" data-nodeid="21712"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(server *Server)</span> <span class="hljs-title">register</span><span class="hljs-params">(rcvr <span class="hljs-keyword">interface</span>{}, name <span class="hljs-keyword">string</span>, useName <span class="hljs-keyword">bool</span>)</span> <span class="hljs-title">error</span></span> {
+  <span class="hljs-comment">// 如果服务为空，默认注册一个 </span>
+  <span class="hljs-keyword">if</span> server.serviceMap == <span class="hljs-literal">nil</span> { 
+    server.serviceMap = <span class="hljs-built_in">make</span>(<span class="hljs-keyword">map</span>[<span class="hljs-keyword">string</span>]*service) 
+  }
+  <span class="hljs-comment">// 获取注册服务的反射信息 </span>
+  s := <span class="hljs-built_in">new</span>(service) 
+  s.typ = reflect.TypeOf(rcvr) 
+  s.rcvr = reflect.ValueOf(rcvr) 
+  <span class="hljs-comment">// 可以使用自定义名称 </span>
+  sname := reflect.Indirect(s.rcvr).Type().Name() 
+  <span class="hljs-keyword">if</span> useName { 
+    sname = name 
+  } 
+  <span class="hljs-comment">// 方法必须是暴露的，既服务名首字符大写；不允许重复注册。代码有省略</span>
+  <span class="hljs-keyword">if</span> !isExported(sname) &amp;&amp; !useName { 
+  }   
+  <span class="hljs-keyword">if</span> _, present := server.serviceMap[sname]; present { 
+  } 
+  
+  s.name = sname 
+  <span class="hljs-comment">// 开始注册 rpc struct 内部的方法存根 </span>
+  s.method = suitableMethods(s.typ, <span class="hljs-literal">true</span>) 
+  <span class="hljs-keyword">if</span> <span class="hljs-built_in">len</span>(s.method) == <span class="hljs-number">0</span> { 
+     <span class="hljs-comment">// 如果struct内部一个方法也没，那么直接报错，打印详细的错误信息</span>
+  }
+  <span class="hljs-comment">// 保存在server的serviceMap中 </span>
+  server.serviceMap[s.name] = s 
+  <span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span> 
+} 
+</code></pre>
+<p data-nodeid="22908">接下来，我们来看一下服务端处理 RPC 请求的实现。如下图就展示了服务端 RPC 程序处理请求的过程，它会一直循环处理接收到的客户端 RPC 请求，将其交由 ReadRequestHandler 处理，然后从之前 Register 方法保存的 map 中获取到要调用的对应方法；接着从请求中解码出对应的参数，使用反射调用其方法，获取到结果后将结果编码成响应消息返回给客户端。</p>
+<p data-nodeid="24805"><img src="https://s0.lgstatic.com/i/image/M00/44/EA/CgqCHl8_igqAG76TAABYy-4KsGk165.png" alt="Drawing 1.png" data-nodeid="24809"></p>
+<div data-nodeid="25592" class=""><p style="text-align:center">RPC 服务端处理流程示意图</p></div>
+
+
+
+
+
+
+<p data-nodeid="21716">下面，我们来看一下服务端接收并处理 RPC 请求的具体代码实现。</p>
+<p data-nodeid="21717"><strong data-nodeid="21782">（1）接收请求</strong></p>
+<p data-nodeid="21718">Server 的 Accept 函数会无限循环地调用 net.Listener 的 Accept 函数来获取客户端建立连接的请求，获取到连接请求后，再使用协程来处理请求。代码如下：</p>
+<pre class="lang-go" data-nodeid="21719"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(server *Server)</span> <span class="hljs-title">Accept</span><span class="hljs-params">(lis net.Listener)</span></span> { 
+  <span class="hljs-keyword">for</span> { 
+    conn, err := lis.Accept() 
+    <span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> { 
+      log.Fatal(<span class="hljs-string">"rpc.Serve: accept:"</span>, err.Error())
+    }
+    <span class="hljs-comment">// accept连接以后，打开一个goroutine处理请求 </span>
+    <span class="hljs-keyword">go</span> server.ServeConn(conn) 
+  } 
+} 
+</code></pre>
+<p data-nodeid="21720"><strong data-nodeid="21787">（2）读取并解析请求</strong></p>
+<p data-nodeid="21721">ServeConn 函数会从建立的连接中读取数据，然后创建一个 gobServerCodec，并将其交由 Server 的 ServeCodec 函数处理，如下所示：</p>
+<pre class="lang-go" data-nodeid="21722"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(server *Server)</span> <span class="hljs-title">ServeConn</span><span class="hljs-params">(conn io.ReadWriteCloser)</span></span> { 
+  buf := bufio.NewWriter(conn) 
+  srv := &amp;gobServerCodec{ 
+    rwc:  conn, 
+    dec:  gob.NewDecoder(conn), 
+    enc:  gob.NewEncoder(buf), 
+    encBuf: buf, 
+  } 
+  <span class="hljs-comment">// 根据指定的codec进行协议解析 </span>
+  server.ServeCodec(srv) 
+} 
+</code></pre>
+<p data-nodeid="21723">ServeCodec 函数会循环地调用 readRequest 函数，读取网络连接上的字节流，解析出请求，然后开启协程执行 Server 的 call 函数，处理对应的 RPC 调用。</p>
+<pre class="lang-go" data-nodeid="21724"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(server *Server)</span> <span class="hljs-title">ServeCodec</span><span class="hljs-params">(codec ServerCodec)</span></span> { 
+  sending := <span class="hljs-built_in">new</span>(sync.Mutex) 
+  <span class="hljs-keyword">for</span> { 
+    <span class="hljs-comment">// 解析请求 </span>
+    service, mtype, req, argv, replyv, keepReading, err := server.readRequest (codec)
+    <span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> { 
+      <span class="hljs-keyword">if</span> debugLog &amp;&amp; err != io.EOF { 
+        log.Println(<span class="hljs-string">"rpc:"</span>, err) 
+      } 
+      <span class="hljs-keyword">if</span> !keepReading { 
+        <span class="hljs-keyword">break</span> 
+      } 
+      <span class="hljs-comment">// send a response if we actually managed to read a header. </span>
+      <span class="hljs-comment">// 如果当前请求错误了，我们应该返回信息，然后继续处理 </span>
+      <span class="hljs-keyword">if</span> req != <span class="hljs-literal">nil</span> { 
+        server.sendResponse(sending, req, invalidRequest, codec, err.Error())
+        server.freeRequest(req) 
+      } 
+      <span class="hljs-keyword">continue</span> 
+    } 
+    <span class="hljs-comment">// 因为需要继续处理后续请求，所以开一个gorutine处理rpc方法 </span>
+    <span class="hljs-keyword">go</span> service.call(server, sending, mtype, req, argv, replyv, codec) 
+  }
+  <span class="hljs-comment">// 如果连接关闭了需要释放资源 </span>
+  codec.Close() 
+} 
+
+</code></pre>
+<p data-nodeid="21725"><strong data-nodeid="21793">（3）执行远程方法并返回响应</strong></p>
+<p data-nodeid="21726">Server 的 call 函数就是通过 Func.Call 反射调用对应 RPC 过程的方法，它还会调用 send Response 将返回值发送给 RPC 客户端，代码如下：</p>
+<pre class="lang-go" data-nodeid="21727"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(s *service)</span> <span class="hljs-title">call</span><span class="hljs-params">(server *Server, sending *sync.Mutex, mtype *methodType, req *Request, argv, replyv reflect.Value, codec ServerCodec)</span></span> {
+  function := mtype.method.Func 
+  <span class="hljs-comment">// 这里是真正调用rpc方法的地方 </span>
+  returnValues := function.Call([]reflect.Value{s.rcvr, argv, replyv}) 
+  errInter := returnValues[<span class="hljs-number">0</span>].Interface() 
+  errmsg := <span class="hljs-string">""</span> 
+  <span class="hljs-comment">// 处理返回请求了 </span>
+  server.sendResponse(sending, req, replyv.Interface(), codec, errmsg) 
+  server.freeRequest(req) 
+} 
+</code></pre>
+<h4 data-nodeid="23464" class="">2. 客户端发送 RPC 请求原理</h4>
+
+
+<p data-nodeid="23996">无论是同步调用还是异步调用，每次 RPC 请求都会生成一个 Call 对象，并使用 seq 作为 key 保存在 map 中，服务端返回响应值时再根据响应值中的 seq 从 map 中取出 Call，进行相应处理。客户端发起 RPC 调用的过程大致如下图所示。</p>
+<p data-nodeid="25070"><img src="https://s0.lgstatic.com/i/image/M00/44/EA/CgqCHl8_iiGAdkeMAABxSJbVfuw198.png" alt="Drawing 2.png" data-nodeid="25074"></p>
+<div data-nodeid="25333" class=""><p style="text-align:center">客户端发送和接收请求流程示意图</p></div>
+
+
+
+
+
+
+<p data-nodeid="21734">下面我们将依次讲解同步调用和异步调用、请求参数编码和接收服务器响应三个部分的具体实现。</p>
+<p data-nodeid="21735"><strong data-nodeid="21805">（1）同步调用和异步调用</strong></p>
+<p data-nodeid="21736">本课时的案例展示了 Go 原生 RPC 的客户端支持同步和异步两种调用，下面我们来介绍一下这两种调用的函数以及调用的数据结构。</p>
+<pre class="lang-go" data-nodeid="21737"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(client *Client)</span> <span class="hljs-title">Call</span><span class="hljs-params">(serviceMethod <span class="hljs-keyword">string</span>, args <span class="hljs-keyword">interface</span>{}, reply <span class="hljs-keyword">interface</span>{})</span> <span class="hljs-title">error</span></span> {
+ call := &lt;-client.Go(serviceMethod, args, reply, <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> *Call, <span class="hljs-number">1</span>)).Done
+ <span class="hljs-keyword">return</span> call.Error
+}
+</code></pre>
+<p data-nodeid="21738">Call 方法直接调用了 Go 方法，而 Go 方法则是先创建并初始化了 Call 对象，记录下此次调用的方法、参数和返回值，并生成 DoneChannel；然后调用 Client 的 send 方法进行真正的请求发送处理，代码如下：</p>
+<pre class="lang-go" data-nodeid="21739"><code data-language="go"><span class="hljs-comment">// 异步调用实现</span>
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(client *Client)</span> <span class="hljs-title">Go</span><span class="hljs-params">(serviceMethod <span class="hljs-keyword">string</span>, args <span class="hljs-keyword">interface</span>{}, reply <span class="hljs-keyword">interface</span>{}, done <span class="hljs-keyword">chan</span> *Call)</span> *<span class="hljs-title">Call</span></span> {
+ <span class="hljs-comment">// 初始化 Call </span>
+ call := <span class="hljs-built_in">new</span>(Call)
+ call.ServiceMethod = serviceMethod
+ call.Args = args
+ call.Reply = reply
+ <span class="hljs-keyword">if</span> done == <span class="hljs-literal">nil</span> {
+   done = <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> *Call, <span class="hljs-number">10</span>) <span class="hljs-comment">// buffered.</span>
+ } <span class="hljs-keyword">else</span> {
+   <span class="hljs-keyword">if</span> <span class="hljs-built_in">cap</span>(done) == <span class="hljs-number">0</span> {
+     log.Panic(<span class="hljs-string">"rpc: done channel is unbuffered"</span>)
+   }
+ }
+ call.Done = done
+  <span class="hljs-comment">// 调用 Client 的 send 方法</span>
+ client.send(call)
+ <span class="hljs-keyword">return</span> call
+}
+<span class="hljs-keyword">type</span> Call <span class="hljs-keyword">struct</span> {
+  ServiceMethod <span class="hljs-keyword">string</span>   <span class="hljs-comment">// 服务名及方法名 格式:服务.方法</span>
+  Args     <span class="hljs-keyword">interface</span>{} <span class="hljs-comment">// 函数的请求参数 (*struct).</span>
+  Reply     <span class="hljs-keyword">interface</span>{} <span class="hljs-comment">// 函数的响应参数 (*struct).</span>
+  Error     error    <span class="hljs-comment">// 方法完成后 error的状态.</span>
+  Done     <span class="hljs-keyword">chan</span> *Call <span class="hljs-comment">// </span>
+}
+</code></pre>
+<p data-nodeid="21740"><strong data-nodeid="21811">（2）请求参数编码</strong></p>
+<p data-nodeid="21741">Client 的 send 函数首先会判断客户端实例的状态，如果处于关闭状态，则直接返回结果；否则会生成唯一的 seq 值，将 Call 保存到客户端的哈希表 pending 中，然后调用客户端编码器的WriteRequest 来编码请求并发送，代码如下：</p>
+<pre class="lang-go" data-nodeid="21742"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(client *Client)</span> <span class="hljs-title">send</span><span class="hljs-params">(call *Call)</span></span> {
+  <span class="hljs-comment">// ....</span>
+  <span class="hljs-comment">//生成seq,每次调用均生成唯一的seq,在服务端返回结果后会通过该值进行匹配</span>
+  seq := client.seq
+  client.seq++
+  client.pending[seq] = call
+  client.mutex.Unlock()
+ 
+  <span class="hljs-comment">// 请求并发送请求</span>
+  client.request.Seq = seq
+  client.request.ServiceMethod = call.ServiceMethod
+  err := client.codec.WriteRequest(&amp;client.request, call.Args)
+  <span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> {
+    <span class="hljs-comment">//发送请求错误时,将map中call对象删除.</span>
+    client.mutex.Lock()
+    call = client.pending[seq]
+    <span class="hljs-built_in">delete</span>(client.pending, seq)
+    client.mutex.Unlock()
+  }
+}
+</code></pre>
+<p data-nodeid="21743"><strong data-nodeid="21816">（3）接收返回值</strong></p>
+<p data-nodeid="21744">接下来我们来看一下客户端是如何接收并处理服务端返回值的。客户端的 input 函数接收服务端返回的响应值，它进行无限 for 循环，不断调用 codec 也就是 gobClientCodecd 的 ReadResponseHeader 函数，然后根据其返回数据中的 seq 来判断是否是本客户端发出请求的响应值。如果是，则获取对应的 Call 对象，并将其从 pending 哈希表中删除，继续调用 codec 的 ReadReponseBody 方法获取返回值 Reply 对象，并调用 Call 对象的 done 方法，代码如下：</p>
+<pre class="lang-go" data-nodeid="21745"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(client *Client)</span> <span class="hljs-title">input</span><span class="hljs-params">()</span></span> {
+  <span class="hljs-keyword">var</span> err error
+  <span class="hljs-keyword">var</span> response Response
+  <span class="hljs-keyword">for</span> err == <span class="hljs-literal">nil</span> {
+    response = Response{}
+    <span class="hljs-comment">//通过response中的 Seq获取call对象</span>
+    seq := response.Seq
+    client.mutex.Lock()
+    call := client.pending[seq]
+    <span class="hljs-built_in">delete</span>(client.pending, seq)
+    client.mutex.Unlock()
+ 
+    <span class="hljs-keyword">switch</span> {
+    <span class="hljs-keyword">case</span> call == <span class="hljs-literal">nil</span>:
+    <span class="hljs-keyword">case</span> response.Error != <span class="hljs-string">""</span>:
+      <span class="hljs-comment">//上述两个case，一个处理call为nil，另外处理服务端返回的错误,直接将错误返回</span>
+    <span class="hljs-keyword">default</span>:
+      <span class="hljs-comment">//通过编码器,将Resonse的body部分解码成reply对象.</span>
+      err = client.codec.ReadResponseBody(call.Reply)
+      <span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> {
+        call.Error = errors.New(<span class="hljs-string">"reading body "</span> + err.Error())
+      }
+      call.done()
+    }
+  }
+}
+</code></pre>
+<p data-nodeid="21746">上述代码中，gobClientCodecd 的 ReadResponseHeader、ReadReponseBody 方法和上文中的 WriteRequest 类似，这里不做赘述。Call 对象的 done 方法则通过 Call 的 DoneChannel，将获得返回值的结果通知到调用层，代码如下：</p>
+<pre class="lang-go" data-nodeid="21747"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(call *Call)</span> <span class="hljs-title">done</span><span class="hljs-params">()</span></span> {
+ <span class="hljs-keyword">select</span> {
+ <span class="hljs-keyword">case</span> call.Done &lt;- call:
+   <span class="hljs-comment">// ok</span>
+ <span class="hljs-keyword">default</span>:
+   <span class="hljs-keyword">if</span> debugLog {
+     log.Println(<span class="hljs-string">"rpc: discarding Call reply due to insufficient Done chan capacity"</span>)
+   }
+ }
+}
+</code></pre>
+<p data-nodeid="21748">客户端接收到 RPC 请求的响应后会进行其他业务逻辑操作，RPC 框架则会对进行 RPC 请求所需要的资源进行回收，下次进行 RPC 请求时则需要再次建立相应的结构体并获取对应的资源。</p>
+<h3 data-nodeid="21749">小结</h3>
+<p data-nodeid="21750">Go 语言原生 RPC 算是个基础版本的 RPC 框架，代码精简，可扩展性高，但是只实现了 RPC 最基本的网络通信，而超时熔断、链接管理（保活与重连）、服务注册发现等功能还是欠缺的。因此还是达不到生产环境“开箱即用”的水准，不过 GitHub 就有一个基于 RPC 的功能增强版本——rpcx，支持了大部分主流 RPC 的特性。</p>
+<p data-nodeid="21751">虽然目前官方已经宣布不再添加新功能，并推荐使用 gRPC，但是作为 Go 标准库中的 RPC 框架，还是有很多地方值得我们借鉴和学习，比如注册服务时如何保存反射信息等。本课时我们从源码角度分析了 Go 语言原生 RPC 框架，希望能给你带来对 RPC 框架的整体认知。</p>
+<p data-nodeid="21752">如果 Go 官方团队准备为 Go RPC 添加新功能，那么你最希望添加哪一项目前尚未支持的功能呢？欢迎你在留言区分享你的想法。</p></div>
+
+</body></html>

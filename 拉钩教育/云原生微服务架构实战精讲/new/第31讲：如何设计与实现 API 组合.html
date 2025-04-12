@@ -1,0 +1,1302 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第31讲：如何设计与实现 API 组合</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>第31讲：如何设计与实现 API 组合</h1><p data-nodeid="33125">从现在开始，我们将进入到 API 组合这一模块，该模块分为 3 个课时，分别介绍 API 组合的相关概念和具体的实现技术。而此次课时主要介绍 API 组合的设计与实现。</p>
+<p data-nodeid="33126">在介绍 API 组合之前，首先介绍一下 API 网关（Gateway）。</p>
+<h3 data-nodeid="33127">API 网关</h3>
+<p data-nodeid="33128">这里先区分一下外部 API 和内部 API。外部 API 是提供给 Web 应用、移动客户端和第三方客户端来调用的；而内部 API 是提供给其他微服务来调用的。</p>
+<p data-nodeid="34848" class="">如果把微服务架构的后台当成一个黑盒子，那么外部 API 就是外部用户与这个黑盒子交互的方式，<strong data-nodeid="34854">这两者之间交互的桥梁，就是 API 网关</strong>。所有外部的 API 访问请求，都需要通过这个网关进入到后台。</p>
+
+<p data-nodeid="35759">下图给出了 API 网关的示意图，其本质上是一个<strong data-nodeid="35766">反向代理</strong>（Reverse Proxy）。</p>
+<p data-nodeid="35760" class=""><img src="https://s0.lgstatic.com/i/image/M00/2A/6C/CgqCHl78UQWAQJu1AABh3O-rYrk883.png" alt="image (2).png" data-nodeid="35773"></p>
+
+
+
+<p data-nodeid="33133">作为外部访问请求的唯一入口，API 网关所能提供的功能非常丰富，具体如下。</p>
+<p data-nodeid="33134">API 网关负责把外部的访问请求路由到具体的服务，在进行路由时，通常根据访问请求的路径、查询参数和 HTTP 头来确定。</p>
+<p data-nodeid="33135">比如，可以把路径以 /trip/ 开头的请求路由到行程管理服务，而把以 /passenger/ 开头的请求路由到乘客管理服务。而当服务支持多个版本同时运行时，请求路由的逻辑会更加复杂一些，比如路径前缀 /trip/v1/ 和 /trip/v2/ 的请求分别路由到不同版本的行程管理服务。API 网关的路由通过静态或动态的方式进行配置，有些 API 网关支持通过开放 API 在运行时动态修改路由配置。</p>
+<p data-nodeid="36234" class=""><strong data-nodeid="36239">API 组合</strong>把来自不同服务的数据组合在一起，形成新的组合 API，这也是本模块需要介绍的内容。如果把不同服务 API 所提供的数据当成是数据库的表格，那么 API 组合就是表之间的连接操作。在组合 API 时，可以对 API 返回的结果进行投影、转换和充实。</p>
+
+<ul data-nodeid="33137">
+<li data-nodeid="33138">
+<p data-nodeid="33139"><strong data-nodeid="33272">边界功能</strong>用来在接收到请求之后，在请求发送给后台服务之前，对请求进行处理。边界功能通常满足应用的一些横切需要，包括身份认证、授权管理、请求速率限制、缓存、性能指标数据收集、请求日志等。由于 API 网关实现了这些功能，可以简化后台服务的开发，这也是大部分 API 网关产品的卖点所在。</p>
+</li>
+<li data-nodeid="33140">
+<p data-nodeid="33141"><strong data-nodeid="33277">协议翻译</strong>指的是把外部 API 的协议转换成内部服务之间使用的协议。外部 API 为了兼容性，一般使用 REST API 作为协议，而应用内部的服务之间，出于性能的考虑，可能使用 gRPC，甚至是私有的协议。API 网关负责在两种 API 协议之间进行转换。</p>
+</li>
+</ul>
+<p data-nodeid="33142">由于 API 网关的重要性，云平台通常都提供了相关的服务。除此之外，还有很多开源和商用的产品，比较流行的产品包括 WSO2、Netflix Zuul、Spring Cloud Gateway、Kong 和 SwaggerHub 等。</p>
+<p data-nodeid="33143">从上述说明中可以看到，API 组合也属于 API 网关的一种功能。只不过 API 组合与应用的逻辑紧密相关，无法通过简单的配置来实现，一般需要编写代码或脚本来完成。</p>
+<h3 data-nodeid="33144">API 组合</h3>
+<p data-nodeid="33145">在微服务架构的应用中，应用的功能被分散到多个微服务中。来自一个微服务的 API 并不能满足外部使用者的需求，因为一个微服务只能提供部分数据。比如，示例应用中的乘客管理界面需要使用来自乘客管理服务、地址管理服务、行程管理服务和行程派发服务的数据。因此，需要一种方式来提供给使用者所需要的全部数据。</p>
+<p data-nodeid="33146">第一种做法是由客户端根据需要来直接调用不同微服务的 API，这种做法在客户端和微服务之间建立了紧密的耦合关系，增加了客户端使用 API 的难度。当展示一个页面时，可能需要调用多次 API，相应的性能也会比较差。</p>
+<p data-nodeid="33147">另外一种做法是使用第 22 课时介绍的 CQRS 技术，针对客户端的不同需求，创建相应的查询服务，这种做法可以避免多次 API 调用的性能问题。不过 CQRS 技术使用的范围较窄，技术的门槛较高，在实践中的应用也比较少。</p>
+<p data-nodeid="33148">相比前两种做法，更好的做法是使用 API 组合，在应用内部创建进行 API 组合的服务。对客户端发送的 API 请求，该组合服务调用后台的多个微服务的 API，并把得到的数据进行整合，再返回给客户端。API 组合的好处是对微服务 API 的调用发生在系统内部，调用的延迟很小，也免去了客户端的多次调用。</p>
+<h3 data-nodeid="33149">Backend For Frontend 模式</h3>
+<p data-nodeid="33150">当应用所要支持的客户端种类变多时，使用单一的通用 API 变得不再适用，这是由于不同客户端的差异性造成的。</p>
+<p data-nodeid="33151">桌面客户端的屏幕大、一般使用的是高速的 ADSL 或光纤网络；移动客户端屏幕小、网络速度较慢，而且对电池消耗有要求。</p>
+<p data-nodeid="33152">这就意味着在移动客户端上需要严格控制 API 请求的数量和响应的大小。移动客户端上的用户体验也与 Web 界面有很大差异，满足用户界面需求的 API 也相应地存在很大不同。如果使用单一的 API 为这两类客户端服务，那么这些差异性会使得 API 的维护成本变高。</p>
+<p data-nodeid="36692" class=""><strong data-nodeid="36697">Backend For Frontend 模式</strong>指的是为每一种类型的前端创建其独有的后端 API。这个 API 专门为前端设计，完全满足其需求，通常由该前端的团队来维护。</p>
+
+<p data-nodeid="37570">下图是 Backend For Frontend 模式的示意图，其中移动客户端和桌面客户端使用专门为它们设计的 API，这些 API 使用同样的后台服务作为数据来源。</p>
+<p data-nodeid="38478"><img src="https://s0.lgstatic.com/i/image/M00/2A/6C/CgqCHl78US2AJni8AABsasYH0J8660.png" alt="image (3).png" data-nodeid="38486"></p>
+
+
+
+
+
+
+
+
+<p data-nodeid="33158">在微服务架构的应用中，这种模式实际上更加适用，因为微服务已经把系统的功能进行了划分，在实现前端需要的 API 时，只需要把微服务的 API 进行整合即可，同时也对前端屏蔽了后端 API 的细节。</p>
+<h3 data-nodeid="33159">API 组合的实现</h3>
+<p data-nodeid="33160">API 组合有很多种不同的实现方式，最简单的做法是基于已有的工具进行配置，复杂的实现则需要自己编写代码开发。</p>
+<p data-nodeid="33161">本课时介绍的是为管理乘客的 Web 界面创建的 API 组合，完整的实现请参考示例应用源代码中的 happyride-passenger-web-api 模块。</p>
+<p data-nodeid="33162">乘客管理 Web 界面在管理乘客时，需要用到乘客的地址信息，地址管理服务负责对地址进行统一管理，提供了地址的搜索和查询 API，地址管理服务对应的聚合的根实体是地址对象。在乘客管理服务中，表示用户地址的 UserAddress 对象只包含了地址对象的标识符，并没有包含其他信息。这就意味着当乘客查看或编辑地址时，对应的 API 需要调用地址管理服务的 API 来获取地址的详细数据。</p>
+<p data-nodeid="33163">Web 界面需要的这个 API 负责返回乘客的所有相关信息，包括每个地址的详细信息。而对于地址搜索和查询相关的请求，则直接转发给内部的地址管理服务。</p>
+<p data-nodeid="33164">示例应用使用 Spring Cloud Gateway 来实现该 API 组合。</p>
+<h4 data-nodeid="33165">1. Spring Cloud Gateway</h4>
+<p data-nodeid="33166">Spring Cloud Gateway 是 Spring 框架提供的 API 网关的实现，基于 Spring Boot 2、Spring WebFlux 和 Project Reactor。在使用 Spring Cloud Gateway 之前，需要对反应式编程的概念有基本的了解。</p>
+<p data-nodeid="33167"><strong data-nodeid="33319">反应式编程</strong>是一套完整的编程体系，既有其指导思想，又有相应地框架和库的支持，并且在生产环境中有大量实际的应用。Java 9 中把反应式流规范以 java.util.concurrent.Flow 类的方式添加到了 Java 标准库中，Spring 5 对反应式编程模型提供了支持，尤其是反应式 Web 应用开发使用的 WebFlux，Spring 5 默认的反应式框架是 Reactor。</p>
+<p data-nodeid="33168">Reactor 是一个完全基于反应式流规范的库，两个最核心的类是 Flux 和 Mono，用来表示流：</p>
+<ul data-nodeid="33169">
+<li data-nodeid="33170">
+<p data-nodeid="33171">Flux 表示包含 0 到无限个元素的流；</p>
+</li>
+<li data-nodeid="33172">
+<p data-nodeid="33173">Mono 则表示最多一个元素的流。</p>
+</li>
+</ul>
+<p data-nodeid="33174">Flux 和 Mono 的强大之处来源于各种不同的操作符，可以对流中的元素进行不同的处理。</p>
+<p data-nodeid="33175">Spring Cloud Gateway 中有 3 个基本的概念，分别是路由、断言和过滤器。</p>
+<ul data-nodeid="33176">
+<li data-nodeid="33177">
+<p data-nodeid="33178"><strong data-nodeid="33329">路由</strong>是网关的基本组成部分，由标识符、目的地 URI、断言的集合和过滤器的集合组成。</p>
+</li>
+<li data-nodeid="33179">
+<p data-nodeid="33180"><strong data-nodeid="33334">断言</strong>用来判断是否匹配 HTTP 请求，本质上是一个 Java 中的 Predicate 接口的对象，进行判断时的输入类型是 Spring 的 ServerWebExchange 对象。</p>
+</li>
+<li data-nodeid="33181">
+<p data-nodeid="33182"><strong data-nodeid="33339">过滤器</strong>用来对 HTTP 请求和响应进行处理，它们都是 GatewayFilter 接口的对象，多个过滤器串联在一起，组成过滤器链。前一个过滤器的输出作为下一个过滤器的输入，这一点与 Servlet 规范中的过滤器是相似的。</p>
+</li>
+</ul>
+<p data-nodeid="33183">当客户端的请求发送到网关时，网关会通过路由的断言来判断该请求是否与某个路由相匹配。如果找到了对应的路由，请求会由该路由的过滤器链来处理，过滤器既可以在请求发送到目标服务之前进行处理，也可以对目标服务返回的响应进行处理。</p>
+<p data-nodeid="33184">Spring Cloud Gateway 提供了两种方式来配置路由，一种方式是通过配置来声明，另一种是通过代码来完成。</p>
+<p data-nodeid="33185">Spring Cloud Gateway 提供了大量内置的断言和过滤器的工厂实现。以断言来说，可以通过 HTTP 请求的头、方法、路径、查询参数、Cookie 和主机名等来进行匹配；以过滤器来说，内置的过滤器工厂可以对 HTTP 请求的头、路径、查询参数和内容进行修改，也可以对 HTTP 响应的状态码、头和内容进行修改，还可以添加请求速率限制、自动重试和断路器等功能。</p>
+<h4 data-nodeid="33186">2. 具体实现</h4>
+<p data-nodeid="33187">对于本课时要实现的 API 组合来说，地址相关的 API 只需要转发给地址管理服务即可，这可以通过 Spring Cloud Gateway 的配置来完成。下表是 API 组合所提供的功能。</p>
+<table data-nodeid="33189">
+<thead data-nodeid="33190">
+<tr data-nodeid="33191">
+<th data-org-content="**API 路径**" data-nodeid="33193"><strong data-nodeid="33348">API 路径</strong></th>
+<th data-org-content="**说明**" data-nodeid="33194"><strong data-nodeid="33352">说明</strong></th>
+</tr>
+</thead>
+<tbody data-nodeid="33197">
+<tr data-nodeid="33198">
+<td data-org-content="/address/**" data-nodeid="33199">/address/**</td>
+<td data-org-content="转发给地址管理服务" data-nodeid="33200">转发给地址管理服务</td>
+</tr>
+<tr data-nodeid="33201">
+<td data-org-content="/passenger/{passengerId}" data-nodeid="33202">/passenger/{passengerId}</td>
+<td data-org-content="获取乘客的详细信息，组合来自乘客管理服务和地址管理服务的数据" data-nodeid="33203">获取乘客的详细信息，组合来自乘客管理服务和地址管理服务的数据</td>
+</tr>
+</tbody>
+</table>
+<p data-nodeid="33204">在下面的配置中，标识符为 address_service 的路由的目的地 URI 由配置项 destination.address 来确定，使用的断言是 Path 类型，也就是根据请求的路径来判断，即以 /address 开头的全部请求。使用的过滤器是 StripPrefix，也就是去掉 URI 的路径中的一些前缀。在使用这个过滤器之后，路径 /address/search 会被替换为 /search，与地址管理服务的 API 路径相匹配。</p>
+<pre class="lang-yaml hljs" data-nodeid="33205"><code data-language="yaml"><span class="hljs-attr">spring:</span>
+&nbsp; <span class="hljs-attr">cloud:</span>
+&nbsp; &nbsp; <span class="hljs-attr">gateway:</span>
+&nbsp; &nbsp; &nbsp; <span class="hljs-attr">routes:</span>
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-bullet">-</span> <span class="hljs-attr">id:</span> <span class="hljs-string">address_service</span>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-attr">uri:</span> <span class="hljs-string">\${destination.address}</span>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-attr">predicates:</span>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-bullet">-</span> <span class="hljs-string">Path=/address/**</span>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-attr">filters:</span>
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-bullet">-</span> <span class="hljs-string">StripPrefix=1</span>
+</code></pre>
+<p data-nodeid="33206">在实现获取乘客详细信息的 API 时，需要对乘客管理服务返回的乘客信息进行修改，添加地址的详细信息。获取地址信息需要访问地址管理服务的 API，这里使用的是 Spring WebFlux 提供的反应式客户端 WebClient 对象。下面代码 AddressServiceProxy 中的 getAddresses 方法用来访问地址管理服务的 API，配置对象 DestinationConfig 中包含了地址管理服务的地址。</p>
+<p data-nodeid="33207">当访问 API 出现错误时，getAddresses 方法返回的 Mono 对象中包含的是一个空的列表，这样做可以保证乘客 API 在地址管理服务出现问题时，仍然可以返回有价值的部分数据。这也是错误处理的一种常见策略。</p>
+<pre class="lang-java hljs" data-nodeid="33208"><code data-language="java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">AddressServiceProxy</span> </span>{
+&nbsp; <span class="hljs-meta">@Autowired</span>
+&nbsp; DestinationConfig destinationConfig;
+&nbsp; <span class="hljs-keyword">public</span> Mono&lt;List&lt;AddressVO&gt;&gt; getAddresses(<span class="hljs-keyword">final</span> String addressIds) {
+&nbsp; &nbsp; <span class="hljs-keyword">return</span> WebClient.create(<span class="hljs-keyword">this</span>.destinationConfig.getAddress())
+&nbsp; &nbsp; &nbsp; &nbsp; .get()
+&nbsp; &nbsp; &nbsp; &nbsp; .uri(uriBuilder -&gt; uriBuilder.path(<span class="hljs-string">"/addresses/{addressIds}"</span>)
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .build(ImmutableMap.of(<span class="hljs-string">"addressIds"</span>, addressIds)))
+&nbsp; &nbsp; &nbsp; &nbsp; .retrieve()
+&nbsp; &nbsp; &nbsp; &nbsp; .bodyToMono(<span class="hljs-keyword">new</span> ParameterizedTypeReference&lt;List&lt;AddressVO&gt;&gt;() {})
+&nbsp; &nbsp; &nbsp; &nbsp; .onErrorReturn(Collections.emptyList());
+&nbsp; }
+}
+</code></pre>
+<p data-nodeid="33209">在实现乘客 API 时，需要用到修改 HTTP 响应内容的过滤器，该过滤器只能通过代码来配置，如下面的代码所示。RouteLocatorBuilder 构建器用来创建包含路由的 RouteLocator 对象，路由的标识符是 enrich_passenger，使用的断言基于请求的路径进行匹配。第一个过滤器 stripPrefix 去掉 /passenger 前缀，第二个过滤器 modifyResponseBody 声明了原始的响应内容的类型是 PassengerVO 对象，而修改之后的内容的类型是 PassengerResponse 对象。</p>
+<p data-nodeid="33210">在进行修改时，把 PassengerVO 对象中包含乘客的所有地址的标识符以逗号分隔并连接起来之后，调用 AddressServiceProxy 对象的 getAddresses 方法来批量获取地址的信息。最后把这两部分数据组合在 PassengerResponse 对象中，作为最终的响应。</p>
+<pre class="lang-java hljs" data-nodeid="33211"><code data-language="java"><span class="hljs-meta">@Configuration</span>
+<span class="hljs-meta">@EnableWebFlux</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">WebConfig</span> <span class="hljs-keyword">implements</span> <span class="hljs-title">WebFluxConfigurer</span> </span>{
+&nbsp; <span class="hljs-meta">@Autowired</span>
+&nbsp; AddressServiceProxy addressServiceProxy;
+&nbsp; <span class="hljs-meta">@Autowired</span>
+&nbsp; DestinationConfig destinationConfig;
+&nbsp; <span class="hljs-meta">@Bean</span>
+&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> RouteLocator <span class="hljs-title">routes</span><span class="hljs-params">(<span class="hljs-keyword">final</span> RouteLocatorBuilder builder)</span> </span>{
+&nbsp; &nbsp; <span class="hljs-keyword">return</span> builder.routes()
+&nbsp; &nbsp; &nbsp; &nbsp; .route(<span class="hljs-string">"enrich_passenger"</span>, r -&gt; r.path(<span class="hljs-string">"/passenger/{passengerId}"</span>)
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .filters(f -&gt; f
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .stripPrefix(<span class="hljs-number">1</span>)
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .modifyResponseBody(PassengerVO.class, PassengerResponse.class,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; (exchange, passenger) -&gt; {
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">final</span> String addressIds = passenger.getUserAddresses()
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .stream()
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .map(UserAddressVO::getAddressId)
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .collect(Collectors.joining(","));
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.addressServiceProxy.getAddresses(addressIds)
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .map(addresses -&gt;
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; PassengerResponse
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .fromPassengerAndAddresses(passenger,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; addresses));
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; }))
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .uri(<span class="hljs-keyword">this</span>.destinationConfig.getPassenger())).build();
+&nbsp; }
+}
+</code></pre>
+<p data-nodeid="33212">下面的 JSON 代码展示了乘客管理服务返回的乘客信息的数据。</p>
+<pre class="lang-json hljs" data-nodeid="33213"><code data-language="json">{
+&nbsp; &nbsp; <span class="hljs-attr">"email"</span>: <span class="hljs-string">"test@test.com"</span>,
+&nbsp; &nbsp; <span class="hljs-attr">"id"</span>: <span class="hljs-string">"55af028b-6bd3-4266-b8db-70d2b0d2dc07"</span>,
+&nbsp; &nbsp; <span class="hljs-attr">"mobilePhoneNumber"</span>: <span class="hljs-string">"13812345678"</span>,
+&nbsp; &nbsp; <span class="hljs-attr">"name"</span>: <span class="hljs-string">"test"</span>,
+&nbsp; &nbsp; <span class="hljs-attr">"userAddresses"</span>: [
+&nbsp; &nbsp; &nbsp; &nbsp; {
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-attr">"addressId"</span>: <span class="hljs-string">"c258ac5f-c86c-4fd0-b046-a17c047ba6a3"</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-attr">"id"</span>: <span class="hljs-string">"b11db379-f652-4aa9-ac4a-0cb0c0224b30"</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-attr">"name"</span>: <span class="hljs-string">"home"</span>
+&nbsp; &nbsp; &nbsp; &nbsp; },
+&nbsp; &nbsp; &nbsp; &nbsp; {
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-attr">"addressId"</span>: <span class="hljs-string">"ba629ecf-3f92-4953-afe3-766a6586bbb5"</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-attr">"id"</span>: <span class="hljs-string">"63992a22-411d-49b0-893c-c5742d43d970"</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-attr">"name"</span>: <span class="hljs-string">"office"</span>
+&nbsp; &nbsp; &nbsp; &nbsp; }
+&nbsp; &nbsp; ]
+}
+</code></pre>
+<p data-nodeid="33214">在经过 API 组合之后，乘客 API 返回的乘客信息的数据如下所示。从中可以看到，userAddresses 属性的值进行了修改，包含了地址的详细信息。</p>
+<pre class="lang-json hljs" data-nodeid="33215"><code data-language="json">{
+&nbsp; &nbsp; <span class="hljs-attr">"email"</span>: <span class="hljs-string">"33"</span>,
+&nbsp; &nbsp; <span class="hljs-attr">"id"</span>: <span class="hljs-string">"54d4dd20-09dd-4105-b9aa-48560c841ca1"</span>,
+&nbsp; &nbsp; <span class="hljs-attr">"mobilePhoneNumber"</span>: <span class="hljs-string">"33"</span>,
+&nbsp; &nbsp; <span class="hljs-attr">"name"</span>: <span class="hljs-string">"bob"</span>,
+&nbsp; &nbsp; <span class="hljs-attr">"userAddresses"</span>: [
+&nbsp; &nbsp; &nbsp; &nbsp; {
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-attr">"addressId"</span>: <span class="hljs-string">"585d747e-8605-442f-93bb-043aac15ea7e"</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-attr">"addressLine"</span>: <span class="hljs-string">"王府井社区居委会-0"</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-attr">"areaId"</span>: <span class="hljs-number">16</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-attr">"areas"</span>: [],
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-attr">"id"</span>: <span class="hljs-string">"83e5597d-dd8f-4906-ba8d-abf24a7754c2"</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-attr">"lat"</span>: <span class="hljs-number">39.914211</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-attr">"lng"</span>: <span class="hljs-number">116.414808</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-attr">"name"</span>: <span class="hljs-string">"xyz"</span>
+&nbsp; &nbsp; &nbsp; &nbsp; },
+&nbsp; &nbsp; &nbsp; &nbsp; {
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-attr">"addressId"</span>: <span class="hljs-string">"df7eccb3-06d6-4400-b0e3-975be546c691"</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-attr">"addressLine"</span>: <span class="hljs-string">"王府井社区居委会-1"</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-attr">"areaId"</span>: <span class="hljs-number">16</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-attr">"areas"</span>: [],
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-attr">"id"</span>: <span class="hljs-string">"a604a3d3-6d01-497f-99c4-6a3de311cd9f"</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-attr">"lat"</span>: <span class="hljs-number">39.914293</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-attr">"lng"</span>: <span class="hljs-number">116.414966</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-attr">"name"</span>: <span class="hljs-string">"def"</span>
+&nbsp; &nbsp; &nbsp; &nbsp; }
+&nbsp; &nbsp; ]
+}
+</code></pre>
+<h3 data-nodeid="33216">总结</h3>
+<p data-nodeid="33870">为了满足不同客户端的需求，微服务架构的应用中通常需要使用 API 组合来创建客户端独有的 API。通过本课时的学习，你可以了解到 API 网关和 API 组合的基本概念，以及 Backend For Frontend 模式在实际开发中的作用，最后还可以掌握如何使用 Spring Cloud Gateway 来组合 API。</p></div>
+
+</body></html>

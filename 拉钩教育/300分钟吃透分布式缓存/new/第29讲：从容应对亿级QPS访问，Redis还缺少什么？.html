@@ -1,0 +1,1153 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第29讲：从容应对亿级QPS访问，Redis还缺少什么？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>第29讲：从容应对亿级QPS访问，Redis还缺少什么？</h1><p><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px; background-color: transparent;">众所周知，</span>Redis 在线上实际运行时，面对海量数据、高并发访问，会遇到不少问题，需要进行针对性扩展及优化。本课时，我会结合微博在使用 Redis 中遇到的问题，来分析如何在生产环境下对 Redis 进行扩展改造，以应对百万级 QPS。</span></p>
+<h3><p style="text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">功能扩展 &nbsp; &nbsp; &nbsp;</span></p></h3>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">对于线上较大流量的业务，单个 Redis 实例的内存占用很容易达到数 G 的容量，对应的 aof 会占用数十 G 的空间。即便每天流量低峰时间，对 Redis 进行 rewriteaof，减少数据冗余，但由于业务数据多，写操作多，aof 文件仍然会达到 10G 以上。</span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"><br></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">此时，在 Redis 需要升级版本或修复 bug 时，如果直接重启变更，由于需要数据恢复，这个过程需要近 10 分钟的时间，时间过长，会严重影响系统的可用性。面对这种问题，可以对 Redis 扩展热升级功能，从而在毫秒级完成升级操作，完全不影响业务访问。</span></p>
+<p style="text-align: center; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"><img style="width: 220px; height: 262px;" src="https://s0.lgstatic.com/i/image3/M01/54/36/Cgq2xl3nTi6ATt3OAAB8xLAMsH8657.png"> &nbsp; &nbsp; &nbsp; </span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">热升级方案如下，首先构建一个 Redis 壳程序，将 redisServer 的所有属性（包括redisDb、client等）保存为全局变量。然后将 Redis 的处理逻辑代码全部封装到动态连接库 so 文件中。Redis 第一次启动，从磁盘加载恢复数据，在后续升级时，通过指令，壳程序重新加载 Redis 新的 so 文件，即可完成功能升级，毫秒级完成 Redis 的版本升级。而且整个过程中，所有 Client 连接仍然保留，在升级成功后，原有 Client 可以继续进行读写操作，整个过程对业务完全透明。</span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"> &nbsp; &nbsp; &nbsp; </span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">在 Redis 使用中，也经常会遇到一些特殊业务场景，是当前 Redis 的数据结构无法很好满足的。此时可以对 Redis 进行定制化扩展。可以根据业务数据特点，扩展新的数据结构，甚至扩展新的 Redis 存储模型，来提升 Redis 的内存效率和处理性能。</span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"><img style="width: 400px; height: 106px;" src="https://s0.lgstatic.com/i/image3/M01/54/36/Cgq2xl3nTi-AG3PqAAAzCoYX72M095.png"> &nbsp; &nbsp; &nbsp; </span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">在微博中，有个业务类型是关注列表。关注列表存储的是一个用户所有关注的用户 uid。关注列表可以用来验证关注关系，也可以用关注列表，进一步获取所有关注人的微博列表等。由于用户数量过于庞大，存储关注列表的 Redis 是作为一个缓存使用的，即不活跃的关注列表会很快被踢出 Redis。在再次需要这个用户的关注列表时，重新从 DB 加载，并写回 Redis。关注列表的元素全部 long，最初使用 set 存储，回种 set 时，使用 sadd 进行批量添加。线上发现，对于关注数比较多的关注列表，比如关注数有数千上万个用户，需要 sadd 上成千上万个 uid，即便分几次进行批量添加，每次也会消耗较多时间，数据回种效率较低，而且会导致 Redis 卡顿。另外，用 set 存关注列表，内存效率也比较低。</span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"><br></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">于是，我们对 Redis 扩展了 longset 数据结构。longset 本质上是一个 long 型的一维开放数组。可以采用 double-hash 进行寻址。</span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"><img style="width: 400px; height: 233px;" src="https://s0.lgstatic.com/i/image3/M01/54/36/CgpOIF3nTi-ANs20AABZa3pOh28323.png"> &nbsp; &nbsp; &nbsp; </span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">从 DB 加载到用户的关注列表，准备写入 Redis 前。Client 首先根据关注的 uid 列表，构建成 long 数组的二进制格式，然后通过扩展的 lsset 指令写入 Redis。Redis 接收到指令后，直接将 Client 发来的二进制格式的 long 数组作为 value 值进行存储。</span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"><br></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">longset 中的 long 数组，采用 double-hash 进行寻址，即对每个 long 值采用 2 个哈希函数计算，然后按 (h1 + n*h2)% 数组长度 的方式，确定 long 值的位置。n 从 0 开始计算，如果出现哈希冲突，即计算的哈希位置，已经有其他元素，则 n 加 1，继续向前推进计算，最大计算次数是数组的长度。</span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"><br></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">在向 longset 数据结构不断增加 long 值元素的过程中，当数组的填充率超过阀值，Redis 则返回 longset 过满的异常。此时 Client 会根据最新全量数据，构建一个容量加倍的一维 long 数组，再次 lsset 回 Redis 中。</span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"><img style="width: 400px; height: 185px;" src="https://s0.lgstatic.com/i/image3/M01/54/36/Cgq2xl3nTi-AQhi1AABe70OR04g550.png"> &nbsp; &nbsp; &nbsp; </span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">在移动社交平台中，庞大的用户群体，相互之间会关注、订阅，用户自己会持续分享各种状态，另外这些状体数据会被其他用户阅读、评论、扩散及点赞。这样，在用户维度，就有关注数、粉丝数、各种状态行为数，然后用户每发表的一条 feed、状态，还有阅读数、评论数、转发数、表态数等。一方面会有海量 key 需要进行计数，另外一方面，一个 key 会有 N 个计数。在日常访问中，一次查询，不仅需要查询大量的 key，而且对每个 key 需要查询多个计数。</span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"><br></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">以微博为例，历史计数高达千亿级，而且随着每日新增数亿条 feed 记录，每条记录会产生 4~8 种计数，如果采用 Redis 的计数，仅仅单副本存储，历史数据需要占用 5~6T 以上的内存，每日新增 50G 以上，如果再考虑多 IDC、每个 IDC 部署 1 主多从，占用内存还要再提升一个数量级。由于微博计数，所有的 key 都是随时间递增的 long 型值，于是我们改造了 Redis 的存储结构。</span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"><br></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">首先采用 cdb 分段存储计数器，通过预先分配的内存数组 Table 存储计数，并且采用 double hash 解决冲突，避免 Redis 实现中的大量指针开销。 然后，通过 Schema 策略支持多列，一个 key id 对应的多个计数可以作为一条计数记录，还支持动态增减计数列，每列的计数内存使用精简到 bit。而且，由于 feed 计数冷热区分明显，我们进行冷热数据分离存储方案，根据时间维度，近期的热数据放在内存，之前的冷数据放在磁盘， 降低机器成本。</span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"><br></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">关于计数器服务的扩展，后面的案例分析课时，我会进一步深入介绍改造方案。</span></p>
+<p style="text-align: center; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"><img style="width: 250px; height: 252px;" src="https://s0.lgstatic.com/i/image3/M01/54/36/CgpOIF3nTi-ACqjuAAANlz-bKIw421.png"> &nbsp; &nbsp; &nbsp; </span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">线上 Redis 使用，不管是最初的 sync 机制，还是后来的 psync 和 psync2，主从复制都会受限于复制积压缓冲。如果 slave 断开复制连接的时间较长，或者 master 某段时间写入量过大，而 slave 的复制延迟较大，slave 的复制偏移量落在 master 的复制积压缓冲之外，则会导致全量复制。</span></p>
+<h3><p style="text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">完全增量复制 </span></p></h3>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">于是，微博整合 Redis 的 rdb 和 aof 策略，构建了完全增量复制方案。</span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"><img style="width: 350px; height: 149px;" src="https://s0.lgstatic.com/i/image3/M01/54/36/Cgq2xl3nTi-AMYHHAABrLF_9OHw108.png"> &nbsp; &nbsp; &nbsp; </span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">在完全增量方案中，aof 文件不再只有一个，而是按后缀 id 进行递增，如 aof.00001、aof.00002，当 aof 文件超过阀值，则创建下一个 id 加 1 的文件，从而滚动存储最新的写指令。在 bgsave 构建 rdb 时，rdb 文件除了记录当前的内存数据快照，还会记录 rdb 构建时间，对应 aof 文件的 id 及位置。这样 rdb 文件和其记录 aof 文件位置之后的写指令，就构成一份完整的最新数据记录。</span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"><br></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">主从复制时，master 通过独立的复制线程向 slave 同步数据。每个 slave 会创建一个复制线程。第一次复制是全量复制，之后的复制，不管 slave 断开复制连接有多久，只要 aof 文件没有被删除，都是增量复制。</span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"><br></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">第一次全量复制时，复制线程首先将 rdb 发给 slave，然后再将 rdb 记录的 aof 文件位置之后的所有数据，也发送给 slave，即可完成。整个过程不用重新构建 rdb。</span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"><img style="width: 400px; height: 170px;" src="https://s0.lgstatic.com/i/image3/M01/54/36/CgpOIF3nTjCAXTypAABrLF_9OHw277.png"> &nbsp; &nbsp; &nbsp; </span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">后续同步时，slave 首先传递之前复制的 aof 文件的 id 及位置。master 的复制线程根据这个信息，读取对应 aof 文件位置之后的所有内容，发送给 slave，即可完成数据同步。</span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"><br></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">由于整个复制过程，master 在独立复制线程中进行，所以复制过程不影响用户的正常请求。为了减轻 master 的复制压力，全增量复制方案仍然支持 slave 嵌套，即可以在 slave 后继续挂载多个 slave，从而把复制压力分散到多个不同的 Redis 实例。</span></p>
+<h3><p style="text-align: justify; line-height: 1.75em;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">集群管理</span></p></h3>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"><img style="width: 550px; height: 366px;" src="https://s0.lgstatic.com/i/image3/M01/54/36/Cgq2xl3nTjCAd6C9AADiZzQzf2s186.png"> &nbsp; &nbsp; &nbsp; </span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">前面讲到，Redis-Cluster 的数据存储和集群逻辑耦合，代码逻辑复杂易错，存储 slot 和 key 的映射需要额外占用较多内存，对小 value 业务影响特别明显，而且迁移效率低，迁移大 value 容易导致阻塞，另外，Cluster 复制只支持 slave 挂在 master 下，无法支持 需要较多slave、读 TPS 特别大的业务场景。除此之外，Redis 当前还只是个存储组件，线上运行中，集群管理、日常维护、状态监控报警等这些功能，要么没有支持，要么支持不便。</span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"><br></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">因此我们也基于 Redis 构建了集群存储体系。首先将 Redis 的集群功能剥离到独立系统，Redis 只关注存储，不再维护 slot 等相关的信息。通过新构建的 clusterManager 组件，负责 slot 维护，数据迁移，服务状态管理。</span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"><br></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">Redis 集群访问可以由 proxy 或 smart client 进行。对性能特别敏感的业务，可以通过 smart client 访问，避免访问多一跳。而一般业务，可以通过 Proxy 访问 Redis。</span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"><br></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;"></span></p>
+<p style="text-align: justify; color: rgb(73, 73, 73); line-height: 1.75em; font-size: 11pt; margin-top: 0pt; margin-bottom: 0pt;"><span style="color: rgb(63, 63, 63); font-family: 微软雅黑,Microsoft YaHei; font-size: 16px;">业务资源的部署、Proxy 的访问，都通过配置中心进行获取及协调。clusterManager 向配置中心注册业务资源部署，并持续探测服务状态，根据服务状态进行故障转移，切主、上下线 slave 等。proxy 和 smart client 从配置中心获取配置信息，并持续订阅服务状态的变化。<br></span></p></div>
+
+</body></html>

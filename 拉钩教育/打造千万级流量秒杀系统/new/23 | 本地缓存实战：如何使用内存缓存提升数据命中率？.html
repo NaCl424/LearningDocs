@@ -1,0 +1,1414 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>23 | 本地缓存实战：如何使用内存缓存提升数据命中率？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>23 | 本地缓存实战：如何使用内存缓存提升数据命中率？</h1><p data-nodeid="213186" class="">上一讲我分享了如何使用 Redis 缓存库存数据，其中提到过库存数据及其内存缓存的实现。要知道，库存数据会被高频访问，为了实现库存数据高性能访问，我们需要把它缓存到内存中。那么，除了库存数据外，秒杀系统还有哪些高频访问数据需要内存缓存呢？</p>
+<p data-nodeid="213187">在秒杀系统中，还有这几类数据会被高频访问：活动信息、库存信息、用户抢购次数、黑白名单。其中，活动信息和黑白名单访问量最大，且活动开始后基本不会被修改，特别适合缓存在内存中。库存信息和用户抢购次数在活动开始后虽然时刻在变动，但为了实现高性能中间层流量拦截器，我们也需要将它们在内存中缓存一份。</p>
+<p data-nodeid="213188">既然有四种数据需要缓存到内存中，那么内存缓存的核心逻辑该如何实现呢？</p>
+<p data-nodeid="213189">还记得上一讲我给你介绍的基于 Redis 的库存缓存吗？<strong data-nodeid="213242">它提供了 Set、Get、Del 等方法。同样，内存缓存也需要有这些功能，以便足够通用。</strong></p>
+<p data-nodeid="213190">虽然功能大同小异，但内存缓存在细节上跟 Redis 还是有些区别，比如，根据业务特点，我们在实现内存缓存的时候可以采用不同的策略，让内存缓存性能最优。</p>
+<p data-nodeid="213191">就拿秒杀系统来说，活动信息和黑白名单在活动开始后基本只有读请求，而库存信息和用户抢购次数在秒杀活动开始后读和写的请求量都很大。其中，活动信息在缓存中 Value 是结构体，而黑白名单、库存信息、用户抢购次数的 Value 是整数。因此，在这几种业务场景中，我们实现的内存缓存需要对<strong data-nodeid="213249">结构体和整数</strong>这两种数据类型做性能优化。</p>
+<p data-nodeid="213192">具体怎么做呢？接下来我给你详细介绍下。</p>
+<h3 data-nodeid="213193">整数内存缓存</h3>
+<p data-nodeid="213194">整数内存缓存主要是以保存整数为主，这里我将它命名为 IntCache。它的定义在 infrastructure/stores/cache.go 中，如下所示：</p>
+<pre class="lang-go hljs" data-nodeid="213195"><code data-language="go"><span class="hljs-keyword">type</span> IntCache <span class="hljs-keyword">interface</span> {
+   Get(key <span class="hljs-keyword">string</span>) (<span class="hljs-keyword">int64</span>, <span class="hljs-keyword">bool</span>)
+   Set(key <span class="hljs-keyword">string</span>, val <span class="hljs-keyword">int64</span>)
+   Add(key <span class="hljs-keyword">string</span>, delta <span class="hljs-keyword">int64</span>) <span class="hljs-keyword">int64</span>
+   Del(key <span class="hljs-keyword">string</span>)
+}
+</code></pre>
+<p data-nodeid="213196">总共是有 Get、Set、Add、Del 这四种方法，分别对应获取、设置、增加、删除这四种操作。这些方法具体要怎么实现呢？</p>
+<p data-nodeid="213197">首先，内存缓存的数据结构是 KV 结构，对应到 Go 语言中是 map 类型。因此我们需要用 map 来缓存数据。</p>
+<p data-nodeid="213198">其次，内存缓存是要在高并发下运行的，必须要考虑到多线程下并发读写数据的问题，通常需要加锁，一般是读写锁。假如并发不是很大，不需要追求极致性能，可以考虑使用 Go 标准库中的 sync.Map。</p>
+<p data-nodeid="213199">但是，对秒杀系统来说，它的并发已经达到了我们有足够理由追求极致性能，我们需要评估 sync.Map 的性能，特别是其内部使用了互斥锁，容易产生加锁冲突。为此，还需我们自己去实现性能更好的内存缓存。特别是对于库存信息和用户抢购次数这类数据，我们更要自己实现，因为通用缓存为了考虑通用性，通常会牺牲一些性能。</p>
+<p data-nodeid="213200">基于以上两点，我定义了一个<strong data-nodeid="213262">intCache 结构体</strong>来实现整数缓存，它包含一个读写锁和 map 类型的 data 字段。然后开始实现前面定义的 Get、Set、Add、Del 方法，以及一个用于创建 IntCache 的函数 NewIntCache。具体代码如下：</p>
+<pre class="lang-go hljs" data-nodeid="213201"><code data-language="go"><span class="hljs-keyword">type</span> intCache <span class="hljs-keyword">struct</span> {
+   sync.RWMutex
+   data <span class="hljs-keyword">map</span>[<span class="hljs-keyword">string</span>]*<span class="hljs-keyword">int64</span>
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">NewIntCache</span><span class="hljs-params">()</span> <span class="hljs-title">IntCache</span></span> {
+   <span class="hljs-keyword">return</span> &amp;intCache{
+      data: <span class="hljs-built_in">make</span>(<span class="hljs-keyword">map</span>[<span class="hljs-keyword">string</span>]*<span class="hljs-keyword">int64</span>),
+   }
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(c *intCache)</span> <span class="hljs-title">getPtr</span><span class="hljs-params">(key <span class="hljs-keyword">string</span>)</span> *<span class="hljs-title">int64</span></span> {
+   c.RLock()
+   vp, _ := c.data[key]
+   c.RUnlock()
+   <span class="hljs-keyword">return</span> vp
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(c *intCache)</span> <span class="hljs-title">Set</span><span class="hljs-params">(key <span class="hljs-keyword">string</span>, val <span class="hljs-keyword">int64</span>)</span></span> {
+   vp := c.getPtr(key)
+   <span class="hljs-keyword">if</span> vp != <span class="hljs-literal">nil</span> {
+      atomic.StoreInt64(vp, val)
+   } <span class="hljs-keyword">else</span> {
+      vp = <span class="hljs-built_in">new</span>(<span class="hljs-keyword">int64</span>)
+      *vp = val
+      c.Lock()
+      c.data[key] = vp
+      c.Unlock()
+   }
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(c *intCache)</span> <span class="hljs-title">Get</span><span class="hljs-params">(key <span class="hljs-keyword">string</span>)</span> <span class="hljs-params">(<span class="hljs-keyword">int64</span>, <span class="hljs-keyword">bool</span>)</span></span> {
+   vp := c.getPtr(key)
+   <span class="hljs-keyword">if</span> vp != <span class="hljs-literal">nil</span> {
+      <span class="hljs-keyword">return</span> atomic.LoadInt64(vp), <span class="hljs-literal">true</span>
+   }
+   <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>, <span class="hljs-literal">false</span>
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(c *intCache)</span> <span class="hljs-title">Add</span><span class="hljs-params">(key <span class="hljs-keyword">string</span>, delta <span class="hljs-keyword">int64</span>)</span> <span class="hljs-title">int64</span></span> {
+   vp := c.getPtr(key)
+   <span class="hljs-keyword">if</span> vp != <span class="hljs-literal">nil</span> {
+      <span class="hljs-keyword">return</span> atomic.AddInt64(vp, delta)
+   } <span class="hljs-keyword">else</span> {
+      <span class="hljs-keyword">var</span> val <span class="hljs-keyword">int64</span>
+      <span class="hljs-keyword">var</span> ok <span class="hljs-keyword">bool</span>
+      c.Lock()
+      <span class="hljs-keyword">if</span> vp, ok = c.data[key]; ok {
+         val = atomic.AddInt64(vp, delta)
+      } <span class="hljs-keyword">else</span> {
+         val = delta
+         vp = &amp;val
+         c.data[key] = vp
+      }
+      c.Unlock()
+      <span class="hljs-keyword">return</span> val
+   }
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(c *intCache)</span> <span class="hljs-title">Del</span><span class="hljs-params">(key <span class="hljs-keyword">string</span>)</span></span> {
+   vp := c.getPtr(key)
+   <span class="hljs-keyword">if</span> vp != <span class="hljs-literal">nil</span> {
+      c.Lock()
+      <span class="hljs-built_in">delete</span>(c.data, key)
+      c.Unlock()
+   }
+}
+</code></pre>
+<p data-nodeid="213202">整数内存缓存中，Set、Add、Del 都是改写数据的方法，这类方法中通常需要加写锁来防止数据不一致。但是，写锁是互斥锁，直接加写锁会导致性能下降。因此，我在定义 data 字段时，map 的 Value 类型用的是<strong data-nodeid="213268">整数指针</strong>，以便结合原子操作来快速修改数据。并且，我还实现了一个 getPtr 方法，通过加读锁来获取对应 key 的整数指针。</p>
+<p data-nodeid="213203"><strong data-nodeid="213272">在 Set 和 Add 方法中，如果该指针存在，则使用原子操作，否则使用写锁。而在 Del 方法中，如果该指针存在，则加写锁并删除数据，否则直接返回。</strong></p>
+<p data-nodeid="213204">接下来，我们在 infrastructure/stores/cache_test.go 中实现单元测试，调用我们实现的 New函数，验证缓存功能是否正常。代码如下所示：</p>
+<pre class="lang-go hljs" data-nodeid="213205"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">TestIntCache</span><span class="hljs-params">(t *testing.T)</span></span> {
+   c := stores.NewIntCache()
+   key := <span class="hljs-string">"test"</span>
+   c.Set(key, <span class="hljs-number">1</span>)
+   <span class="hljs-keyword">if</span> v, ok := c.Get(key); !ok || v != <span class="hljs-number">1</span> {
+      t.Fatal(<span class="hljs-string">"failed"</span>)
+   }
+   <span class="hljs-keyword">if</span> v := c.Add(key, <span class="hljs-number">5</span>); v != <span class="hljs-number">6</span> {
+      t.Fatal(<span class="hljs-string">"failed"</span>)
+   }
+   c.Del(key)
+   <span class="hljs-keyword">if</span> _, ok := c.Get(key); ok {
+      t.Fatal(<span class="hljs-string">"failed"</span>)
+   }
+}
+</code></pre>
+<p data-nodeid="213206">在 Goland 中点击单元测试函数左边的绿色箭头，或者在项目根目录下执行命令 go test -v ./infrastructure/stores ，便可以运行单元测试。如果代码逻辑正确，你将看到 PASS TestIntCache。</p>
+<p data-nodeid="213207">最后，我们来实现 IntCache 的性能测试。同时，我们也为 sync.Map 的 Store、Load、Delete 方法实现性能测试函数，与 IntCache 的 Set、Get、Del 方法对比性能。通过一个环境变量 maxKey，我们可以控制测试过程中使用不同数量的 key 测试性能。具体代码如下：</p>
+<pre class="lang-go hljs" data-nodeid="213208"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">initKeys</span><span class="hljs-params">(b *testing.B)</span> []<span class="hljs-title">string</span></span> {
+   <span class="hljs-keyword">var</span> keys = <span class="hljs-built_in">make</span>([]<span class="hljs-keyword">string</span>, <span class="hljs-number">0</span>)
+   maxKeyStr := os.Getenv(<span class="hljs-string">"maxKey"</span>)
+   maxKey, _ := strconv.Atoi(maxKeyStr)
+   <span class="hljs-keyword">if</span> maxKey &lt;= <span class="hljs-number">0</span> {
+      maxKey = b.N
+   }
+   <span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt; maxKey; i++ {
+      keys = <span class="hljs-built_in">append</span>(keys, strconv.Itoa(i))
+   }
+   <span class="hljs-keyword">return</span> keys
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">initIntCache</span><span class="hljs-params">(b *testing.B, c stores.IntCache, keys []<span class="hljs-keyword">string</span>)</span></span> {
+   l := <span class="hljs-built_in">len</span>(keys)
+   <span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt; b.N; i++ {
+      c.Set(keys[i%l], <span class="hljs-keyword">int64</span>(i))
+   }
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">initSyncMap</span><span class="hljs-params">(b *testing.B, c sync.Map, keys []<span class="hljs-keyword">string</span>)</span></span> {
+   l := <span class="hljs-built_in">len</span>(keys)
+   <span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt; b.N; i++ {
+      c.Store(keys[i%l], <span class="hljs-keyword">int64</span>(i))
+   }
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">BenchmarkIntCache_Add</span><span class="hljs-params">(b *testing.B)</span></span> {
+   keys := initKeys(b)
+   c := stores.NewIntCache()
+   initIntCache(b, c, keys)
+   l := <span class="hljs-built_in">len</span>(keys)
+   b.ReportAllocs()
+   b.StartTimer()
+   <span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt; b.N; i++ {
+      c.Add(keys[i%l], <span class="hljs-number">1</span>)
+   }
+   b.StopTimer()
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">BenchmarkIntCache_Set</span><span class="hljs-params">(b *testing.B)</span></span> {
+   keys := initKeys(b)
+   c := stores.NewIntCache()
+   b.ReportAllocs()
+   b.StartTimer()
+   initIntCache(b, c, keys)
+   b.StopTimer()
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">BenchmarkSyncMap_Set</span><span class="hljs-params">(b *testing.B)</span></span> {
+   keys := initKeys(b)
+   c := sync.Map{}
+   b.ReportAllocs()
+   b.StartTimer()
+   initSyncMap(b, c, keys)
+   b.StopTimer()
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">BenchmarkIntCache_Get</span><span class="hljs-params">(b *testing.B)</span></span> {
+   keys := initKeys(b)
+   c := stores.NewIntCache()
+   initIntCache(b, c, keys)
+   l := <span class="hljs-built_in">len</span>(keys)
+   b.ReportAllocs()
+   b.StartTimer()
+   <span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt; b.N; i++ {
+      c.Get(keys[i%l])
+   }
+   b.StopTimer()
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">BenchmarkSyncMap_Get</span><span class="hljs-params">(b *testing.B)</span></span> {
+   keys := initKeys(b)
+   c := sync.Map{}
+   initSyncMap(b, c, keys)
+   l := <span class="hljs-built_in">len</span>(keys)
+   b.ReportAllocs()
+   b.StartTimer()
+   <span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt; b.N; i++ {
+      c.Load(keys[i%l])
+   }
+   b.StopTimer()
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">BenchmarkIntCache_Del</span><span class="hljs-params">(b *testing.B)</span></span> {
+   keys := initKeys(b)
+   c := stores.NewIntCache()
+   initIntCache(b, c, keys)
+   l := <span class="hljs-built_in">len</span>(keys)
+   b.ReportAllocs()
+   b.StartTimer()
+   <span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt; b.N; i++ {
+      c.Del(keys[i%l])
+   }
+   b.StopTimer()
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">BenchmarkSyncMap_Del</span><span class="hljs-params">(b *testing.B)</span></span> {
+   keys := initKeys(b)
+   c := sync.Map{}
+   initSyncMap(b, c, keys)
+   l := <span class="hljs-built_in">len</span>(keys)
+   b.ReportAllocs()
+   b.StartTimer()
+   <span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt; b.N; i++ {
+      c.Delete(keys[i%l])
+   }
+   b.StopTimer()
+}
+</code></pre>
+<p data-nodeid="213209">为了测试不同 key 时的性能，我们在项目根目录下执行 go test -v -bench=. ./infrastructure/stores | grep allocs。你将看到以 Benchmark 开头的 5 列数据，分别是：函数名、执行次数、每次耗时、每次分配内存大小、每次分配内存次数。如下所示：</p>
+<p data-nodeid="215034"><img src="https://s0.lgstatic.com/i/image2/M01/0A/38/CgpVE2ARIEeAXJoQAAIFbJGteSs410.png" alt="1.png" data-nodeid="215037"></p>
+
+
+
+
+
+
+
+
+
+
+
+<p data-nodeid="213211">通过对比我们不难发现：当使用完全不同的 key 时，IntCache 性能是 sync.Map 的 1.5 ~ 2 倍，它的内存分配次数是 sync.Map 的 1/3。使用不同 key 对应到秒杀的哪个业务场景呢？那就是用户抢购次数缓存。因为有上百万的用户参与活动，每个用户都有自己的抢购次数，在缓存中会存在大量不同的 key。</p>
+<p data-nodeid="213212">而库存数据是少量数据，它对应到性能测试中则是相同的 key 的场景。我们可以在命令前面加上 maxKey=100 环境变量来指定使用 100 个 key 来做性能测试。结果如下：</p>
+<p data-nodeid="215328" class=""><img src="https://s0.lgstatic.com/i/image2/M01/0A/36/Cip5yGARIKaAHAolAAIXyRqzYmw535.png" alt="2.png" data-nodeid="215331"></p>
+
+<p data-nodeid="213214">通过对比可以看到，此时 IntCach的性能是 sync.Map 的 3 倍以上。</p>
+<h3 data-nodeid="213215">对象内存缓存</h3>
+<p data-nodeid="213216">前面我提到黑白名单、库存信息、用户抢购次数可以用整数内存缓存来提升性能，而<strong data-nodeid="213306">活动信息则可以用对象内存缓存来提升性能</strong>。它的实现过程跟整数内存缓存的类似，区别在于它不需要 Add ，只需要 Get、Set、Del 这三个方法。对象内存缓存的定义如下所示：</p>
+<pre class="lang-go hljs" data-nodeid="213217"><code data-language="go"><span class="hljs-keyword">type</span> ObjCache <span class="hljs-keyword">interface</span> {
+   Get(key <span class="hljs-keyword">string</span>) (<span class="hljs-keyword">interface</span>{}, <span class="hljs-keyword">bool</span>)
+   Set(key <span class="hljs-keyword">string</span>, val <span class="hljs-keyword">interface</span>{})
+   Del(key <span class="hljs-keyword">string</span>)
+}
+</code></pre>
+<p data-nodeid="213218">接下来，我们就可以参考整数内存缓存的实现方式来实现对象内存缓存。具体来说，也就是定义一个 objCache 结构体类型，包含一个读写锁和一个 data 字段。其中 data 字段的类型也是 map，但该 map 的 Value 类型是 interface，这样它能保存任意类型的对象。然后我们再实现它的三个方法，以及一个用于创建对象内存缓存的函数 NewObjCache。代码如下所示：</p>
+<pre class="lang-go hljs" data-nodeid="213219"><code data-language="go"><span class="hljs-keyword">type</span> objCache <span class="hljs-keyword">struct</span> {
+   sync.RWMutex
+   data <span class="hljs-keyword">map</span>[<span class="hljs-keyword">string</span>]<span class="hljs-keyword">interface</span>{}
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">NewObjCache</span><span class="hljs-params">()</span> <span class="hljs-title">ObjCache</span></span> {
+   <span class="hljs-keyword">return</span> &amp;objCache{
+      data: <span class="hljs-built_in">make</span>(<span class="hljs-keyword">map</span>[<span class="hljs-keyword">string</span>]<span class="hljs-keyword">interface</span>{}),
+   }
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(oc *objCache)</span> <span class="hljs-title">Set</span><span class="hljs-params">(key <span class="hljs-keyword">string</span>, data <span class="hljs-keyword">interface</span>{})</span></span> {
+   oc.Lock()
+   oc.data[key] = data
+   oc.Unlock()
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(oc *objCache)</span> <span class="hljs-title">Get</span><span class="hljs-params">(key <span class="hljs-keyword">string</span>)</span> <span class="hljs-params">(<span class="hljs-keyword">interface</span>{}, <span class="hljs-keyword">bool</span>)</span></span> {
+   oc.RLock()
+   v, ok := oc.data[key]
+   oc.RUnlock()
+   <span class="hljs-keyword">return</span> v, ok
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(oc *objCache)</span> <span class="hljs-title">Del</span><span class="hljs-params">(key <span class="hljs-keyword">string</span>)</span></span> {
+   <span class="hljs-keyword">if</span> _, ok := oc.Get(key); ok {
+      oc.Lock()
+      <span class="hljs-built_in">delete</span>(oc.data, key)
+      oc.Unlock()
+   }
+}
+</code></pre>
+<p data-nodeid="213220">在单元测试中，我们调用 NewObjCache 创建一个对象内存缓存，并调用 Set、Get、Del 方法进行测试。代码如下：</p>
+<pre class="lang-go hljs" data-nodeid="213221"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">TestObjCache</span><span class="hljs-params">(t *testing.T)</span></span> {
+   c := stores.NewObjCache()
+   key := <span class="hljs-string">"test"</span>
+   c.Set(key, <span class="hljs-keyword">int64</span>(<span class="hljs-number">1</span>))
+   <span class="hljs-keyword">if</span> v, ok := c.Get(key); !ok || v.(<span class="hljs-keyword">int64</span>) != <span class="hljs-number">1</span> {
+      t.Fatal(<span class="hljs-string">"failed"</span>)
+   }
+   c.Del(key)
+   <span class="hljs-keyword">if</span> _, ok := c.Get(key); ok {
+      t.Fatal(<span class="hljs-string">"failed"</span>)
+   }
+}
+</code></pre>
+<p data-nodeid="213222">同样地，我们也参考整数内存缓存，实现对象内存缓存 Get、Set、Del 的性能测试函数。代码如下：</p>
+<pre class="lang-go hljs" data-nodeid="213223"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">initObjCache</span><span class="hljs-params">(b *testing.B, c stores.ObjCache, keys []<span class="hljs-keyword">string</span>)</span></span> {
+   l := <span class="hljs-built_in">len</span>(keys)
+   <span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt; b.N; i++ {
+      c.Set(keys[i%l], <span class="hljs-keyword">int64</span>(i))
+   }
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">BenchmarkObjCache_Set</span><span class="hljs-params">(b *testing.B)</span></span> {
+   keys := initKeys(b)
+   c := stores.NewObjCache()
+   b.ReportAllocs()
+   b.StartTimer()
+   initObjCache(b, c, keys)
+   b.StopTimer()
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">BenchmarkObjCache_Get</span><span class="hljs-params">(b *testing.B)</span></span> {
+   keys := initKeys(b)
+   c := stores.NewObjCache()
+   initObjCache(b, c, keys)
+   l := <span class="hljs-built_in">len</span>(keys)
+   b.ReportAllocs()
+   b.StartTimer()
+   <span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt; b.N; i++ {
+      c.Get(keys[i%l])
+   }
+   b.StopTimer()
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">BenchmarkObjCache_Del</span><span class="hljs-params">(b *testing.B)</span></span> {
+   keys := initKeys(b)
+   c := stores.NewObjCache()
+   initObjCache(b, c, keys)
+   l := <span class="hljs-built_in">len</span>(keys)
+   b.ReportAllocs()
+   b.StartTimer()
+   <span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt; b.N; i++ {
+      c.Del(keys[i%l])
+   }
+   b.StopTimer()
+}
+</code></pre>
+<p data-nodeid="213224">注意，为了方便对比数据，我们需要将上面的函数放到整数内存缓存相应函数的下面。由于活动信息数量比较少，我们使用环境变量 maxKey=100 控制 key 的个数并执行性能测试命令。最终输出结果如下：</p>
+<p data-nodeid="215622" class="te-preview-highlight"><img src="https://s0.lgstatic.com/i/image2/M01/0A/36/Cip5yGARILKASIqbAALZ_hTn-xU294.png" alt="3.png" data-nodeid="215625"></p>
+
+<p data-nodeid="213226">可以看到，对象内存缓存的性能是 sync.Map 的 2 倍以上。</p>
+<p data-nodeid="213227"><img src="https://s0.lgstatic.com/i/image2/M01/0A/33/CgpVE2AREmeAA9RYAAajIoDHwI4279.png" alt="图片1.png" data-nodeid="213317"></p>
+<h3 data-nodeid="213228">小结</h3>
+<p data-nodeid="213229">这一讲我给你介绍了内存缓存是如何设计和实现的，并借助 Go 的性能测试框架来对比不同方案的性能。希望你能学以致用，在工作中能快速分析出手头项目应当用哪种缓存方案，在性能和开发成本之间做好权衡。</p>
+<p data-nodeid="213230"><strong data-nodeid="213323">思考题：</strong></p>
+<p data-nodeid="213231">你也可以想想，实现好内存缓存后，该如何从 Redis 中读取数据并初始化内存缓存呢？</p>
+<p data-nodeid="213232">可以在留言区给出自己的答案哦。期待你的讨论！</p>
+<p data-nodeid="213233">好了，这一讲就到这里了。下一讲，我将给你介绍“如何实现连接池减少连接所需时间”。到时见！</p>
+<p data-nodeid="213234" class="">源码地址：<a href="https://github.com/lagoueduCol/MiaoSha-Yiletian/tree/main/infrastructure" data-nodeid="213330">https://github.com/lagoueduCol/MiaoSha-Yiletian/tree/main/infrastructure</a></p></div>
+
+</body></html>

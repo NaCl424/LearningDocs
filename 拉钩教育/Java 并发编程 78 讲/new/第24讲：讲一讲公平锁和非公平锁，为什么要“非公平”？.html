@@ -1,0 +1,1351 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第24讲：讲一讲公平锁和非公平锁，为什么要“非公平”？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>第24讲：讲一讲公平锁和非公平锁，为什么要“非公平”？</h1><p>本课时我们主要讲一讲公平锁和非公平锁，以及为什么要“非公平”？</p>
+<h3>什么是公平和非公平</h3>
+<p>首先，我们来看下什么是公平锁和非公平锁，公平锁指的是按照线程请求的顺序，来分配锁；而非公平锁指的是不完全按照请求的顺序，在一定情况下，可以允许插队。但需要注意这里的非公平并不是指完全的随机，不是说线程可以任意插队，而是仅仅“在合适的时机”插队。</p>
+<p>那么什么时候是合适的时机呢？假设当前线程在请求获取锁的时候，恰巧前一个持有锁的线程释放了这把锁，那么当前申请锁的线程就可以不顾已经等待的线程而选择立刻插队。但是如果当前线程请求的时候，前一个线程并没有在那一时刻释放锁，那么当前线程还是一样会进入等待队列。</p>
+<p>为了能够更好的理解公平锁和非公平锁，我们举一个生活中的例子，假设我们还在学校读书，去食堂排队买饭，我排在队列的第二个，我前面还有一位同学，但此时我脑子里想的不是午饭，而是上午的一道数学题并陷入深思，所以当前面的同学打完饭之后轮到我时我走神了，并也没注意到现在轮到我了，此时前面的同学突然又回来插队，说“不好意思，阿姨麻烦给我加个鸡腿”，像这样的行为就可以类比我们的公平锁和非公平锁。</p>
+<p>看到这里，你可能不解，为什么要设置非公平策略呢，而且非公平还是 ReentrantLock的默认策略，如果我们不加以设置的话默认就是非公平的，难道我的这些排队的时间都白白浪费了吗，为什么别人比我有优先权呢？毕竟公平是一种很好的行为，而非公平是一种不好的行为。</p>
+<p>让我们考虑一种情况，假设线程 A 持有一把锁，线程 B 请求这把锁，由于线程 A 已经持有这把锁了，所以线程 B 会陷入等待，在等待的时候线程 B 会被挂起，也就是进入阻塞状态，那么当线程 A 释放锁的时候，本该轮到线程 B 苏醒获取锁，但如果此时突然有一个线程 C 插队请求这把锁，那么根据非公平的策略，会把这把锁给线程 C，这是因为唤醒线程 B 是需要很大开销的，很有可能在唤醒之前，线程 C 已经拿到了这把锁并且执行完任务释放了这把锁。相比于等待唤醒线程 B 的漫长过程，插队的行为会让线程 C 本身跳过陷入阻塞的过程，如果在锁代码中执行的内容不多的话，线程 C 就可以很快完成任务，并且在线程 B 被完全唤醒之前，就把这个锁交出去，这样是一个双赢的局面，对于线程 C 而言，不需要等待提高了它的效率，而对于线程 B 而言，它获得锁的时间并没有推迟，因为等它被唤醒的时候，线程 C 早就释放锁了，因为线程 C 的执行速度相比于线程 B 的唤醒速度，是很快的，所以 Java 设计者设计非公平锁，是为了提高整体的运行效率。</p>
+<h3>公平的场景</h3>
+<p>下面我们用图示来说明公平和非公平的场景，先来看公平的情况。假设我们创建了一个公平锁，此时有 4 个线程按顺序来请求公平锁，线程 1 在拿到这把锁之后，线程 2、3、4 会在等待队列中开始等待，然后等线程 1 释放锁之后，线程 2、3、4 会依次去获取这把锁，线程 2 先获取到的原因是它等待的时间最长。</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/5D/BF/CgpOIF4Jrv-AF9RXAABULbvqDXk649.png" alt=""></p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/5D/BF/CgpOIF4JrzyAcpwfAABJXkyqDT8424.png" alt=""></p>
+<h3>不公平的场景</h3>
+<p>下面我们再来看看非公平的情况，假设线程 1 在解锁的时候，突然有线程 5 尝试获取这把锁，那么根据我们的非公平策略，线程 5 是可以拿到这把锁的，尽管它没有进入等待队列，而且线程 2、3、4 等待的时间都比线程 5 要长，但是从整体效率考虑，这把锁此时还是会交给线程 5 持有。</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/5D/C0/CgpOIF4Jr5CAR4urAABkLD-41lc376.png" alt=""></p>
+<h3>代码案例：演示公平和非公平的效果</h3>
+<p>下面我们来用代码演示看下公平和非公平的实际效果，代码如下：</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-comment">/**
+&nbsp;*&nbsp;描述：演示公平锁，分别展示公平和不公平的情况，非公平锁会让现在持有锁的线程优先再次获取到锁。代码借鉴自Java并发编程实战手册2.7。
+&nbsp;*/</span>
+<span class="hljs-keyword">public</span>&nbsp;<span class="hljs-class"><span class="hljs-keyword">class</span>&nbsp;<span class="hljs-title">FairAndUnfair</span>&nbsp;</span>{
+
+
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-function"><span class="hljs-keyword">public</span>&nbsp;<span class="hljs-keyword">static</span>&nbsp;<span class="hljs-keyword">void</span>&nbsp;<span class="hljs-title">main</span><span class="hljs-params">(String&nbsp;args[])</span>&nbsp;</span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;PrintQueue&nbsp;printQueue&nbsp;=&nbsp;<span class="hljs-keyword">new</span>&nbsp;PrintQueue();
+
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Thread&nbsp;thread[]&nbsp;=&nbsp;<span class="hljs-keyword">new</span>&nbsp;Thread[<span class="hljs-number">10</span>];
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">for</span>&nbsp;(<span class="hljs-keyword">int</span>&nbsp;i&nbsp;=&nbsp;<span class="hljs-number">0</span>;&nbsp;i&nbsp;&lt;&nbsp;<span class="hljs-number">10</span>;&nbsp;i++)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;thread[i]&nbsp;=&nbsp;<span class="hljs-keyword">new</span>&nbsp;Thread(<span class="hljs-keyword">new</span>&nbsp;Job(printQueue),&nbsp;<span class="hljs-string">"Thread&nbsp;"</span>&nbsp;+&nbsp;i);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">for</span>&nbsp;(<span class="hljs-keyword">int</span>&nbsp;i&nbsp;=&nbsp;<span class="hljs-number">0</span>;&nbsp;i&nbsp;&lt;&nbsp;<span class="hljs-number">10</span>;&nbsp;i++)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;thread[i].start();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">try</span>&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Thread.sleep(<span class="hljs-number">100</span>);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}&nbsp;<span class="hljs-keyword">catch</span>&nbsp;(InterruptedException&nbsp;e)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;e.printStackTrace();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;}
+
+
+}
+
+
+<span class="hljs-class"><span class="hljs-keyword">class</span>&nbsp;<span class="hljs-title">Job</span>&nbsp;<span class="hljs-keyword">implements</span>&nbsp;<span class="hljs-title">Runnable</span>&nbsp;</span>{
+
+
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">private</span>&nbsp;PrintQueue&nbsp;printQueue;
+
+
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-function"><span class="hljs-keyword">public</span>&nbsp;<span class="hljs-title">Job</span><span class="hljs-params">(PrintQueue&nbsp;printQueue)</span>&nbsp;</span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">this</span>.printQueue&nbsp;=&nbsp;printQueue;
+&nbsp;&nbsp;&nbsp;&nbsp;}
+
+
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-meta">@Override</span>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-function"><span class="hljs-keyword">public</span>&nbsp;<span class="hljs-keyword">void</span>&nbsp;<span class="hljs-title">run</span><span class="hljs-params">()</span>&nbsp;</span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;System.out.printf(<span class="hljs-string">"%s:&nbsp;Going&nbsp;to&nbsp;print&nbsp;a&nbsp;job\n"</span>,&nbsp;Thread.currentThread().getName());
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;printQueue.printJob(<span class="hljs-keyword">new</span>&nbsp;Object());
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;System.out.printf(<span class="hljs-string">"%s:&nbsp;The&nbsp;document&nbsp;has&nbsp;been&nbsp;printed\n"</span>,&nbsp;Thread.currentThread().getName());
+&nbsp;&nbsp;&nbsp;&nbsp;}
+
+
+}
+
+
+<span class="hljs-class"><span class="hljs-keyword">class</span>&nbsp;<span class="hljs-title">PrintQueue</span>&nbsp;</span>{
+
+
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">private</span>&nbsp;<span class="hljs-keyword">final</span>&nbsp;Lock&nbsp;queueLock&nbsp;=&nbsp;<span class="hljs-keyword">new</span>&nbsp;ReentrantLock(<span class="hljs-keyword">false</span>);
+
+
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-function"><span class="hljs-keyword">public</span>&nbsp;<span class="hljs-keyword">void</span>&nbsp;<span class="hljs-title">printJob</span><span class="hljs-params">(Object&nbsp;document)</span>&nbsp;</span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;queueLock.lock();
+
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">try</span>&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Long&nbsp;duration&nbsp;=&nbsp;(<span class="hljs-keyword">long</span>)&nbsp;(Math.random()&nbsp;*&nbsp;<span class="hljs-number">10000</span>);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;System.out.printf(<span class="hljs-string">"%s:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;%d&nbsp;seconds\n"</span>,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Thread.currentThread().getName(),&nbsp;(duration&nbsp;/&nbsp;<span class="hljs-number">1000</span>));
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Thread.sleep(duration);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}&nbsp;<span class="hljs-keyword">catch</span>&nbsp;(InterruptedException&nbsp;e)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;e.printStackTrace();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}&nbsp;<span class="hljs-keyword">finally</span>&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;queueLock.unlock();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;queueLock.lock();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">try</span>&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Long&nbsp;duration&nbsp;=&nbsp;(<span class="hljs-keyword">long</span>)&nbsp;(Math.random()&nbsp;*&nbsp;<span class="hljs-number">10000</span>);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;System.out.printf(<span class="hljs-string">"%s:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;%d&nbsp;seconds\n"</span>,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Thread.currentThread().getName(),&nbsp;(duration&nbsp;/&nbsp;<span class="hljs-number">1000</span>));
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Thread.sleep(duration);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}&nbsp;<span class="hljs-keyword">catch</span>&nbsp;(InterruptedException&nbsp;e)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;e.printStackTrace();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}&nbsp;<span class="hljs-keyword">finally</span>&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;queueLock.unlock();
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;}
+}
+</code></pre>
+<p>我们可以通过改变 new ReentrantLock(false) 中的参数来设置公平/非公平锁。以上代码在公平的情况下的输出：</p>
+<pre><code data-language="java" class="lang-java hljs">Thread&nbsp;<span class="hljs-number">0</span>:&nbsp;Going&nbsp;to&nbsp;print&nbsp;a&nbsp;job
+Thread&nbsp;<span class="hljs-number">0</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">5</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">1</span>:&nbsp;Going&nbsp;to&nbsp;print&nbsp;a&nbsp;job
+Thread&nbsp;<span class="hljs-number">2</span>:&nbsp;Going&nbsp;to&nbsp;print&nbsp;a&nbsp;job
+Thread&nbsp;<span class="hljs-number">3</span>:&nbsp;Going&nbsp;to&nbsp;print&nbsp;a&nbsp;job
+Thread&nbsp;<span class="hljs-number">4</span>:&nbsp;Going&nbsp;to&nbsp;print&nbsp;a&nbsp;job
+Thread&nbsp;<span class="hljs-number">5</span>:&nbsp;Going&nbsp;to&nbsp;print&nbsp;a&nbsp;job
+Thread&nbsp;<span class="hljs-number">6</span>:&nbsp;Going&nbsp;to&nbsp;print&nbsp;a&nbsp;job
+Thread&nbsp;<span class="hljs-number">7</span>:&nbsp;Going&nbsp;to&nbsp;print&nbsp;a&nbsp;job
+Thread&nbsp;<span class="hljs-number">8</span>:&nbsp;Going&nbsp;to&nbsp;print&nbsp;a&nbsp;job
+Thread&nbsp;<span class="hljs-number">9</span>:&nbsp;Going&nbsp;to&nbsp;print&nbsp;a&nbsp;job
+Thread&nbsp;<span class="hljs-number">1</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">3</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">2</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">4</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">3</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">3</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">4</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">9</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">5</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">5</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">6</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">7</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">7</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">3</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">8</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">9</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">9</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">5</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">0</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">8</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">0</span>:&nbsp;The&nbsp;document&nbsp;has&nbsp;been&nbsp;printed
+Thread&nbsp;<span class="hljs-number">1</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">1</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">1</span>:&nbsp;The&nbsp;document&nbsp;has&nbsp;been&nbsp;printed
+Thread&nbsp;<span class="hljs-number">2</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">8</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">2</span>:&nbsp;The&nbsp;document&nbsp;has&nbsp;been&nbsp;printed
+Thread&nbsp;<span class="hljs-number">3</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">2</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">3</span>:&nbsp;The&nbsp;document&nbsp;has&nbsp;been&nbsp;printed
+Thread&nbsp;<span class="hljs-number">4</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">0</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">4</span>:&nbsp;The&nbsp;document&nbsp;has&nbsp;been&nbsp;printed
+Thread&nbsp;<span class="hljs-number">5</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">7</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">5</span>:&nbsp;The&nbsp;document&nbsp;has&nbsp;been&nbsp;printed
+Thread&nbsp;<span class="hljs-number">6</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">3</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">6</span>:&nbsp;The&nbsp;document&nbsp;has&nbsp;been&nbsp;printed
+Thread&nbsp;<span class="hljs-number">7</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">9</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">7</span>:&nbsp;The&nbsp;document&nbsp;has&nbsp;been&nbsp;printed
+Thread&nbsp;<span class="hljs-number">8</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">5</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">8</span>:&nbsp;The&nbsp;document&nbsp;has&nbsp;been&nbsp;printed
+Thread&nbsp;<span class="hljs-number">9</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">9</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">9</span>:&nbsp;The&nbsp;document&nbsp;has&nbsp;been&nbsp;printed
+</code></pre>
+<p>可以看出，线程直接获取锁的顺序是完全公平的，先到先得。</p>
+<p>而以上代码在非公平的情况下的输出是这样的：</p>
+<pre><code data-language="java" class="lang-java hljs">Thread&nbsp;<span class="hljs-number">0</span>:&nbsp;Going&nbsp;to&nbsp;print&nbsp;a&nbsp;job
+Thread&nbsp;<span class="hljs-number">0</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">6</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">1</span>:&nbsp;Going&nbsp;to&nbsp;print&nbsp;a&nbsp;job
+Thread&nbsp;<span class="hljs-number">2</span>:&nbsp;Going&nbsp;to&nbsp;print&nbsp;a&nbsp;job
+Thread&nbsp;<span class="hljs-number">3</span>:&nbsp;Going&nbsp;to&nbsp;print&nbsp;a&nbsp;job
+Thread&nbsp;<span class="hljs-number">4</span>:&nbsp;Going&nbsp;to&nbsp;print&nbsp;a&nbsp;job
+Thread&nbsp;<span class="hljs-number">5</span>:&nbsp;Going&nbsp;to&nbsp;print&nbsp;a&nbsp;job
+Thread&nbsp;<span class="hljs-number">6</span>:&nbsp;Going&nbsp;to&nbsp;print&nbsp;a&nbsp;job
+Thread&nbsp;<span class="hljs-number">7</span>:&nbsp;Going&nbsp;to&nbsp;print&nbsp;a&nbsp;job
+Thread&nbsp;<span class="hljs-number">8</span>:&nbsp;Going&nbsp;to&nbsp;print&nbsp;a&nbsp;job
+Thread&nbsp;<span class="hljs-number">9</span>:&nbsp;Going&nbsp;to&nbsp;print&nbsp;a&nbsp;job
+Thread&nbsp;<span class="hljs-number">0</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">8</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">0</span>:&nbsp;The&nbsp;document&nbsp;has&nbsp;been&nbsp;printed
+Thread&nbsp;<span class="hljs-number">1</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">9</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">1</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">8</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">1</span>:&nbsp;The&nbsp;document&nbsp;has&nbsp;been&nbsp;printed
+Thread&nbsp;<span class="hljs-number">2</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">6</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">2</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">4</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">2</span>:&nbsp;The&nbsp;document&nbsp;has&nbsp;been&nbsp;printed
+Thread&nbsp;<span class="hljs-number">3</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">9</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">3</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">8</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">3</span>:&nbsp;The&nbsp;document&nbsp;has&nbsp;been&nbsp;printed
+Thread&nbsp;<span class="hljs-number">4</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">4</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">4</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">2</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">4</span>:&nbsp;The&nbsp;document&nbsp;has&nbsp;been&nbsp;printed
+Thread&nbsp;<span class="hljs-number">5</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">2</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">5</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">5</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">5</span>:&nbsp;The&nbsp;document&nbsp;has&nbsp;been&nbsp;printed
+Thread&nbsp;<span class="hljs-number">6</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">2</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">6</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">6</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">6</span>:&nbsp;The&nbsp;document&nbsp;has&nbsp;been&nbsp;printed
+Thread&nbsp;<span class="hljs-number">7</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">6</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">7</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">4</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">7</span>:&nbsp;The&nbsp;document&nbsp;has&nbsp;been&nbsp;printed
+Thread&nbsp;<span class="hljs-number">8</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">3</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">8</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">6</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">8</span>:&nbsp;The&nbsp;document&nbsp;has&nbsp;been&nbsp;printed
+Thread&nbsp;<span class="hljs-number">9</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">3</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">9</span>:&nbsp;PrintQueue:&nbsp;Printing&nbsp;a&nbsp;Job&nbsp;during&nbsp;<span class="hljs-number">5</span>&nbsp;seconds
+Thread&nbsp;<span class="hljs-number">9</span>:&nbsp;The&nbsp;document&nbsp;has&nbsp;been&nbsp;printed
+</code></pre>
+<p>可以看出，非公平情况下，存在抢锁“插队”的现象，比如Thread 0 在释放锁后又能优先获取到锁，虽然此时在等待队列中已经有 Thread 1 ~ Thread 9 在排队了。</p>
+<h3>对比公平和非公平的优缺点</h3>
+<p>我们接下来对比公平和非公平的优缺点，如表格所示。</p>
+<p><img src="https://s0.lgstatic.com/i/image3/M01/5D/C8/CgpOIF4Jsh6AbVZ-AAB_Y_MH7f4077.png" alt=""><br>
+公平锁的优点在于各个线程公平平等，每个线程等待一段时间后，都有执行的机会，而它的缺点就在于整体执行速度更慢，吞吐量更小，相反非公平锁的优势就在于整体执行速度更快，吞吐量更大，但同时也可能产生线程饥饿问题，也就是说如果一直有线程插队，那么在等待队列中的线程可能长时间得不到运行。</p>
+<h3>源码分析</h3>
+<p>下面我们来分析公平和非公平锁的源码，具体看下它们是怎样实现的，可以看到在 ReentrantLock 类包含一个 Sync 类，这个类继承自AQS（AbstractQueuedSynchronizer），代码如下：</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-keyword">public</span>&nbsp;<span class="hljs-class"><span class="hljs-keyword">class</span>&nbsp;<span class="hljs-title">ReentrantLock</span>&nbsp;<span class="hljs-keyword">implements</span>&nbsp;<span class="hljs-title">Lock</span>,&nbsp;<span class="hljs-title">java</span>.<span class="hljs-title">io</span>.<span class="hljs-title">Serializable</span>&nbsp;</span>{
+&nbsp;
+<span class="hljs-keyword">private</span>&nbsp;<span class="hljs-keyword">static</span>&nbsp;<span class="hljs-keyword">final</span>&nbsp;<span class="hljs-keyword">long</span>&nbsp;serialVersionUID&nbsp;=&nbsp;<span class="hljs-number">7373984872572414699L</span>;
+&nbsp;
+<span class="hljs-comment">/**&nbsp;Synchronizer&nbsp;providing&nbsp;all&nbsp;implementation&nbsp;mechanics&nbsp;*/</span>
+&nbsp;
+<span class="hljs-keyword">private</span>&nbsp;<span class="hljs-keyword">final</span>&nbsp;Sync&nbsp;sync;
+</code></pre>
+<p>Sync 类的代码：</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-keyword">abstract</span>&nbsp;<span class="hljs-keyword">static</span>&nbsp;<span class="hljs-class"><span class="hljs-keyword">class</span>&nbsp;<span class="hljs-title">Sync</span>&nbsp;<span class="hljs-keyword">extends</span>&nbsp;<span class="hljs-title">AbstractQueuedSynchronizer</span>&nbsp;</span>{...}
+</code></pre>
+<p>根据代码可知，Sync 有公平锁 FairSync 和非公平锁 NonfairSync两个子类：</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-keyword">static</span>&nbsp;<span class="hljs-keyword">final</span>&nbsp;<span class="hljs-class"><span class="hljs-keyword">class</span>&nbsp;<span class="hljs-title">NonfairSync</span>&nbsp;<span class="hljs-keyword">extends</span>&nbsp;<span class="hljs-title">Sync</span>&nbsp;</span>{...}
+<span class="hljs-keyword">static</span>&nbsp;<span class="hljs-keyword">final</span>&nbsp;<span class="hljs-class"><span class="hljs-keyword">class</span>&nbsp;<span class="hljs-title">FairSync</span>&nbsp;<span class="hljs-keyword">extends</span>&nbsp;<span class="hljs-title">Sync</span>&nbsp;</span>{...}
+</code></pre>
+<p>下面我们来看一下公平锁与非公平锁的加锁方法的源码。</p>
+<p>公平锁的锁获取源码如下：</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-function"><span class="hljs-keyword">protected</span>&nbsp;<span class="hljs-keyword">final</span>&nbsp;<span class="hljs-keyword">boolean</span>&nbsp;<span class="hljs-title">tryAcquire</span><span class="hljs-params">(<span class="hljs-keyword">int</span>&nbsp;acquires)</span>&nbsp;</span>{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">final</span>&nbsp;Thread&nbsp;current&nbsp;=&nbsp;Thread.currentThread();
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">int</span>&nbsp;c&nbsp;=&nbsp;getState();
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(c&nbsp;==&nbsp;<span class="hljs-number">0</span>)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(!hasQueuedPredecessors()&nbsp;&amp;&amp;&nbsp;<span class="hljs-comment">//这里判断了&nbsp;hasQueuedPredecessors()</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;compareAndSetState(<span class="hljs-number">0</span>,&nbsp;acquires))&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;setExclusiveOwnerThread(current);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;<span class="hljs-keyword">true</span>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;}&nbsp;<span class="hljs-keyword">else</span>&nbsp;<span class="hljs-keyword">if</span>&nbsp;(current&nbsp;==&nbsp;getExclusiveOwnerThread())&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">int</span>&nbsp;nextc&nbsp;=&nbsp;c&nbsp;+&nbsp;acquires;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(nextc&nbsp;&lt;&nbsp;<span class="hljs-number">0</span>)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">throw</span>&nbsp;<span class="hljs-keyword">new</span>&nbsp;Error(<span class="hljs-string">"Maximum&nbsp;lock&nbsp;count&nbsp;exceeded"</span>);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;setState(nextc);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;<span class="hljs-keyword">true</span>;
+&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;<span class="hljs-keyword">false</span>;
+}
+</code></pre>
+<p>非公平锁的锁获取源码如下：</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-function"><span class="hljs-keyword">final</span>&nbsp;<span class="hljs-keyword">boolean</span>&nbsp;<span class="hljs-title">nonfairTryAcquire</span><span class="hljs-params">(<span class="hljs-keyword">int</span>&nbsp;acquires)</span>&nbsp;</span>{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">final</span>&nbsp;Thread&nbsp;current&nbsp;=&nbsp;Thread.currentThread();
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">int</span>&nbsp;c&nbsp;=&nbsp;getState();
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(c&nbsp;==&nbsp;<span class="hljs-number">0</span>)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(compareAndSetState(<span class="hljs-number">0</span>,&nbsp;acquires))&nbsp;{&nbsp;<span class="hljs-comment">//这里没有判断&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;hasQueuedPredecessors()</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;setExclusiveOwnerThread(current);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;<span class="hljs-keyword">true</span>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">else</span>&nbsp;<span class="hljs-keyword">if</span>&nbsp;(current&nbsp;==&nbsp;getExclusiveOwnerThread())&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">int</span>&nbsp;nextc&nbsp;=&nbsp;c&nbsp;+&nbsp;acquires;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(nextc&nbsp;&lt;&nbsp;<span class="hljs-number">0</span>)&nbsp;<span class="hljs-comment">//&nbsp;overflow</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">throw</span>&nbsp;<span class="hljs-keyword">new</span>&nbsp;Error(<span class="hljs-string">"Maximum&nbsp;lock&nbsp;count&nbsp;exceeded"</span>);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;setState(nextc);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;<span class="hljs-keyword">true</span>;
+&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;<span class="hljs-keyword">false</span>;
+}
+</code></pre>
+<p>通过对比，我们可以明显的看出公平锁与非公平锁的 lock() 方法唯一的区别就在于公平锁在获取锁时多了一个限制条件：hasQueuedPredecessors() 为 false，这个方法就是判断在等待队列中是否已经有线程在排队了。这也就是公平锁和非公平锁的核心区别，如果是公平锁，那么一旦已经有线程在排队了，当前线程就不再尝试获取锁；对于非公平锁而言，无论是否已经有线程在排队，都会尝试获取一下锁，获取不到的话，再去排队。</p>
+<p>这里有一个特例需要我们注意，针对 tryLock() 方法，它不遵守设定的公平原则。</p>
+<p>例如，当有线程执行 tryLock() 方法的时候，一旦有线程释放了锁，那么这个正在 tryLock 的线程就能获取到锁，即使设置的是公平锁模式，即使在它之前已经有其他正在等待队列中等待的线程，简单地说就是 tryLock 可以插队。</p>
+<p>看它的源码就会发现：</p>
+<pre><code data-language="java" class="lang-java hljs"><span class="hljs-function"><span class="hljs-keyword">public</span>&nbsp;<span class="hljs-keyword">boolean</span>&nbsp;<span class="hljs-title">tryLock</span><span class="hljs-params">()</span>&nbsp;</span>{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;sync.nonfairTryAcquire(<span class="hljs-number">1</span>);
+}
+</code></pre>
+<p>这里调用的就是 nonfairTryAcquire()，表明了是不公平的，和锁本身是否是公平锁无关。</p>
+<p>综上所述，公平锁就是会按照多个线程申请锁的顺序来获取锁，从而实现公平的特性。非公平锁加锁时不考虑排队等待情况，直接尝试获取锁，所以存在后申请却先获得锁的情况，但由此也提高了整体的效率。</p></div>
+
+</body></html>

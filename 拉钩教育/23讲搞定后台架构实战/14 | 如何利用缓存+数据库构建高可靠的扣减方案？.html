@@ -1,0 +1,916 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>14 | 如何利用缓存+数据库构建高可靠的扣减方案？</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>14 | 如何利用缓存+数据库构建高可靠的扣减方案？</h1><p data-nodeid="1057" class="">在上两讲里分别介绍了使用数据库和纯缓存实现的扣减方案。在需求层面上，上述两者都能实现业务需求。但均存在一些缺陷：</p>
+<ul data-nodeid="1058">
+<li data-nodeid="1059">
+<p data-nodeid="1060">数据库方案的性能较差；</p>
+</li>
+<li data-nodeid="1061">
+<p data-nodeid="1062">纯缓存方案虽不会导致超卖，但因缓存不具备事务特性，极端情况下会存在缓存里的数据无法回滚，导致出现少卖的情况。且因“<a href="https://kaiwu.lagou.com/course/courseInfo.htm?courseId=595#/detail/pc?id=6138" data-nodeid="1137">第 13 讲</a>”是异步写库，也可能发生异步写库失败，导致多扣的数据再也无法找回的情况。</p>
+</li>
+</ul>
+<p data-nodeid="1063">因此，本讲将向你介绍一种新的实现方案——使用数据库+缓存的方式规避上述存在的潜在问题。</p>
+<h3 data-nodeid="1842">顺序写的性能更好</h3>
+<p data-nodeid="2368" class="">本讲的方案是借助了“<strong data-nodeid="2374">顺序写要比随机更新性能好</strong>”这个特性进行设计的。</p>
+
+
+<p data-nodeid="3441" class=""><strong data-nodeid="3446">在向磁盘进行数据操作时，向文件末尾不断追加写入的性能要远大于随机修改的性能</strong>。因为对于传统的机械硬盘来说，每一次的随机更新都需要机械键盘的磁头在硬盘的盘面上进行寻址，再去更新目标数据，这种方式十分消耗性能。而向文件末尾追加写入，每一次的写入只需要磁头一次寻址，将磁头定位到文件末尾即可，后续的顺序写入不断追加即可。</p>
+
+
+
+<p data-nodeid="2907" class="">对于固态硬盘来说，虽然避免了磁头移动，但依然存在一定的寻址过程。此外，对文件内容的随机更新和数据库的表更新比较类似，都存在加锁带来的性能消耗。</p>
+
+<p data-nodeid="1067"><strong data-nodeid="1151">数据库同样是插入要比更新的性能好</strong>。对于数据库的更新，为了保证对同一条数据并发更新的一致性，会在更新时增加锁，但加锁是十分消耗性能的。此外，对于没有索引的更新条件，要想找到需要更新的那条数据，需要遍历整张表，时间复杂度为 O(N)。而插入只在末尾进行追加，性能非常好。</p>
+<h3 data-nodeid="1068">借力顺序写的架构</h3>
+<p data-nodeid="1069">有了上述的理论基础后，只要对上一讲的架构稍做变更，就可以得到兼具性能和高可靠的扣减架构了，整体架构如下图 1 所示：</p>
+<p data-nodeid="1070"><img src="https://s0.lgstatic.com/i/image6/M01/05/79/CioPOWAwyQ6AWdJwAACfPtIGbZQ225.png" alt="Drawing 0.png" data-nodeid="1156"></p>
+<div data-nodeid="1071"><p style="text-align:center">图 1：兼具性能和更加高可靠的扣减架构</p></div>
+<p data-nodeid="1072">上述的架构和纯缓存的架构区别在于，<strong data-nodeid="1162">写入数据库不是异步写入，而是在扣减的时候同步写入</strong>。</p>
+<p data-nodeid="1073">这里你可能会有些疑问：同步的写入数据库是不是和“<a href="https://kaiwu.lagou.com/course/courseInfo.htm?courseId=595#/detail/pc?id=6137" data-nodeid="1166">第 12 讲</a>”讲述的内容类似？且数据库扣减的性能对于海量并发是扛不住的，这个方案是不是在倒退？</p>
+<p data-nodeid="1074">如果你仔细看架构图，会发现并非如此。同步写入数据库使用是 insert 操作，也就是顺序写，而不是 update 做数据库数量的扣减。因此，它的性能较好。</p>
+<p data-nodeid="5057" class="">insert 的数据库称为<strong data-nodeid="5063">任务库</strong>，它只存储每次扣减的原始数据，而不做真实扣减（即不进行 update）。它的表结构大致如下：</p>
+
+
+
+<pre class="lang-java" data-nodeid="1076"><code data-language="java">create table task{
+  id bigint not <span class="hljs-keyword">null</span> comment <span class="hljs-string">"任务顺序编号"</span>,
+  task_id bigint not <span class="hljs-keyword">null</span> 
+}
+</code></pre>
+<p data-nodeid="1077">任务表里存储的内容格式可以为 JSON、XML 等结构化的数据。以 JSON 为例，数据内容大致可以如下：</p>
+<pre class="lang-java" data-nodeid="1078"><code data-language="java">{
+  <span class="hljs-string">"扣减号"</span>:uuid,
+  <span class="hljs-string">"skuid1"</span>:<span class="hljs-string">"数量"</span>,
+  <span class="hljs-string">"skuid2"</span>:<span class="hljs-string">"数量"</span>,
+  <span class="hljs-string">"xxxx"</span>:<span class="hljs-string">"xxxx"</span>
+}
+</code></pre>
+<p data-nodeid="6664" class="">在上述架构里，还有一个**正式业务库，这里面存储的才是真正的扣减明细和 SKU 的汇总数据。对于正式库里的数据，通过任务表的任务进行同步即可，此种方式保证了数据的最终一致性。</p>
+
+
+
+<h3 data-nodeid="1080">扣减流程</h3>
+<p data-nodeid="1081">在引入了任务表之后，整体的扣减流程如下图 2 所示：</p>
+<p data-nodeid="1082"><img src="https://s0.lgstatic.com/i/image6/M00/05/7C/Cgp9HWAwySGAOrtLAADfkL8uxjA721.png" alt="Drawing 2.png" data-nodeid="1187"></p>
+<div data-nodeid="1083"><p style="text-align:center">图 2：基于任务的扣减流程</p></div>
+<p data-nodeid="1084">上述的流程<strong data-nodeid="1193">和纯缓存的区别在于增加了事务开启与回滚的步骤，以及同步的数据库写入流程</strong>，详细分析如下。</p>
+<ol data-nodeid="11850">
+<li data-nodeid="11851">
+<p data-nodeid="11852">首先是前置业务参数检验（包含基础参数、数量检验等），此步骤在本讲和前两讲的方案里都有。可以说，任何对外接口此功能都是不可或缺的，是完成业务验证性的必要一环。</p>
+</li>
+<li data-nodeid="11853">
+<p data-nodeid="11854">然后在图中编号 2 处，开始数据事务。</p>
+</li>
+<li data-nodeid="11855">
+<p data-nodeid="11856">当开始事务后，首先将此次序列化后的扣减明细写入到扣减数据库中的任务表里。</p>
+</li>
+<li data-nodeid="11857">
+<p data-nodeid="11858">假设数据库插入扣减明细失败，则事务回滚，任务表中无新增数据，数据一致，无任何影响。</p>
+</li>
+<li data-nodeid="11859">
+<p data-nodeid="11860">当数据库插入扣减明细成功后，便针对缓存进行扣减。和上一讲保持一致，使用 lua 等功能进行扣减即可。</p>
+</li>
+<li data-nodeid="11861">
+<p data-nodeid="11862">如果缓存扣减成功，也就是流程正常结束，提交数据库事务，给客户返回扣减成功。</p>
+</li>
+<li data-nodeid="11863">
+<p data-nodeid="11864">如果缓存扣减失败，有可能有两大类原因。</p>
+<ol data-nodeid="11865">
+<li data-nodeid="11866">
+<p data-nodeid="11867">一类原因是此次<strong data-nodeid="11883">扣减的数量不够</strong>，比如缓存里有 5 个数量，而实际此次扣减需要 10 个。当判断数量不够后，便调用缓存的归还并将数据库进行回滚即可。</p>
+</li>
+<li data-nodeid="11868">
+<p data-nodeid="11869">第二类原因是缓<strong data-nodeid="11893">存出现故障，导致扣减失败</strong>。缓存失败的可能性有很多，比如网络不通、调用缓存扣减超时、在扣减到一半时缓存突然宕机（故障 failover）了，以及在上述返回的过程中产生异常等。<strong data-nodeid="11894">针对上述请求，都有相应的异常抛出，根据异常进行数据库回滚即可，最终任务库里的数据都是准的</strong>。</p>
+</li>
+</ol>
+</li>
+</ol>
+<p data-nodeid="12430" class="">完成上述步骤之后，便可以进行任务库里的数据处理了。任务库里存储的是纯文本的 JSON 数据，无法被直接使用。需要将其中的数据转储至实际的业务库里。业务库里会存储两类数据，一类是每次扣减的流水数据，它与任务表里的数据区别在于它是结构化，而不是 JSON 文本的大字段内容。另外一类是汇总数据，即每一个 SKU 当前总共有多少量，当前还剩余多少量（即从任务库同步时需要进行扣减的），表结构大致如下：</p>
+
+
+
+
+
+
+
+
+
+
+<pre class="lang-sql" data-nodeid="1107"><code data-language="sql"><span class="hljs-keyword">create</span> <span class="hljs-keyword">table</span> 流水表{
+  <span class="hljs-keyword">id</span> <span class="hljs-built_in">bigint</span> <span class="hljs-keyword">not</span> <span class="hljs-literal">null</span>,
+  <span class="hljs-keyword">uuid</span> <span class="hljs-built_in">bigint</span> <span class="hljs-keyword">not</span> <span class="hljs-literal">null</span> <span class="hljs-keyword">comment</span> <span class="hljs-string">'扣减编号'</span>,
+  sku_id <span class="hljs-built_in">bigint</span> <span class="hljs-keyword">not</span> <span class="hljs-literal">null</span> <span class="hljs-keyword">comment</span> <span class="hljs-string">'商品编号'</span>,
+  <span class="hljs-keyword">num</span> <span class="hljs-built_in">int</span> <span class="hljs-keyword">not</span> <span class="hljs-literal">null</span> <span class="hljs-keyword">comment</span> <span class="hljs-string">'当次扣减的数量'</span> 
+}<span class="hljs-keyword">comment</span> <span class="hljs-string">'扣减流水表'</span>
+</code></pre>
+<p data-nodeid="23164" class="">商品的实时数据汇总表，结构如下：</p>
+
+
+
+
+
+
+
+
+
+<pre class="lang-sql" data-nodeid="27710"><code data-language="sql"><span class="hljs-keyword">create</span> <span class="hljs-keyword">table</span> 汇总表{
+  <span class="hljs-keyword">id</span> bitint <span class="hljs-keyword">not</span> <span class="hljs-literal">null</span>,
+  sku_id <span class="hljs-keyword">unsigned</span> <span class="hljs-built_in">bigint</span> <span class="hljs-keyword">not</span> <span class="hljs-literal">null</span> <span class="hljs-keyword">comment</span> <span class="hljs-string">'商品编号'</span>,
+  total_num <span class="hljs-keyword">unsigned</span> <span class="hljs-built_in">int</span> <span class="hljs-keyword">not</span> <span class="hljs-literal">null</span> <span class="hljs-keyword">comment</span> <span class="hljs-string">'总数量'</span>,
+  leaved_num <span class="hljs-keyword">unsigned</span> <span class="hljs-built_in">int</span> <span class="hljs-keyword">not</span> <span class="hljs-literal">null</span> <span class="hljs-keyword">comment</span> <span class="hljs-string">'当前剩余的商品数量'</span>
+}<span class="hljs-keyword">comment</span> <span class="hljs-string">'记录表'</span>
+</code></pre>
+
+
+
+
+
+
+
+
+
+<h4 data-nodeid="1110">原理分析</h4>
+<p data-nodeid="1111">本讲介绍的数据库+缓存的架构主要利用了<strong data-nodeid="1240">数据库顺序写入要比更新性能快</strong>的这一特性。此外，在写入的基础之上，又利用了<strong data-nodeid="1241">数据库的事务特性来保证数据的最终一致性</strong>。当异常出现后，通过事务进行回滚，来保证数据库里的数据不会丢失。</p>
+<p data-nodeid="1112">在整体的流程上，还是复用了上一讲纯缓存的架构流程。当新加入一个商品，或者对已有商品进行补货时，对应的新增商品数量都会通过 Binlog 同步至缓存里。在扣减时，依然以缓存中的数量为准。补货或新增商品的数据同步架构如下图 3 所示：</p>
+<p data-nodeid="1113"><img src="https://s0.lgstatic.com/i/image6/M00/05/79/CioPOWAwyUCAcJrrAAC-K44fcVU378.png" alt="Drawing 4.png" data-nodeid="1245"></p>
+<div data-nodeid="1114"><p style="text-align:center">图 3：补货或新增商品的数据同步架构图</p></div>
+<p data-nodeid="18601" class="">这里你可能会产生疑问：通过任务库同步至正式业务库里那份数据岂不是没用了？当然不是。<strong data-nodeid="18611">正式业务库异构的那份扣减明细和 SKU 当前实时剩余数量的数据，是最为准确的一份数据，我们以它作为数据对比的基准</strong>。如果发现缓存中的数据不一致，就可以及时进行修复。对于数据校准，你可以参考“<a href="https://kaiwu.lagou.com/course/courseInfo.htm?courseId=595#/detail/pc?id=6130" data-nodeid="18609">第 05 讲</a>”里介绍的方案。</p>
+
+
+
+
+
+
+
+
+
+
+
+
+<p data-nodeid="1116">比如，当缓存扣减完成后，我们的应用客户端重启了，此时外部调用方的连接会断开，外部调用方判断此次调用失败。但因突然重启，当次完成的扣减在缓存里是没有完成返还的。但数据库采用的是事务，客户端重启时，事务就自动回滚了。此时，数据库的数据是正确的，但缓存的数据是少的。</p>
+<p data-nodeid="28215" class="">在纯缓存的方案里，如果当时的异步刷库也失败了，则缓存数据一直都是少卖的。而数据库+缓存的方案，只会在一定时间出现少卖的情况，最终的数据一定是一致的。此方案会保证任务数据库和正式业务数据库里的数据准确性，出现故障后基于正式数据库进行异步对比修复即可。这便是两种方案的差异所在。</p>
+
+<h4 data-nodeid="1118">性能提升</h4>
+<p data-nodeid="28721" class="">进行方案升级后，我们便完成了一个更加可靠的扣减架构，且使用任务数据库的顺序插入也保证了一定的性能。但总的来说，即使是基于数据库的顺序插入，缓存操作的性能和数据库的顺序插入也不是一个量级，那么如何提升顺序插入任务数据库的性能和吞吐量呢？</p>
+
+<p data-nodeid="1120" class="">这里我们回顾一下在“<a href="https://kaiwu.lagou.com/course/courseInfo.htm?courseId=595#/detail/pc?id=6134" data-nodeid="1263">第 9 讲</a>”（无状态存储）里介绍的内容和理念——<strong data-nodeid="1277">通过无状态的存储提升可用性</strong>。同样的逻辑，<strong data-nodeid="1278">任务库主要提供两个作用，一个是事务支持，其次是随机的扣减流水任务的存取</strong>。这两个功能均不依赖具体的路由规则，也是随机的、无状态的。因此，可以借鉴“<a href="https://kaiwu.lagou.com/course/courseInfo.htm?courseId=595#/detail/pc?id=6134" data-nodeid="1275">第 9 讲</a>”的架构对本讲的内容进行升级，升级后的架构如下图 4 所示：</p>
+<p data-nodeid="1121"><img src="https://s0.lgstatic.com/i/image6/M00/05/7D/Cgp9HWAwyUuAYlA9AAECkv_ImAo470.png" alt="Drawing 6.png" data-nodeid="1281"></p>
+<div data-nodeid="1122"><p style="text-align:center">图 4：无状态存储的架构图</p></div>
+<p data-nodeid="29733" class="te-preview-highlight">采用无状态存储后，任务库便可以进行水平扩展了，在性能和高可用上得到进一步的加强。具体的细节原理和落地步骤，你可以参考“<a href="https://kaiwu.lagou.com/course/courseInfo.htm?courseId=595#/detail/pc?id=6134" data-nodeid="29737">第 9 讲</a>”，这里不再赘述。</p>
+
+
+<h4 data-nodeid="1124">数据同步</h4>
+<p data-nodeid="1125">任务库和业务正式库之间的数据同步和“<a href="https://kaiwu.lagou.com/course/courseInfo.htm?courseId=595#/detail/pc?id=6134" data-nodeid="1287">第 9 讲</a>”里介绍的无状态的存储基本类似，但整体实现上会更加简单。因为在业务上，扣<strong data-nodeid="1293">减前置依赖的均是缓存里的数据，业务正式库里的数据只用来做兜底使用</strong>。因此最终只要使用 Worker 将数据从任务库同步至业务正式库即可，架构如下图 5 所示：</p>
+<p data-nodeid="1126"><img src="https://s0.lgstatic.com/i/image6/M00/05/7D/Cgp9HWAwyVWADsz1AACynQcYQUU915.png" alt="Drawing 8.png" data-nodeid="1296"></p>
+<div data-nodeid="1127"><p style="text-align:center">图 5：Worker 架构图</p></div>
+<h3 data-nodeid="1128">总结</h3>
+<p data-nodeid="1129">在本讲里，我们介绍了通过<strong data-nodeid="1307">缓存和数据库结合</strong>的方式，实现了一个更加可靠的扣减方案。相比纯缓存方案，即使使用了无状态的分库存储，它的性能也会有一定的损耗。但此方案的好处在于<strong data-nodeid="1308">数据更精准、更可靠</strong>。对于类似额度扣减、实物库存扣减等场景，此方案均适用。而对于一些虚拟的次数限制，同时业务上能够容忍在一定概率下数据不准确的场景，也可以选择纯缓存的扣减方案。</p>
+<p data-nodeid="1130">此外，“<strong data-nodeid="1314">顺序追加写要比随机修改的性能好</strong>”这个技巧，其实在很多场景里都有应用，是一个值得你深入学习和理解的技能。比如数据库的 Redo log、Undo log；Elasticsearch 里的 Translog 都是先将数据按非结构化的方式顺序写入日志文件里，再进行正常的变更。当出现宕机后，采用日志进行数据恢复。</p>
+<p data-nodeid="1131" class="">经过“12、13、14”这三讲的学习，我想你对“扣减”相关的内容已经掌握得如鱼得水了，欢迎你动一动手指，在留言区写一写思考、做一做总结。如果你对哪里有疑问，也可以在留言区提问，咱们一起讨论。</p></div>
+
+</body></html>

@@ -1,0 +1,1036 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>05 | 多进程解决方案：cluster 模式以及 PM2 工具的原理介绍</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>05 | 多进程解决方案：cluster 模式以及 PM2 工具的原理介绍</h1><p data-nodeid="1613" class="">前几讲我们都使用了一种非常简单暴力的方式（node app.js）启动 Node.js 服务器，而在线上我们要考虑使用多核 CPU，充分利用服务器资源，这里就用到多进程解决方案，所以本讲介绍 PM2 的原理以及如何应用一个 cluster 模式启动 Node.js 服务。</p>
+<h3 data-nodeid="1614">单线程问题</h3>
+<p data-nodeid="1615">在<a href="https://kaiwu.lagou.com/course/courseInfo.htm?courseId=694#/detail/pc?id=6783" data-nodeid="1750">《01 | 事件循环：高性能到底是如何做到的？》</a>中我们分析了 Node.js 主线程是单线程的，如果我们使用 node app.js 方式运行，就启动了一个进程，只能在<strong data-nodeid="1764">一个 CPU 中进行运算</strong>，无法应用服务器的多核 CPU，因此我们需要寻求一些解决方案。你能想到的解决方案肯定是<strong data-nodeid="1765">多进程分发策略</strong>，即主进程接收所有请求，然后通过一定的<strong data-nodeid="1766">负载均衡策略</strong>分发到不同的 Node.js 子进程中。如图 1 的方案所示：</p>
+<p data-nodeid="1616"><img src="https://s0.lgstatic.com/i/image6/M01/1D/E0/CioPOWBQKV2ABtnsAAAuF7ZUkEQ818.png" alt="Drawing 1.png" data-nodeid="1769"></p>
+<p data-nodeid="1617">这一方案有 2 个不同的实现：</p>
+<ul data-nodeid="1618">
+<li data-nodeid="1619">
+<p data-nodeid="1620">主进程监听一个端口，子进程不监听端口，通过主进程分发请求到子进程；</p>
+</li>
+<li data-nodeid="1621">
+<p data-nodeid="1622">主进程和子进程分别监听不同端口，通过主进程分发请求到子进程。</p>
+</li>
+</ul>
+<p data-nodeid="1623">在 Node.js 中的 cluster 模式使用的是第一个实现。</p>
+<h3 data-nodeid="1624">cluster 模式</h3>
+<p data-nodeid="1625">cluster 模式其实就是我们上面图 1 所介绍的模式，<strong data-nodeid="1784">一个主进程</strong>和<strong data-nodeid="1785">多个子进程</strong>，从而形成一个集群的概念。我们先来看看 cluster 模式的应用例子。</p>
+<h4 data-nodeid="1626">应用</h4>
+<p data-nodeid="1627">我们先实现一个简单的 app.js，代码如下：</p>
+<pre class="lang-javascript" data-nodeid="1628"><code data-language="javascript"><span class="hljs-keyword">const</span> http = <span class="hljs-built_in">require</span>(<span class="hljs-string">'http'</span>);
+<span class="hljs-comment">/**
+ * 
+ * 创建 http 服务，简单返回
+ */</span>
+<span class="hljs-keyword">const</span> server = http.createServer(<span class="hljs-function">(<span class="hljs-params">req, res</span>) =&gt;</span> {
+    res.write(<span class="hljs-string">\`hello world, start with cluster <span class="hljs-subst">\${process.pid}</span>\`</span>);
+    res.end();
+});
+<span class="hljs-comment">/**
+ * 
+ * 启动服务
+ */</span>
+server.listen(<span class="hljs-number">3000</span>, () =&gt; {
+    <span class="hljs-built_in">console</span>.log(<span class="hljs-string">'server start http://127.0.0.1:3000'</span>);
+});
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">\`Worker <span class="hljs-subst">\${process.pid}</span> started\`</span>);
+</code></pre>
+<p data-nodeid="1629">这是最简单的一个 Node.js 服务，接下来我们应用 cluster 模式来包装这个服务，代码如下：</p>
+<pre class="lang-javascript" data-nodeid="1630"><code data-language="javascript"><span class="hljs-keyword">const</span> cluster = <span class="hljs-built_in">require</span>(<span class="hljs-string">'cluster'</span>);
+<span class="hljs-keyword">const</span> instances = <span class="hljs-number">2</span>; <span class="hljs-comment">// 启动进程数量</span>
+<span class="hljs-keyword">if</span> (cluster.isMaster) {
+    <span class="hljs-keyword">for</span>(<span class="hljs-keyword">let</span> i = <span class="hljs-number">0</span>;i&lt;instances;i++) { <span class="hljs-comment">// 使用 cluster.fork 创建子进程</span>
+        cluster.fork();
+    }
+} <span class="hljs-keyword">else</span> {
+    <span class="hljs-built_in">require</span>(<span class="hljs-string">'./app.js'</span>);
+}
+</code></pre>
+<p data-nodeid="1631">首先判断是否为主进程：</p>
+<ul data-nodeid="1632">
+<li data-nodeid="1633">
+<p data-nodeid="1634">如果是则使用 cluster.fork 创建子进程；</p>
+</li>
+<li data-nodeid="1635">
+<p data-nodeid="1636">如果不是则为子进程 require 具体的 app.js。</p>
+</li>
+</ul>
+<p data-nodeid="1637">然后运行下面命令启动服务。</p>
+<pre class="lang-java" data-nodeid="1638"><code data-language="java">$ node cluster.js
+</code></pre>
+<p data-nodeid="1639">启动成功后，再打开另外一个命令行窗口，多次运行以下命令：</p>
+<pre class="lang-java" data-nodeid="1640"><code data-language="java">curl <span class="hljs-string">"http://127.0.0.1:3000/"</span>
+</code></pre>
+<p data-nodeid="1641">你可以看到如下输出：</p>
+<pre class="lang-java" data-nodeid="1642"><code data-language="java">hello world, start with cluster <span class="hljs-number">4543</span>
+hello world, start with cluster <span class="hljs-number">4542</span>
+hello world, start with cluster <span class="hljs-number">4543</span>
+hello world, start with cluster <span class="hljs-number">4542</span>
+</code></pre>
+<p data-nodeid="1643">后面的进程 ID 是比较有规律的随机数，有时候输出 4543，有时候输出 4542，4543 和 4542 就是我们 <strong data-nodeid="1800">fork 出来的两个子进程</strong>，接下来我们看下为什么是这样的。</p>
+<h4 data-nodeid="1644">原理</h4>
+<p data-nodeid="1645">首先我们需要搞清楚两个问题：</p>
+<ul data-nodeid="1646">
+<li data-nodeid="1647">
+<p data-nodeid="1648">Node.js 的 cluster 是如何做到多个进程监听一个端口的；</p>
+</li>
+<li data-nodeid="1649">
+<p data-nodeid="1650">Node.js 是如何进行负载均衡请求分发的。</p>
+</li>
+</ul>
+<p data-nodeid="1651"><strong data-nodeid="1808">多进程端口问题</strong></p>
+<p data-nodeid="1652">在 cluster 模式中存在 master 和 worker 的概念，<strong data-nodeid="1818">master 就是主进程</strong>，<strong data-nodeid="1819">worker 则是子进程</strong>，因此这里我们需要看下 master 进程和 worker 进程的创建方式。如下代码所示：</p>
+<pre class="lang-javascript" data-nodeid="1653"><code data-language="javascript"><span class="hljs-keyword">const</span> cluster = <span class="hljs-built_in">require</span>(<span class="hljs-string">'cluster'</span>);
+<span class="hljs-keyword">const</span> instances = <span class="hljs-number">2</span>; <span class="hljs-comment">// 启动进程数量</span>
+<span class="hljs-keyword">if</span> (cluster.isMaster) {
+    <span class="hljs-keyword">for</span>(<span class="hljs-keyword">let</span> i = <span class="hljs-number">0</span>;i&lt;instances;i++) { <span class="hljs-comment">// 使用 cluster.fork 创建子进程</span>
+        cluster.fork();
+    }
+} <span class="hljs-keyword">else</span> {
+    <span class="hljs-built_in">require</span>(<span class="hljs-string">'./app.js'</span>);
+}
+</code></pre>
+<p data-nodeid="1654">这段代码中，第一次 require 的 cluster 对象就默认是一个 master，这里的判断逻辑在<a href="https://github.com/nodejs/node/blob/master/lib/cluster.js" data-nodeid="1823">源码</a>中，如下代码所示：</p>
+<pre class="lang-javascript" data-nodeid="1655"><code data-language="javascript"><span class="hljs-meta">'use strict'</span>;
+	
+	<span class="hljs-keyword">const</span> childOrPrimary = <span class="hljs-string">'NODE_UNIQUE_ID'</span> <span class="hljs-keyword">in</span> process.env ? <span class="hljs-string">'child'</span> : <span class="hljs-string">'primary'</span>;
+	<span class="hljs-built_in">module</span>.exports = <span class="hljs-built_in">require</span>(<span class="hljs-string">\`internal/cluster/<span class="hljs-subst">\${childOrPrimary}</span>\`</span>);
+</code></pre>
+<p data-nodeid="1656">通过<strong data-nodeid="1830">进程环境变量设置</strong>来判断：</p>
+<ul data-nodeid="1657">
+<li data-nodeid="1658">
+<p data-nodeid="1659">如果没有设置则为 master 进程；</p>
+</li>
+<li data-nodeid="1660">
+<p data-nodeid="1661">如果有设置则为子进程。</p>
+</li>
+</ul>
+<p data-nodeid="1662">因此第一次调用 cluster 模块是 master 进程，而后都是子进程。</p>
+<p data-nodeid="1663">主进程和子进程 require 文件不同：</p>
+<ul data-nodeid="1664">
+<li data-nodeid="1665">
+<p data-nodeid="1666">前者是 internal/cluster/primary；</p>
+</li>
+<li data-nodeid="1667">
+<p data-nodeid="1668">后者是 internal/cluster/child。</p>
+</li>
+</ul>
+<p data-nodeid="1669">我们先来看下 master 进程的创建过程，这部分<a href="https://github.com/nodejs/node/blob/7397c7e4a303b1ebad84892872717c0092852921/lib/internal/cluster/primary.js#L60" data-nodeid="1840">代码在这里</a>。</p>
+<p data-nodeid="1670">可以看到 cluster.fork，一开始就会调用 setupPrimary 方法，创建主进程，由于该方法是通过 cluster.fork 调用，因此会调用多次，但是该模块有个全局变量 initialized 用来区分是否为首次，如果是首次则创建，否则则跳过，如下代码：</p>
+<pre class="lang-javascript" data-nodeid="1671"><code data-language="javascript">  <span class="hljs-keyword">if</span> (initialized === <span class="hljs-literal">true</span>)
+	    <span class="hljs-keyword">return</span> process.nextTick(setupSettingsNT, settings);
+	
+	  initialized = <span class="hljs-literal">true</span>;
+</code></pre>
+<p data-nodeid="1672">接下来继续看 cluster.fork 方法，源码如下：</p>
+<pre class="lang-javascript" data-nodeid="1673"><code data-language="javascript">cluster.fork = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">env</span>) </span>{
+	  cluster.setupPrimary();
+	  <span class="hljs-keyword">const</span> id = ++ids;
+	  <span class="hljs-keyword">const</span> workerProcess = createWorkerProcess(id, env);
+	  <span class="hljs-keyword">const</span> worker = <span class="hljs-keyword">new</span> Worker({
+	    <span class="hljs-attr">id</span>: id,
+	    <span class="hljs-attr">process</span>: workerProcess
+	  });
+	
+	  worker.on(<span class="hljs-string">'message'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">message, handle</span>) </span>{
+	    cluster.emit(<span class="hljs-string">'message'</span>, <span class="hljs-keyword">this</span>, message, handle);
+	  });
+</code></pre>
+<p data-nodeid="1674">在上面代码中第 2 行就是<strong data-nodeid="1855">创建主进程</strong>，第 4 行就是<strong data-nodeid="1856">创建 worker 子进程</strong>，在这个 createWorkerProcess 方法中，最终是使用 child_process 来创建子进程的。在初始化代码中，我们调用了两次 cluster.fork 方法，因此会创建 2 个子进程，在创建后又会调用我们项目根目录下的 cluster.js 启动一个新实例，这时候由于 cluster.isMaster 是 false，因此会 require 到 internal/cluster/child 这个方法。</p>
+<p data-nodeid="1675">由于是 worker 进程，因此代码会 require ('./app.js') 模块，在该模块中会监听具体的端口，代码如下：</p>
+<pre class="lang-javascript" data-nodeid="1676"><code data-language="javascript"><span class="hljs-comment">/**
+ * 
+ * 启动服务
+ */</span>
+server.listen(<span class="hljs-number">3000</span>, () =&gt; {
+    <span class="hljs-built_in">console</span>.log(<span class="hljs-string">'server start http://127.0.0.1:3000'</span>);
+});
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">\`Worker <span class="hljs-subst">\${process.pid}</span> started\`</span>);
+</code></pre>
+<p data-nodeid="1677">这里的 server.listen 方法很重要，这部分<a href="https://github.com/nodejs/node/blob/15164cebcebfcad9822d3f065234a8c1511776a4/lib/net.js" data-nodeid="1865">源代码在这里</a>，其中的 server.listen 会调用该模块中的 listenInCluster 方法，该方法中有一个关键信息，如下代码所示：</p>
+<pre class="lang-javascript" data-nodeid="1678"><code data-language="javascript"><span class="hljs-keyword">if</span> (cluster.isPrimary || exclusive) {
+	    <span class="hljs-comment">// Will create a new handle</span>
+	    <span class="hljs-comment">// _listen2 sets up the listened handle, it is still named like this</span>
+	    <span class="hljs-comment">// to avoid breaking code that wraps this method</span>
+	    server._listen2(address, port, addressType, backlog, fd, flags);
+	    <span class="hljs-keyword">return</span>;
+	  }
+	
+	  <span class="hljs-keyword">const</span> serverQuery = {
+	    <span class="hljs-attr">address</span>: address,
+	    <span class="hljs-attr">port</span>: port,
+	    <span class="hljs-attr">addressType</span>: addressType,
+	    <span class="hljs-attr">fd</span>: fd,
+	    flags,
+	  };
+	
+	  <span class="hljs-comment">// Get the primary's server handle, and listen on it</span>
+	  cluster._getServer(server, serverQuery, listenOnPrimaryHandle);
+</code></pre>
+<p data-nodeid="1679">上面代码中的第 6 行，判断为<strong data-nodeid="1880">主进程</strong>，就是<strong data-nodeid="1881">真实的监听端口启动服务</strong>，而如果非主进程则调用 cluster._getServer 方法，也就是 internal/cluster/child 中的 cluster._getServer 方法。</p>
+<p data-nodeid="1680">接下来我们看下这部分代码：</p>
+<pre class="lang-javascript" data-nodeid="1681"><code data-language="javascript">obj.once(<span class="hljs-string">'listening'</span>, () =&gt; {
+	    cluster.worker.state = <span class="hljs-string">'listening'</span>;
+	    <span class="hljs-keyword">const</span> address = obj.address();
+	    message.act = <span class="hljs-string">'listening'</span>;
+	    message.port = (address &amp;&amp; address.port) || options.port;
+	    send(message);
+	  });
+</code></pre>
+<p data-nodeid="1682">这一代码通过 send 方法，如果监听到 listening 发送一个消息给到主进程，主进程也有一个同样的 listening 事件，监听到该事件后将子进程通过 EventEmitter 绑定在主进程上，这样就完成了主子进程之间的<strong data-nodeid="1892">关联绑定</strong>，并且只监听了一个端口。而主子进程之间的通信方式，就是我们常听到的 <strong data-nodeid="1893">IPC 通信方式</strong>。</p>
+<p data-nodeid="1683"><strong data-nodeid="1897">负载均衡原理</strong></p>
+<p data-nodeid="1684">既然 Node.js cluster 模块使用的是主子进程方式，那么它是如何进行负载均衡处理的呢，这里就会涉及 Node.js cluster 模块中的两个模块。</p>
+<ul data-nodeid="1685">
+<li data-nodeid="1686">
+<p data-nodeid="1687"><a href="https://github.com/nodejs/node/blob/7397c7e4a303b1ebad84892872717c0092852921/lib/internal/cluster/round_robin_handle.js" data-nodeid="1905">round_robin_handle.js</a>（非 Windows 平台应用模式），这是一个<strong data-nodeid="1911">轮询处理模式</strong>，也就是轮询调度分发给空闲的子进程，处理完成后回到 worker 空闲池子中，这里要注意的就是如果绑定过就会复用该子进程，如果没有则会重新判断，这里可以通过上面的 app.js 代码来测试，用浏览器去访问，你会发现每次调用的子进程 ID 都会不变。</p>
+</li>
+<li data-nodeid="1688">
+<p data-nodeid="1689"><a href="https://github.com/nodejs/node/blob/7397c7e4a303b1ebad84892872717c0092852921/lib/internal/cluster/shared_handle.js" data-nodeid="1916">shared_handle.js</a>（ Windows 平台应用模式），通过将文件描述符、端口等信息传递给子进程，子进程通过信息创建相应的 SocketHandle / ServerHandle，然后进行相应的端口绑定和监听、处理请求。</p>
+</li>
+</ul>
+<p data-nodeid="1690">以上就是 cluster 的原理，总结一下就是 cluster 模块应用 child_process 来创建子进程，子进程通过复写掉 cluster._getServer 方法，从而在 server.listen 来保证只有主进程监听端口，主子进程通过 IPC 进行通信，其次主进程根据平台或者协议不同，应用两种不同模块（round_robin_handle.js 和 shared_handle.js）进行请求分发给子进程处理。接下来我们看一下 cluster 的成熟的应用工具 PM2 的应用和原理。</p>
+<h3 data-nodeid="1691">PM2 原理</h3>
+<p data-nodeid="1692">PM2 是<strong data-nodeid="1935">守护进程管理器</strong>，可以帮助你管理和保持应用程序在线。PM2 入门非常简单，它是一个简单直观的 CLI 工具，可以通过 NPM 安装，接下来我们看下一些简单的用法。</p>
+<h4 data-nodeid="1693">应用</h4>
+<p data-nodeid="1694">你可以使用如下命令进行 NPM 或者 Yarn 的安装：</p>
+<pre class="lang-java" data-nodeid="1695"><code data-language="java">$ npm install pm2@latest -g
+# or
+$ yarn global add pm2
+</code></pre>
+<p data-nodeid="1696">安装成功后，可以使用如下命令查看是否安装成功以及当前的版本：</p>
+<pre class="lang-java" data-nodeid="1697"><code data-language="java">$&nbsp;pm2 --version
+</code></pre>
+<p data-nodeid="1698">接下来我们使用 PM2 启动一个简单的 Node.js 项目，进入本讲代码的项目根目录，然后运行下面命令：</p>
+<pre class="lang-java" data-nodeid="1699"><code data-language="java">$&nbsp;pm2 start app.js
+</code></pre>
+<p data-nodeid="1700">运行后，再执行如下命令：</p>
+<pre class="lang-java" data-nodeid="1701"><code data-language="java">$&nbsp;pm2&nbsp;list
+</code></pre>
+<p data-nodeid="1702">可以看到如图 2 所示的结果，代表运行成功了。</p>
+<p data-nodeid="1703"><img src="https://s0.lgstatic.com/i/image6/M01/1D/E3/Cgp9HWBQKZeAM-MIAAB0_RHaw1E022.png" alt="Drawing 2.png" data-nodeid="1944"></p>
+<div data-nodeid="1704"><p style="text-align:center">图 2 pm2 list 运行结果</p></div>
+<p data-nodeid="1705">PM2 启动时可以带一些配置化参数，具体参数列表你可以参考<a href="https://pm2.keymetrics.io/docs/usage/pm2-doc-single-page/" data-nodeid="1948">官方文档</a>。在开发中我总结出了一套最佳的实践，如以下配置所示：</p>
+<pre class="lang-javascript" data-nodeid="1706"><code data-language="javascript"><span class="hljs-built_in">module</span>.exports = {
+    <span class="hljs-attr">apps</span> : [{
+      <span class="hljs-attr">name</span>: <span class="hljs-string">"nodejs-column"</span>, <span class="hljs-comment">// 启动进程名</span>
+      <span class="hljs-attr">script</span>: <span class="hljs-string">"./app.js"</span>, <span class="hljs-comment">// 启动文件</span>
+      <span class="hljs-attr">instances</span>: <span class="hljs-number">2</span>, <span class="hljs-comment">// 启动进程数</span>
+      <span class="hljs-attr">exec_mode</span>: <span class="hljs-string">'cluster'</span>, <span class="hljs-comment">// 多进程多实例</span>
+      <span class="hljs-attr">env_development</span>: {
+        <span class="hljs-attr">NODE_ENV</span>: <span class="hljs-string">"development"</span>,
+        <span class="hljs-attr">watch</span>: <span class="hljs-literal">true</span>, <span class="hljs-comment">// 开发环境使用 true，其他必须设置为 false</span>
+      },
+      <span class="hljs-attr">env_testing</span>: {
+        <span class="hljs-attr">NODE_ENV</span>: <span class="hljs-string">"testing"</span>,
+        <span class="hljs-attr">watch</span>: <span class="hljs-literal">false</span>, <span class="hljs-comment">// 开发环境使用 true，其他必须设置为 false</span>
+      },
+      <span class="hljs-attr">env_production</span>: {
+        <span class="hljs-attr">NODE_ENV</span>: <span class="hljs-string">"production"</span>,
+        <span class="hljs-attr">watch</span>: <span class="hljs-literal">false</span>, <span class="hljs-comment">// 开发环境使用 true，其他必须设置为 false</span>
+      },
+      <span class="hljs-attr">log_date_format</span>: <span class="hljs-string">'YYYY-MM-DD HH:mm Z'</span>,
+      <span class="hljs-attr">error_file</span>: <span class="hljs-string">'~/data/err.log'</span>, <span class="hljs-comment">// 错误日志文件，必须设置在项目外的目录，这里为了测试</span>
+      <span class="hljs-attr">out_file</span>: <span class="hljs-string">'~/data/info.log'</span>, <span class="hljs-comment">//  流水日志，包括 console.log 日志，必须设置在项目外的目录，这里为了测试</span>
+      <span class="hljs-attr">max_restarts</span>: <span class="hljs-number">10</span>,
+    }]
+  }
+</code></pre>
+<p data-nodeid="3650" class="te-preview-highlight">在上面的配置中要特别注意 <strong data-nodeid="3664">error_file</strong> 和 <strong data-nodeid="3665">out_file</strong>，这里的日志目录在项目初始化时要创建好，如果不提前创建好会导致线上运行失败，特别是无权限创建目录时。其次如果存在环境差异的配置时，可以放置在不同的环境下，最终可以使用下面三种方式来启动项目，分别对应不同环境。</p>
+
+
+
+<pre class="lang-shell" data-nodeid="1708"><code data-language="shell"><span class="hljs-meta">$</span><span class="bash"> pm2 start pm2.config.js --env development</span>
+<span class="hljs-meta">$</span><span class="bash"> pm2 start pm2.config.js --env testing</span>
+<span class="hljs-meta">$</span><span class="bash"> pm2 start pm2.config.js --env production</span>
+</code></pre>
+<h4 data-nodeid="1709">原理</h4>
+<p data-nodeid="1710">接下来我们来看下是如何实现的，由于整个项目是比较复杂庞大的，这里我们主要关注<strong data-nodeid="1971">进程创建管理的原理</strong>。</p>
+<p data-nodeid="1711">首先我们来看下进程创建的方式，整体的流程如图 3 所示。</p>
+<p data-nodeid="1712"><img src="https://s0.lgstatic.com/i/image6/M01/1D/E0/CioPOWBQKaWAHrR1AAKhg2CW1Z0319.png" alt="Drawing 3.png" data-nodeid="1975"></p>
+<div data-nodeid="1713"><p style="text-align:center">图 3 PM2 源码多进程创建方式</p></div>
+<p data-nodeid="1714">这一方式涉及五个模块文件。</p>
+<ul data-nodeid="1715">
+<li data-nodeid="1716">
+<p data-nodeid="1717">CLI（lib/binaries/CLI.js）处理命令行输入，如我们运行的命令：</p>
+</li>
+</ul>
+<pre class="lang-java" data-nodeid="1718"><code data-language="java">pm2 start pm2.config.js --env development
+</code></pre>
+<ul data-nodeid="1719">
+<li data-nodeid="1720">
+<p data-nodeid="1721">API（lib/API.js）对外暴露的各种命令行调用方法，比如上面的 start 命令对应的 API-&gt;start 方法。</p>
+</li>
+<li data-nodeid="1722">
+<p data-nodeid="1723">Client （lib/Client.js）可以理解为命令行接收端，负责创建守护进程 Daemon，并与 Daemon（lib/Daemon.js）保持 RPC 连接。</p>
+</li>
+<li data-nodeid="1724">
+<p data-nodeid="1725">God （lib/God.js）主要负责进程的创建和管理，主要是通过 Daemon 调用，Client 所有调用都是通过 RPC 调用 Daemon，然后 Daemon 调用 God 中的方法。</p>
+</li>
+<li data-nodeid="1726">
+<p data-nodeid="1727">最终在 God 中调用 ClusterMode（lib/God/ClusterMode.js）模块，在 ClusterMode 中调用 Node.js 的 cluster.fork 创建子进程。</p>
+</li>
+</ul>
+<p data-nodeid="1728">图 3 中首先通过命令行解析调用 API，API 中的方法基本上是与 CLI 中的命令行一一对应的，API 中的 start 方法会根据传入参数判断是否是调用的方法，一般情况下使用的都是一个 JSON 配置文件，因此调用 API 中的私有方法 _startJson。</p>
+<p data-nodeid="1729">接下来就开始在 Client 模块中流转了，在 _startJson 中会调用 executeRemote 方法，该方法会先判断 PM2 的守护进程 Daemon 是否启动，如果没有启动会先调用 Daemon 模块中的方法启动守护进程 RPC 服务，启动成功后再通知 Client 并建立 RPC 通信连接。</p>
+<p data-nodeid="1730">成功建立连接后，Client 会发送启动 Node.js 子进程的命令 prepare，该命令传递 Daemon，Daemon 中有一份对应的命令的执行方法，该命令最终会调用 God 中的 prepare 方法。</p>
+<p data-nodeid="1731">在 God 中最终会调用 God 文件夹下的 ClusterMode 模块，应用 Node.js 的 cluster.fork 创建子进程，这样就完成了整个启动过程。</p>
+<p data-nodeid="1732">综上所述，PM2 通过命令行，使用 RPC 建立 Client 与 Daemon 进程之间的通信，通过 RPC 通信方式，调用 God，从而应用 Node.js 的 cluster.fork 创建子进程的。以上是启动的流程，对于其他命令指令，比如 stop、restart 等，也是一样的通信流转过程，你参照上面的流程分析就可以了，如果遇到任何问题，都可以在留言区与我交流。</p>
+<blockquote data-nodeid="1733">
+<p data-nodeid="1734">以上的分析你需要参考<a href="https://github.com/Unitech/pm2/tree/64f8ea0f2c31c7d70a415eccc6222547b3664e65" data-nodeid="1994">PM2 的 GitHub 源码</a>。</p>
+</blockquote>
+<h3 data-nodeid="1735">总结</h3>
+<p data-nodeid="1736">本讲主要介绍了 Node.js 中的 cluster 模块，并深入介绍了其核心原理，其次介绍了目前比较常用的多进程管理工具 PM2 的应用和原理。学完本讲后，需要掌握 Node.js cluster 原理，并且掌握 PM2 的实现原理。</p>
+<p data-nodeid="1737">接下来我们将开始讲解一些关于 Node.js 性能相关的知识，为后续的高性能服务做一定的准备，其次也在为后续性能优化打下一定的技术基础。</p>
+<p data-nodeid="1738">下一讲会讲解，目前我们在使用的 Node.js cluster 模式存在的性能问题。</p>
+<hr data-nodeid="1739">
+<p data-nodeid="1740"><a href="https://shenceyun.lagou.com/t/mka" data-nodeid="2004"><img src="https://s0.lgstatic.com/i/image6/M00/12/FA/CioPOWBBrAKAAod-AASyC72ZqWw233.png" alt="Drawing 2.png" data-nodeid="2003"></a></p>
+<p data-nodeid="1741"><strong data-nodeid="2008">《大前端高薪训练营》</strong></p>
+<p data-nodeid="1742" class="">对标阿里 P7 技术需求 + 每月大厂内推，6 个月助你斩获名企高薪 Offer。<a href="https://shenceyun.lagou.com/t/mka" data-nodeid="2012">点击链接</a>，快来领取！</p></div>
+
+</body></html>

@@ -1,0 +1,1162 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>12 | 高性能缓存：多级缓存是如何提升服务性能的？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>12 | 高性能缓存：多级缓存是如何提升服务性能的？</h1><p data-nodeid="749" class="">上一讲，我给你介绍了如何为不同的业务场景优化系统参数，从而提升网络性能。但是在实际当中，仅靠这种方式并不能解决所有性能问题。比如当并发高的时候，数据库的响应时间可能达到一秒以上，这个时候，想要通过优化系统参数就很难做到。那怎么办呢？我们可以使用缓存来提升并发访问数据的性能。</p>
+<p data-nodeid="750">什么是缓存？<strong data-nodeid="822">缓存是一种存储器，它位于访问速度、容量和成本相差较大的计算单元和目标存储器之间，主要用于存储热点数据的中间状态，为计算单元处理热点数据时提供良好的访问性能。</strong></p>
+<p data-nodeid="751">打个比方，不知道你平时买东西的时候有没有这样一种体会：一些日常生活用品、水果蔬菜，在小区门口小超市可能就能买到，但类似按摩椅这种商品，就需要你到市区专卖店里买。</p>
+<p data-nodeid="752">很显然，在小区超市买东西要比去市区快很多，原因就是小超市离你比较近。假如把消费者比喻成处理数据的计算单元，商品比喻成数据，那么这里的小超市就相当于缓存，而日常生活用品则是热点数据。</p>
+<p data-nodeid="753">在秒杀系统中，活动信息数据请求量很大，属于热点数据。如果热点数据每次都从 DB 中读取，会给 DB 带来庞大的压力，导致性能大幅下降。所以，我们需要用缓存来提升热点数据的访问性能，比如将活动信息数据在浏览器的缓存中保存一段时间。</p>
+<p data-nodeid="754">但缓存中的热点数据通常具有时效性，比如当后端活动数据有更新的时候，浏览器缓存中的原活动信息就会失效，进而导致缓存穿透问题。为此，我们通常会采用多级缓存来避免单级缓存穿透，提升服务性能。</p>
+<h3 data-nodeid="755">什么是多级缓存</h3>
+<p data-nodeid="756">多级缓存通常是由多种不同容量、不同性能的存储器按顺序组成，最有名的是存储器金字塔。</p>
+<p data-nodeid="757"><img src="https://s0.lgstatic.com/i/image/M00/8B/16/CgqCHl_bKJmANzuoAABzuakYQn4429.png" alt="Drawing 1.png" data-nodeid="831"></p>
+<p data-nodeid="758"><strong data-nodeid="836">在存储器金字塔中，从上往下看，各层存储器离计算单元越来越远，性能和成本从高到低，容量从小到大。</strong> 其中的每一层存储器，都是其下一层存储器的缓存，如 L3 缓存是内存的缓存，内存是硬盘的缓存。</p>
+<p data-nodeid="759">那么，这个多级缓存各层存储器的性能如何呢？</p>
+<p data-nodeid="760">上层的寄存器、L1 缓存、L2 缓存是位于 CPU 核内的高速缓存，访问延迟通常在 10 纳秒以下。L3 缓存是位于 CPU 核外部但在芯片内部的共享高速缓存，访问延迟通常在十纳秒左右。高速缓存具有成本高、容量小的特点，容量最大的 L3 缓存通常也只有几十MB。</p>
+<p data-nodeid="761">本地内存是计算机内的主存储器，相比 CPU 芯片内部的高速缓存，内存的成本要低很多，容量通常是 GB 级别，访问延迟通常在几十到几百纳秒。</p>
+<p data-nodeid="762"><strong data-nodeid="843">内存和高速缓存都属于掉电易失的存储器，如果机器断电了，这类存储器中的数据就丢失了。</strong></p>
+<p data-nodeid="763"><img src="https://s0.lgstatic.com/i/image/M00/8B/0B/Ciqc1F_bKKiAcT5_AAJWQpXoeZI752.png" alt="Drawing 2.png" data-nodeid="846"></p>
+<p data-nodeid="764">本地磁盘是计算机内的辅助存储，负责存储一些希望掉电不丢失的数据，主要有机械磁盘和固态硬盘。它的容量通常在几百 GB ，大的达到了 TB。固态硬盘访问延迟通常在几十到几百微秒，而机械硬盘通常在十几到几十毫秒。</p>
+<p data-nodeid="765">网络内存和网络磁盘属于外部存储，通常用于多个计算机之间共享数据。比如 Redis 属于网络内存存储， NAS 文件系统和 MySQL 之类的关系型数据库属于网络磁盘存储。网络内存和本地磁盘通常用来当作网络磁盘存储的缓存。</p>
+<p data-nodeid="766">为什么会有存储器金字塔结构呢？</p>
+<p data-nodeid="767">主要还是因为存储器的发展速度远无法匹配 CPU 而形成的。具体来说，CPU 的发展基本上符合摩尔定律，而存储器特别是硬盘读写速度的提升却比较漫长，大幅提升主要还是在固态硬盘出现后。如果没有缓存，硬盘访问速度太慢会导致 CPU 性能下降。特别是随着计算机对数据访问的性能要求越来越高，存储器与CPU 的性能差距越来越大，为了满足需求，缓存的级数越来越多，也就形成了现在的存储器金字塔模型。</p>
+<p data-nodeid="768">那么，秒杀系统的多级缓存是如何设计的呢？</p>
+<h3 data-nodeid="769">秒杀系统多级缓存设计</h3>
+<p data-nodeid="770">秒杀系统包含动态数据和静态数据，它的多级缓存包括浏览器端缓存和服务器端缓存。其中浏览器端缓存分为本地内存缓存和本地磁盘缓存，服务器端缓存有本地内存缓存、网络内存缓存。</p>
+<p data-nodeid="771">下面我给你介绍下各部分缓存的原理，以及这么设计的原因。</p>
+<h4 data-nodeid="772">浏览器本地内存缓存</h4>
+<p data-nodeid="773">为什么浏览器端需要有内存缓存呢？</p>
+<p data-nodeid="774">回想下，浏览器端是如何获取秒杀活动信息的呢？当进入秒杀活动页的时候，浏览器通过 JavaScript 发起 HTTP 请求，从秒杀接口服务获取活动信息。一个专题活动，一旦上线，在活动期间是不会随意变更的。所以，活动信息是可以在内存里缓存一段时间的。</p>
+<p data-nodeid="775"><strong data-nodeid="862">在浏览器端，活动信息可以缓存多久？建议缓存到当前场次活动结束之前。</strong> 也就是说，当活动场次因为某场活动结束而切换时，应该从后端获取新的活动数据并更新内存缓存。为什么呢？因为如果运营发现后面某场活动配错了，可以在活动开始前修改该活动信息，在场次切换的时候，浏览器将更新到最新的活动信息。</p>
+<p data-nodeid="776">另外，浏览器的内存缓存还用于缓存页面渲染的结果，比如从后端获取到商品图片后，将其渲染到页面上展现给用户。</p>
+<p data-nodeid="777">总的来说，浏览器的内存缓存是有时效性的，浏览器内存中缓存的数据会随着页面渲染、关闭而更新、丢弃。</p>
+<h4 data-nodeid="778">浏览器本地磁盘缓存</h4>
+<p data-nodeid="779">那什么情况下需要用到浏览器的本地磁盘缓存呢？前面提到的商品图片的渲染结果是缓存在内存中的，假如用户将活动页面关闭再打开，如果重新从服务端下载所有图片并渲染出来，图片的渲染速度会非常慢。怎么办呢？</p>
+<p data-nodeid="780">已经生成的商品图片文件数据是不会随意变动的，所以浏览器端没必要每次都从后端下载图片。但是，也不能将所有图片都缓存到内存里。因为缓存所有的商品图片将会占用大量系统内存，导致系统变慢，影响用户体验。</p>
+<p data-nodeid="781">内存通常适合缓存一些比较小的图片，比如图标、缩略图之类的。由于每张商品图片大小在几百 KB 以上，前端通常会采用一种叫作 <strong data-nodeid="873">“懒加载”</strong> 的技术——只加载页面可见区内的图片，这么做既可以提高页面首屏渲染速度，还能有效减少浏览器内存的占用。</p>
+<p data-nodeid="782">那浏览器应当如何缓存商品图片呢？当后端给浏览器端返回图片的时候，可以通过一些参数，告诉浏览器端将图片在本地磁盘上缓存一段时间。具体我们可以在后端返回的 HTTP 头中加上浏览器缓存相关参数，如下图所示：</p>
+<p data-nodeid="783"><img src="https://s0.lgstatic.com/i/image/M00/8B/16/CgqCHl_bKLyAZ5SmAADZhhxA6xE416.png" alt="Drawing 3.png" data-nodeid="877"></p>
+<div data-nodeid="784"><p style="text-align:center">浏览器缓存参数</p></div>
+<p data-nodeid="785">上图 HTTP 返回头中的 age、cache-control、etag、expires、last-modified 便是用来告诉浏览器应该如何缓存该文件。这些参数中，age、cache-control、expires、last-modified 是用来告诉浏览器该文件已经缓存多久了、最多缓存多久、什么时候过期、上一次修改的时间。</p>
+<p data-nodeid="786">etag 是怎么用的呢？etag 是由服务端生成的一个唯一标识，当文件的本地缓存到期后，浏览器会将该文件的 etag 发给服务端。服务端如果校验自己本地的 etag 与浏览器发过来的 etag 不一致，则会将最新的文件数据返回给浏览器并告诉它缓存该数据；如果一致，服务端只会返回 HTTP 头，告诉浏览器端继续用浏览器本地缓存，而不会返回实际的数据。</p>
+<p data-nodeid="787">由于 HTTP 头通常要比文件数据小很多，在文件没有变更的情况下，通过 etag 能节省很多网络流量，有效提升访问性能。</p>
+<p data-nodeid="788">除了商品图片，为了减少服务端压力，提升服务端性能，秒杀页面用到的 css、js 等静态资源文件，也是通过上述方法缓存在浏览器本地的。</p>
+<h4 data-nodeid="789">服务端本地内存缓存</h4>
+<p data-nodeid="790">前面提到了秒杀活动信息是从秒杀接口服务获取的，那秒杀接口服务又是如何存储活动信息的呢？</p>
+<p data-nodeid="791">在做需求分析和总体架构设计的时候我提到过，秒杀活动信息是由秒杀管理后台配置并存储到数据库中的，而数据库最终会将数据存储到磁盘上。假如活动期间每秒一千万次请求都直接从数据库中取数据，你觉得数据库能扛住吗？也许，当数据库资源足够的时候能扛住，但这意味着要投入很大的成本来建设一个能扛住千万并发的数据库。</p>
+<p data-nodeid="792"><strong data-nodeid="888">那么，有没有办法用相对较小的成本来提升服务端数据访问性能呢？有，那就是利用服务端本地内存缓存。</strong></p>
+<p data-nodeid="793">对于 Golang、java、C/C++ 等静态类型语言来说，最大的好处就是能将热点数据缓存在程序内存中，以便充分利用本地内存的高速读写能力，大幅提升数据访问的性能。</p>
+<p data-nodeid="2805" class="te-preview-highlight">这个性能提升多少？打个比方，如果从数据库加载活动信息数据，即使在并发压力不大的情况下，网络延迟加上数据库处理延迟，整个延迟可能达到 10 毫秒以上。如果用本地内存缓存，整个加载过程能降到 100 纳秒以下，也就是低于 10 毫秒的 1/100000，性能提升 100000 倍以上！</p>
+
+
+
+
+
+
+<p data-nodeid="795">当然，本地内存缓存是需要设置有效时间的。当有效时间过期，会有部分请求发生缓存穿透。流量小的时候问题不大，一旦并发量达到千万，哪怕是 1/100 的流量穿透到了数据库，数据库也可能被压垮。</p>
+<p data-nodeid="796">怎么解决呢？配置类的数据格式比较固定，数据量比较小，我们可以在程序内部使用定时器，定时从下游数据库中获取最新数据，更新到本地内存缓存中。</p>
+<p data-nodeid="797"><strong data-nodeid="897">如果说缓存穿透在软件正常运行时有可能发生，那么有一种情况，缓存穿透必定会发生，那就是在服务启动或重启的时候。</strong> 你可以想象一下，程序刚启动的时候，本地内存缓存为空，此时突然有大量请求涌进来，数据库一定能扛住吗？</p>
+<p data-nodeid="798"><img src="https://s0.lgstatic.com/i/image/M00/8B/0B/Ciqc1F_bKMuAVDLOAAJt-Y2hEd0724.png" alt="Drawing 4.png" data-nodeid="900"></p>
+<p data-nodeid="799">那该怎么办呢？我们可以在本地内存缓存与数据库之间加一层网络内存缓存，为秒杀接口服务各节点提供共享缓存。我上面提到的定时任务，就可以从网络内存缓存中获取最新的数据，并更新到本地内存缓存中，避免本地内存缓存穿透。</p>
+<h4 data-nodeid="800">服务端网络内存缓存</h4>
+<p data-nodeid="801">还记得第 9 讲里我提到的 Memcached 和 Redis 吗？它们常用来当作网络内存缓存来提供服务，其性能至少是关系型数据库的几十倍。在这里，我们还是用 Redis 来介绍下 。</p>
+<p data-nodeid="802">前面提到了，在秒杀接口服务正常运行时，可以通过程序内部定时任务，来定时更新本地内存缓存。但 Redis 是个通用的开源软件，它内部没有从其他存储同步数据的逻辑，那我们要如何将数据同步到 Redis 里呢？答案是利用秒杀系统的管理后台服务。</p>
+<p data-nodeid="803">具体来说，我们可以先在管理后台系统发布修改后的活动信息，然后将最新的活动信息写入到 Redis 中。另外，为了防止 Redis 挂掉重启后缓存数据丢失，管理后台服务中可以实现一个定时器，定时将已发布的活动配置从数据库中取出，并写入到 Redis 中。</p>
+<p data-nodeid="804">由于管理后台是实时将最新数据写入到 Redis 中的，并且有定时任务作兜底方案，这也保障了在 Redis 正常运行的过程中不会有缓存穿透的问题。</p>
+<p data-nodeid="805">以上便是秒杀系统多级缓存中各缓存的原理。<strong data-nodeid="911">多种缓存配合使用，最终落到数据库上的请求可能每秒只有几十次，而系统性能和稳定性都可以得到大幅提升。</strong></p>
+<p data-nodeid="806"><img src="https://s0.lgstatic.com/i/image2/M01/02/E8/Cip5yF_bKNWAUbtvAAJnZQU_BRc902.png" alt="Drawing 5.png" data-nodeid="914"></p>
+<h3 data-nodeid="807">小结</h3>
+<p data-nodeid="808">这一讲主要和你介绍了多级缓存的实现原理。通过多级缓存，我们既能提升浏览器端的加载速度，又能提升服务端整体性能和稳定性。其中，最值得注意的是，如何解决缓存穿透问题和数据同步问题。你学会了吗？</p>
+<p data-nodeid="809">思考题：</p>
+<p data-nodeid="810">前面提到了网络内存和本地磁盘可以当作网络磁盘的缓存使用，那为何我们在设计方案中使用的是网络内存，而不是本地磁盘呢？</p>
+<p data-nodeid="811">你可以把答案写在留言区。我很期待你的回答哦。</p>
+<p data-nodeid="812">这一讲就到这里了，下一讲我将为你介绍如何提升日志性能避免 IO 瓶颈。到时见！</p>
+<hr data-nodeid="813">
+<p data-nodeid="814"><a href="https://shenceyun.lagou.com/t/Mka" data-nodeid="925"><img src="https://s0.lgstatic.com/i/image/M00/80/32/CgqCHl_QgX2AHJo_ACRP1TPc6yM423.png" alt="Drawing 15.png" data-nodeid="924"></a></p>
+<p data-nodeid="815"><strong data-nodeid="929">《Java 工程师高薪训练营》</strong></p>
+<p data-nodeid="816" class="">实战训练+面试模拟+大厂内推，想要提升技术能力，进大厂拿高薪，<a href="https://shenceyun.lagou.com/t/Mka" data-nodeid="933">点击链接，提升自己</a>！</p></div>
+
+</body></html>

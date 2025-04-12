@@ -1,0 +1,1222 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>19 | 性能为王：微服务架构中的多级缓存设计</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>19 | 性能为王：微服务架构中的多级缓存设计</h1><p data-nodeid="15636" class="">前一讲我们学习了利用 Seata 构建微服务环境的分布式事务架构，通过完整的案例也了解了 Seata 的执行过程。</p>
+<p data-nodeid="15637">本讲咱们探讨缓存这个话题，看在微服务环境下如何设计有效的多级缓存架构。本讲涉及三方面内容：</p>
+<ul data-nodeid="15638">
+<li data-nodeid="15639">
+<p data-nodeid="15640">Web 应用的客户端缓存；</p>
+</li>
+<li data-nodeid="15641">
+<p data-nodeid="15642">应用层静态资源缓存；</p>
+</li>
+<li data-nodeid="15643">
+<p data-nodeid="15644">服务层多级缓存。</p>
+</li>
+</ul>
+<p data-nodeid="15645">首先，咱们先讲解微服务架构的多级缓存设计。</p>
+<h3 data-nodeid="15646">微服务架构中的多级缓存设计</h3>
+<p data-nodeid="15647">提到缓存，想必每一位软件工程师都不陌生，它是目前架构设计中提高性能最直接的方式。这里我们举个例子：</p>
+<p data-nodeid="15648"><img src="https://s0.lgstatic.com/i/image6/M01/37/20/CioPOWB1uh2APCKlAAICTDYjG2s412.png" alt="图片1.png" data-nodeid="15725"></p>
+<div data-nodeid="15649"><p style="text-align:center">Redis 缓存</p></div>
+<p data-nodeid="15650">假设应用程序将原始数据存储在 MySQL 数据库中。众所周知 MySQL 数据库会将数据存储在硬盘以防止掉电丢失，但是受制于硬盘的物理设计，即便是目前性能最好的企业级 SSD 硬盘，也比内存的这种高速设备 IO 层面差一个数量级，而以淘宝、京东这种电商为代表的互联网应用，都是典型的“读多写少”的场景，因此我们需要在设计上进行数据的读写分离，在数据写入时直接落盘处理，而占比超过 90% 的数据读取操作时则从以 Redis 为代表的内存 NoSQL 数据库提取数据，利用内存的高吞吐瞬间完成数据提取，这里 Redis 的作用就是我们常说的缓存。</p>
+<p data-nodeid="15651">当然，缓存可不只有用内存替代硬盘这一种形式，在分布式架构下缓存在每一层都有自己的设计，下面咱们通过这个微服务的多级缓存架构图为主线进行讲解。</p>
+<p data-nodeid="15652"><img src="https://s0.lgstatic.com/i/image6/M01/37/18/Cgp9HWB1uiiASVItAAHeGbiJ6x8340.png" alt="图片2.png" data-nodeid="15730"></p>
+<div data-nodeid="15653"><p style="text-align:center">X 缓存多级缓存架构纵览</p></div>
+<p data-nodeid="15654">这张图从上到下包含四层，分别为：<strong data-nodeid="15748">客户端</strong>、<strong data-nodeid="15749">应用层</strong>、<strong data-nodeid="15750">服务层</strong>以及<strong data-nodeid="15751">数据层</strong>。</p>
+<h3 data-nodeid="15655"><strong data-nodeid="15755">客户端缓存</strong></h3>
+<p data-nodeid="15656">X 商城客户端为浏览器，在浏览器层面我们主要是对 HTML 中的图片、CSS、JS、字体这些静态资源进行缓存。</p>
+<p data-nodeid="15657"><img src="https://s0.lgstatic.com/i/image6/M01/37/20/CioPOWB1ujCAA7opAAIOvqg2h_I560.png" alt="图片3.png" data-nodeid="15759"></p>
+<div data-nodeid="15658"><p style="text-align:center">浏览器缓存</p></div>
+<p data-nodeid="15659">我们以百度 Logo 图片为例，百度在 HTTP 通过 Expires 响应头控制静态图片的有效期。Expires 代表过期时间。当前百度 Logo 的过期时间为 2031 年 2 月 8 日 9 时 26 分 31 秒。在这个时间段内，浏览器会将图片以文件形式缓存在本地，再次访问时会看到“from disk cache”的提示，此时浏览器不再产生与服务器的实际请求，会从本地直接读取缓存图片。通过在浏览器端设置 Expires 可以在很大程度减少重复请求静态资源带来的带宽损耗，这在高并发 Web 应用中是基础而重要的设置。</p>
+<h3 data-nodeid="15660">应用层缓存</h3>
+<p data-nodeid="15661">那 Expires 到底在哪里进行设置呢？对于浏览器来说它只是客户端，只负责读取Expires响应头，对于 Expires 要在应用层，也就是 CDN 与 Nginx 中进行设置。</p>
+<h4 data-nodeid="15662">CDN 内容分发网络</h4>
+<p data-nodeid="15663">CDN 全称是 Content Delivery Network，即内容分发网络，是互联网静态资源分发的主要技术手段。</p>
+<p data-nodeid="15664"><img src="https://s0.lgstatic.com/i/image6/M01/37/18/Cgp9HWB1uj6AJlmdAAbIc0lIcAc016.png" alt="图片4.png" data-nodeid="15767"></p>
+<div data-nodeid="15665"><p style="text-align:center">CDN 内容分发网络</p></div>
+<p data-nodeid="15666">中国幅员辽阔，从北京到上海就有上千公里，如果大量的上海用户同时要访问千里之外的北京服务器的资源，这么长的通信必然带来高延迟与更多不可控因素影响数据传输，如果有某种机制允许将北京的静态文件缓存到上海的服务器，上海用户自动就近访问服务器获取资源，这样便可很大程度降低网络延迟，进而提高系统的可用性。而刚才提到的分布式缓存技术就是我们常提到的CDN（内容分发网络）。</p>
+<p data-nodeid="16650" class="">对于广域的互联网应用，CDN 几乎是必需的基础设施，它有效解决了带宽集中占用以及数据分发的问题。像 Web 页面中的图片、音视频、CSS、JS 这些静态资源，都可以通过 CDN 服务器就近获取。</p>
+
+
+
+<p data-nodeid="15668">CDN 技术的核心是“智能 DNS”，智能 DNS 会根据用户的 IP 地址自动确定就近访问 CDN 节点，咱们以下图为例：</p>
+<p data-nodeid="15669"><img src="https://s0.lgstatic.com/i/image6/M01/37/20/CioPOWB1ukeAFt5mAADBdyaj6Hs257.png" alt="图片5.png" data-nodeid="15773"></p>
+<div data-nodeid="15670"><p style="text-align:center">CDN 执行流程</p></div>
+<p data-nodeid="15671">以某上海用户的浏览器要访问商城首页广告位的 banner.jpg 文件，浏览器通过服务商提供的智能 DNS 服务，将请求自动转发到商城在上海地区准备的 CDN 服务器，上海 CDN 收到请求后首先检查本机是否已缓存过 banner.jpg，如果文件已存在便直接将图片数据返回给客户端；如果没有缓存过，则回源到北京的源数据节点，将 banner.jpg 文件抽取并缓存到上海服务器，最后上海 CDN 节点再将本机的 banner.jpg 返回给客户端。对于 banner.jpg 来说，第一次访问后上海 CDN 节点已缓存该文件，则之后的缓存有效期内所有后续访问由上海 CDN 直接提供。与之类似的，商城应用可以在重要城市搭建 CDN 节点，这样原本集中被发往北京服务器的请求就被分摊到 CDN 节点，这也直接降低了北京机房的带宽压力。</p>
+<p data-nodeid="15672">在互联网应用中，因为 CDN 涉及多地域多节点组网，前期投入成本较高，更多的中小型软件公司通常会选择阿里云、腾讯云等大厂提供的 CDN 服务，通过按需付费的方式降低硬件成本。而这些服务商又会为 CDN 赋予额外的能力，比如阿里云、腾讯云 CDN 除了缓存文件之外，还提供了管理后台能为响应赋予额外的响应头。如下所示在阿里云 CDN 后台，就额外设置了 Cache-Control 响应头代表缓存有效期为 1 小时。这里我们额外提一下 Expires 与的 Cache-Control 的区别，Expires 是指定具体某个时间点缓存到期，而 Cache-Control 则代表缓存的有效期是多长时间。Expires 设置时间，Cache-Control 设置时长，根据业务场景不同可以使用不同的响应头。</p>
+<p data-nodeid="15673"><img src="https://s0.lgstatic.com/i/image6/M01/37/18/Cgp9HWB1ulWASjuFAADLl_3qwck166.png" alt="图片6.png" data-nodeid="15778"></p>
+<div data-nodeid="15674"><p style="text-align:center">阿里云自定义响应头</p></div>
+<h4 data-nodeid="15675">Nginx 缓存管理</h4>
+<p data-nodeid="15676">说完 CDN，下面再来聊一下 Nginx。Nginx 是一款开源的、跨平台的高性能 Web 服务器，它有着高性能，稳定性好，配置简单，模块结构化，资源消耗低的优点。同时支持反向代理、负载均衡、缓存的功能。Nginx 是 Web 应用架构中的常客，例如后端 Tomcat 集群便可通过增加 Nginx 前置做软负载均衡，为应用提供高可用特性。</p>
+<p data-nodeid="15677"><img src="https://s0.lgstatic.com/i/image6/M01/37/20/CioPOWB1umWAcVyOAACvk6oAizQ807.png" alt="图片7.png" data-nodeid="15783"></p>
+<div data-nodeid="15678"><p style="text-align:center">Nginx 代理服务器</p></div>
+<p data-nodeid="15679">在互联网应用中，用户分布在全国各地，对资源的响应速度与带宽要求较高，因此部署 CDN 是十分有必要的。但在更多的企业应用中，其实大部分的企业用户都分布在指定的办公区域或者相对固定的场所，再加上并发用户相对较少，其实并不需要额外部署 CDN 这种重量级解决方案。在架构中只需要部署 Nginx 服务器，利用 Nginx 自带的静态资源缓存与压缩功能便可胜任大多数企业应用场景。</p>
+<p data-nodeid="15680">在 Nginx 中自带将后端应用中图片、CSS、JS 等静态资源缓存功能，我们只需在 Nginx 的核心配置 nginx.conf 中增加下面的片段，便可对后端的静态资源进行缓存，关键配置我已做好注释，同学们可以直接使用。</p>
+<pre class="lang-java te-preview-highlight hljs" data-nodeid="19081"><code data-language="java"># 设置缓存目录
+# levels代表采用1:2也就是两级目录的形式保存缓存文件（静态资源css、js）
+# keys_zone定义缓存的名称及内存的使用，名称为babytun-cache ,在内存中开始100m交换空间
+# inactive=7d 如果某个缓存文件超过7天没有被访问，则删除
+# max_size=20g;代表设置文件夹最大不能超过20g，超过后会自动将访问频度（命中率）最低的缓存文件删除
+proxy_cache_path d:/nginx-cache levels=1:2 keys_zone=babytun-cache:100m inactive=7d max_size=20g;
+#配置xmall后端服务器的权重负载均衡策略
+upstream xmall {
+    server 192.168.31.181 weight=5 max_fails=1 fail_timeout=3s;
+    server 192.168.31.182 weight=2;
+    server 192.168.31.183 weight=1;
+    server 192.168.31.184 weight=2;
+}
+server {
+	#nginx通过80端口提供Web服务
+	listen 80;
+	# 开启静态资源缓存
+	# 利用正则表达式匹配URL，匹配成功的则执行内部逻辑
+	# ~* 代表URL匹配不区分大小写
+	location ~* \.(gif|jpg|css|png|js|woff|html)(.*){
+           # 配置代理转发规则
+		proxy_pass http://xmall;
+		proxy_set_header Host $host;
+		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+		proxy_cache xmall-cache;
+		#如果静态资源响应状态码为200（成功）  302（暂时性重定向）时 缓存文件有效期1天
+		proxy_cache_valid 200 302 24h;
+		#301（永久性重定向）缓存保存5天
+		proxy_cache_valid 301 5d;
+		#其他情况
+		proxy_cache_valid any 5m;
+		#设置浏览器端缓存过期时间90天
+		expires 90d;
+	}
+	
+	#使用xmall服务器池进行后端处理
+	location /{
+		proxy_pass http://xmall; 
+		proxy_set_header Host $host;
+		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+	}
+}
+</code></pre>
+
+
+
+
+
+
+<p data-nodeid="15682">增加上面配置后，每一次通过 Nginx 访问应用中新的静态文件时，在 Nginx 服务的缓存目录便会生成缓存文件，在缓存有效期内该静态资源的请求便不再送到后端服务器，而直接由 Nginx 读取本地缓存并返回。</p>
+<p data-nodeid="15683"><img src="https://s0.lgstatic.com/i/image6/M01/37/18/Cgp9HWB1un-AW2XjAADn7gSoGbA241.png" alt="图片8.png" data-nodeid="15789"></p>
+<div data-nodeid="15684"><p style="text-align:center">Nginx 本地缓存</p></div>
+<h3 data-nodeid="15685">服务层缓存</h3>
+<p data-nodeid="15686">在前面无论是 CDN 还是 Nginx，都是对 Web 应用中的静态资源文件进行缓存。但后端应用与服务更多的是访问接口与数据，对于这些对象我们如何利用缓存技术进行性能优化呢？对于后端应用与服务的缓存可以按部署方式分为<strong data-nodeid="15800">进程内缓存</strong>与<strong data-nodeid="15801">分布式缓存</strong>服务。</p>
+<h4 data-nodeid="15687">进程内缓存</h4>
+<p data-nodeid="15688">所谓进程内缓存，就是在应用中开辟的一块内存空间，数据在运行时被载入这块内存，通过本地内存的低延迟、高吞吐的特性提高程序的访问速度。进程内缓存在众多 Java 框架内都有广泛应用，例如 Hibernate、Mybatis 框架的一二级缓存、Spring MVC 的页面缓存都是进程内缓存的经典应用场景，这些进程内缓存在 Java 中也有着非常多优秀的开源实现，如 EhCache、Caffeine 都是代表性产品。</p>
+<h4 data-nodeid="15689">分布式缓存服务</h4>
+<p data-nodeid="15690">与进程内相对的，就是需要独立部署的分布式缓存服务。最常用的是基于 Redis 这种内存型 NoSQL 数据库，对整体架构中的应用数据进行集中缓存。</p>
+<p data-nodeid="15691"><img src="https://s0.lgstatic.com/i/image6/M01/37/18/Cgp9HWB1uouAGwKHAAEZz5CzNlk383.png" alt="图片9.png" data-nodeid="15808"></p>
+<p data-nodeid="15692">在架构设计时，很多新架构师一听到缓存，下意识认为增加 Redis 分布式缓存服务器就够了，其实这是片面的做法。在缓存架构设计时，一定要按照由近到远、由快到慢的顺序进行逐级访问。假设在电商进行商品秒杀活动时，如果没有本地缓存，所有商品、订单、物流的热点数据都保存在 Redis 服务器中，每完成一笔订单，都要额外增加若干次网络通信，网络通信本身就可能由于各种原因存在通信失败的问题。即便是你能保证网络 100% 可用，但 Redis 集群承担了来自所有外部应用的访问压力，一旦突发流量超过 Redis 的负载上限，整体架构便面临崩溃的风险。</p>
+<p data-nodeid="15693"><img src="https://s0.lgstatic.com/i/image6/M01/37/18/Cgp9HWB1upKAf9fNAABaHZB9o40573.png" alt="图片10.png" data-nodeid="15812"></p>
+<div data-nodeid="15694"><p style="text-align:center">Redis 缓存服务集群</p></div>
+<p data-nodeid="15695">因此在 Java 的应用端也要设计多级缓存，我们将进程内缓存与分布式缓存服务结合，有效分摊应用压力。在 Java 应用层面，只有 EhCache 的缓存不存在时，再去 Redis 分布式缓存获取，如果 Redis 也没有此数据再去数据库查询，数据查询成功后对 Redis 与 EhCahce 同时进行双写更新。这样 Java 应用下一次再查询相同数据时便直接从本地 EhCache 缓存提取，不再产生新的网络通信，应用查询性能得到显著提高。</p>
+<p data-nodeid="15696"><img src="https://s0.lgstatic.com/i/image6/M01/37/20/CioPOWB1upqAFwvpAACORNLgcpo164.png" alt="图片11.png" data-nodeid="15816"></p>
+<div data-nodeid="15697"><p style="text-align:center">多级缓存设计</p></div>
+<h4 data-nodeid="15698">保障缓存一致性</h4>
+<p data-nodeid="15699">但事无完美，当引入多级缓存后，我们又会遇到缓存数据一致性的挑战，以下图为例：</p>
+<p data-nodeid="15700"><img src="https://s0.lgstatic.com/i/image6/M01/37/18/Cgp9HWB1uqGANm21AACYJ7OwlSA834.png" alt="图片12.png" data-nodeid="15821"></p>
+<div data-nodeid="15701"><p style="text-align:center">缓存一致性问题</p></div>
+<p data-nodeid="15702">我们都知道作为数据库写操作，是不通过缓存的。假设商品服务实例 1 将 1 号商品价格调整为 80 元，这会衍生一个新问题：如何主动向应用程序推送数据变更的消息来保证它们也能同步更新缓存呢？</p>
+<p data-nodeid="15703">相信此时你已经有了答案。没错，我们需要在当前架构中引入 MQ 消息队列，利用 RocketMQ 的主动推送功能来向其他服务实例以及 Redis 缓存服务发起变更通知。</p>
+<p data-nodeid="15704"><img src="https://s0.lgstatic.com/i/image6/M01/37/20/CioPOWB1uqiAZTFFAADvyhhJIy8978.png" alt="图片13.png" data-nodeid="15826"></p>
+<div data-nodeid="15705"><p style="text-align:center">通过 RocketMQ 解决保证消息一致性</p></div>
+<p data-nodeid="15706">如上图所示，在商品服务实例 1 对商品调价后，主动向 RocketMQ Broker 发送变更消息，Broker 将变更信息推送至其他实例与 Redis 集群，这些服务实例在收到变更消息后，在缓存中先删除过期缓存，再创建新的数据，以此保证各实例数据一致。</p>
+<p data-nodeid="15707">看到这里你会发现，对于缓存来说，并没有终极的解决方案。虽然多级缓存设计带来了更好的应用性能，但也为了缓存一致性必须引入 MQ 增加了架构的复杂度。那到底多级缓存设计该如何取舍呢？在我看来，有三种情况特别适合引入多级缓存。</p>
+<p data-nodeid="15708">第一种情况，缓存的数据是稳定的。例如邮政编码、地域区块、归档的历史数据这些信息适合通过多级缓存减小 Redis 与数据库的压力。</p>
+<p data-nodeid="15709">第二种情况，瞬时可能会产生极高并发的场景。例如春运购票、双 11 零点秒杀、股市开盘交易等，瞬间的流量洪峰可能击穿 Redis 缓存，产生流量雪崩。这时利用预热的进程内缓存分摊流量，减少后端压力是非常有必要的。</p>
+<p data-nodeid="15710">第三种情况，一定程度上允许数据不一致。例如某博客平台中你修改了自我介绍这样的非关键信息，此时在应用集群中其他节点缓存不一致也并不会带来严重影响，对于这种情况我们采用T+1的方式在日终处理时保证缓存最终一致就可以了。</p>
+<p data-nodeid="15711">以上是我总结的三种适合服务层做多级缓存的场景。当然如果你们的应用并发量不大，在未来的1~2 年内利用 Redis 分布式缓存集群完全可以胜任应用性能要求，那自然就没有必要设计多级缓存，我们要根据业务特点灵活调整架构。</p>
+<h3 data-nodeid="15712">小结与预告</h3>
+<p data-nodeid="15713">本讲咱们介绍了在应用微服务架构下从客户端到服务层，各层的缓存设计以及解决方案，讲解了从浏览器的 Expires 响应头到 CDN、Nginx 的静态资源缓存，再到服务层针对数据的多级缓存，使你对微服务架构的缓存有了总体的了解。</p>
+<p data-nodeid="15714" class="">下一讲，咱们聊一聊在传统架构下如何一步步向微服务进行转型，中间会遇到哪些新问题。</p></div>
+
+</body></html>

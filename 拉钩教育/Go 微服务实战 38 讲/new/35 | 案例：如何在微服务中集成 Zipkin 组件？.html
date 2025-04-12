@@ -1,0 +1,1366 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>35 | 案例：如何在微服务中集成 Zipkin 组件？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>35 | 案例：如何在微服务中集成 Zipkin 组件？</h1><p data-nodeid="170290">这一课时我们就来进行案例实战，选择当前流行的链路追踪组件 Zipkin 作为示例，演示如何在 Go 微服务中集成 Zipkin。对于很多使用了 Go 微服务框架的用户来说，其框架本身就拥有 Trace 模块，如 Go-kit。所以本课时我们就在 Go-kit 微服务的案例中集成 Zipkin。</p>
+<p data-nodeid="170291">Zipkin 社区提供了诸如 zipkin-go、zipkin-go-opentracing、go-zipkin 等 Go 客户端库，后面我们会介绍如何将其中的 zipkin-go-opentracing（组件地址参见 https://github.com/openzipkin-contrib/zipkin-go-opentracing）集成到微服务中并加以应用。</p>
+<p data-nodeid="170292">Go-kit 微服务框架的 tracing 包为服务提供了 Dapper 样式的请求追踪。Go-kit 支持 OpenTracing API，并使用 opentracing-go 包为其服务器和客户端提供追踪中间件。Zipkin、LightStep 和 AppDash 是已支持的追踪组件，通过 OpenTracing API 与 Go-kit 一起使用。</p>
+<h3 data-nodeid="170293">应用架构图</h3>
+<p data-nodeid="172120">本课时将会介绍如何在 Go-kit 中集成 Zipkin 进行链路调用的追踪，包括<strong data-nodeid="172128">HTTP 和 gRPC 两种调用方式</strong>。在具体介绍这两种调用方式之前，我们先来看一下 Go-kit 集成 Zipkin 的应用架构，如下图所示：</p>
+<p data-nodeid="172121" class=""><img src="https://s0.lgstatic.com/i/image/M00/5E/75/Ciqc1F-GvryAbSsGAABD2LP4yN8428.png" alt="Drawing 0.png" data-nodeid="172131"></p>
+<div data-nodeid="172122"><p style="text-align:center">Go-kit 集成 Zipkin 的应用架构图</p></div>
+
+
+
+
+
+<p data-nodeid="170297">从架构图中可以看到：我们构建了一个服务网关，通过 API 网关调用具体的微服务，所有的服务都注册到 Consul 上；当客户端的请求到来之时，网关作为服务端的门户，会根据配置的规则，从 Consul 中获取对应服务的信息，并将请求反向代理到指定的服务实例。</p>
+<p data-nodeid="170298">涉及的业务服务与组件包含以下 4 个：</p>
+<ul data-nodeid="170299">
+<li data-nodeid="170300">
+<p data-nodeid="170301">Consul，本地安装并启动；</p>
+</li>
+<li data-nodeid="170302">
+<p data-nodeid="170303">Zipkin，本地安装并启动；</p>
+</li>
+<li data-nodeid="170304">
+<p data-nodeid="170305">API Gateway，微服务网关；</p>
+</li>
+<li data-nodeid="170306">
+<p data-nodeid="170307">String Service，字符串服务，是基于 Kit 构建的，提供基本的字符串操作。</p>
+</li>
+</ul>
+<h3 data-nodeid="170308">HTTP 调用方式的链路追踪</h3>
+<p data-nodeid="170309">关于 HTTP 调用方式的链路追踪，下面我们将依次构建微服务网关、业务服务，并进行结果验证。</p>
+<h4 data-nodeid="172532" class="">1. API 网关构建</h4>
+
+<p data-nodeid="170313">在网关（gateway）中增加链路追踪的采集逻辑，同时在反向代理中增加追踪（tracer）设置。</p>
+<p data-nodeid="170314">Go-kit 在 tracing 包中默认添加了 Zipkin 的支持，所以集成工作会比较轻松。在开始之前，需要下载以下依赖：</p>
+<pre class="lang-js hljs" data-nodeid="189196"><code data-language="js"># zipkin 官方库
+go get github.com/openzipkin/zipkin-go
+
+# 下面三个包都是依赖，按需下载
+git clone https://github.com/googleapis/googleapis.git [your GOPATH]/ src/google.golang.org/genproto
+
+git clone https://github.com/grpc/grpc-go.git [your GOPATH]/src/google. golang.org/grpc
+
+git clone https://github.com/golang/text.git [your GOPATH]/src/golang. org/text
+</code></pre>
+<p data-nodeid="189686" class="">作为链路追踪的“第一站”和“最后一站”，网关会将客户端的请求转发给对应的业务服务，并将响应的结果返回给客户端。我们需要截获到达网关的所有请求，记录追踪信息。在下面这个示例中，网关是作为外部请求的服务端，同时作为字符串服务的客户端（反向代理内部实现），其代码实现如下：</p>
+<pre class="lang-js hljs" data-nodeid="189870"><code data-language="js"><span class="hljs-comment">// 创建环境变量</span>
+<span class="hljs-keyword">var</span> (
+    <span class="hljs-comment">// consul 环境变量省略</span>
+    zipkinURL  = flag.String(<span class="hljs-string">"zipkin.url"</span>, <span class="hljs-string">"HTTP://localhost:9411/api/ v2/spans"</span>, <span class="hljs-string">"Zipkin server url"</span>)
+    )
+flag.Parse()
+
+<span class="hljs-keyword">var</span> zipkinTracer *zipkin.Tracer
+{
+    <span class="hljs-keyword">var</span> (
+        err           error
+        hostPort      = <span class="hljs-string">"localhost:9090"</span>
+        serviceName   = <span class="hljs-string">"gateway-service"</span>
+        useNoopTracer = (*zipkinURL == <span class="hljs-string">""</span>)
+        reporter      = zipkinHTTP.NewReporter(*zipkinURL)
+    ) <span class="hljs-comment">// zipkin 相关的配置变量</span>
+    defer reporter.Close()
+    zEP, <span class="hljs-attr">_</span> := zipkin.NewEndpoint(serviceName, hostPort)
+    <span class="hljs-comment">// 构建 zipkinTracer</span>
+    zipkinTracer, err = zipkin.NewTracer(
+        reporter, zipkin.WithLocalEndpoint(zEP), zipkin.WithNoopTracer (useNoopTracer),
+    )
+    <span class="hljs-keyword">if</span> err != nil {
+        logger.Log(<span class="hljs-string">"err"</span>, err)
+        os.Exit(<span class="hljs-number">1</span>)
+    }
+    <span class="hljs-keyword">if</span> !useNoopTracer {
+        logger.Log(<span class="hljs-string">"tracer"</span>, <span class="hljs-string">"Zipkin"</span>, <span class="hljs-string">"type"</span>, <span class="hljs-string">"Native"</span>, <span class="hljs-string">"URL"</span>, *zipkinURL)
+    }
+}
+</code></pre>
+<p data-nodeid="190656">我们使用的传输方式为 HTTP，可以使用 zipkin-go 提供的 middleware/HTTP 包，它采用装饰者模式把我们的 HTTP.Handler 进行封装，然后启动 HTTP 监听，代码如下所示：</p>
+<pre class="lang-js hljs" data-nodeid="193046"><code data-language="js"><span class="hljs-comment">//创建反向代理</span>
+<span class="hljs-attr">proxy</span> := NewReverseProxy(consulClient, zipkinTracer, logger)
+
+<span class="hljs-attr">tags</span> := map[string]string{
+    <span class="hljs-string">"component"</span>: <span class="hljs-string">"gateway_server"</span>,
+}
+
+<span class="hljs-attr">handler</span> := zipkinHTTPsvr.NewServerMiddleware(
+    zipkinTracer,
+    zipkinHTTPsvr.SpanName(<span class="hljs-string">"gateway"</span>),
+    zipkinHTTPsvr.TagResponseSize(<span class="hljs-literal">true</span>),
+    zipkinHTTPsvr.ServerTags(tags),
+)(proxy)
+</code></pre>
+<p data-nodeid="193047">网关接收请求后，会创建一个 Span，其中的 traceId 将作为本次请求的唯一编号，网关必须把这个 traceID 传递给字符串服务，字符串服务才能为该请求持续记录追踪信息。在 ReverseProxy 中能够完成这一任务的就是 Transport，我们可以使用 zipkin-go 的 middleware/HTTP 包提供的 NewTransport 替换系统默认的 HTTP.DefaultTransport。代码如下所示：</p>
+<pre class="lang-js hljs" data-nodeid="194649"><code data-language="js"><span class="hljs-comment">// NewReverseProxy 创建反向代理处理方法</span>
+func NewReverseProxy(client *api.Client, zikkinTracer *zipkin.Tracer, logger log.Logger) *HTTPutil.ReverseProxy {
+
+    <span class="hljs-comment">//创建 Director</span>
+    <span class="hljs-attr">director</span> := func(req *HTTP.Request) {
+        <span class="hljs-comment">//省略</span>
+    }
+
+    <span class="hljs-comment">// 为反向代理增加追踪逻辑，使用如下 RoundTrip 代替默认 Transport</span>
+    roundTrip, <span class="hljs-attr">_</span> := zipkinHTTPsvr.NewTransport(zikkinTracer, zipkinHTTPsvr.TransportTrace(<span class="hljs-literal">true</span>))
+
+    <span class="hljs-keyword">return</span> &amp;HTTPutil.ReverseProxy{
+        <span class="hljs-attr">Director</span>:  director,
+        <span class="hljs-attr">Transport</span>: roundTrip,
+    }
+}
+</code></pre>
+<p data-nodeid="195111">至此，API 网关服务的搭建就完成了。</p>
+<h4 data-nodeid="195112">2. 业务服务构建</h4>
+<p data-nodeid="195113">创建追踪器与网关的处理方式一样，我们就不再描述。字符串服务对外提供了两个接口：字符串操作（/op/{type}/{a}/{b}）和健康检查（/health）。定义如下：</p>
+<pre class="lang-js hljs" data-nodeid="198226"><code data-language="js">endpoint := MakeStringEndpoint(svc)
+<span class="hljs-comment">//添加追踪，设置 span 的名称为 string-endpoint</span>
+endpoint = Kitzipkin.TraceEndpoint(zipkinTracer, <span class="hljs-string">"string-endpoint"</span>) (endpoint)
+
+<span class="hljs-comment">//创建健康检查的 Endpoint</span>
+<span class="hljs-attr">healthEndpoint</span> := MakeHealthCheckEndpoint(svc)
+
+<span class="hljs-comment">//添加追踪，设置 span 的名称为 health-endpoint</span>
+healthEndpoint = Kitzipkin.TraceEndpoint(zipkinTracer, <span class="hljs-string">"health-endpoint"</span>) (healthEndpoint)
+</code></pre>
+<p data-nodeid="198227">Go-kit 提供了对 zipkin-go 的封装，上面的实现中，直接调用中间件 TraceEndpoint 对字符串服务的两个 Endpoint 进行设置。</p>
+<p data-nodeid="198228">除了 Endpoint，还需要追踪 Transport。可以修改 transports.go 的 MakeHTTPHandler 方法，增加参数 zipkinTracer，然后在 ServerOption 中设置追踪参数。代码如下：</p>
+<pre class="lang-js hljs" data-nodeid="199548"><code data-language="js"><span class="hljs-comment">// MakeHTTPHandler make HTTP handler use mux</span>
+func MakeHTTPHandler(ctx context.Context, endpoints ArithmeticEndpoints, zipkinTracer *gozipkin.Tracer, logger log.Logger) HTTP.Handler {
+    <span class="hljs-attr">r</span> := mux.NewRouter()
+
+    <span class="hljs-attr">zipkinServer</span> := zipkin.HTTPServerTrace(zipkinTracer, zipkin.Name (<span class="hljs-string">"HTTP-transport"</span>))
+
+    <span class="hljs-attr">options</span> := []KitHTTP.ServerOption{
+        KitHTTP.ServerErrorLogger(logger),
+        KitHTTP.ServerErrorEncoder(KitHTTP.DefaultErrorEncoder),
+        zipkinServer,
+    }
+
+    <span class="hljs-comment">// ...</span>
+
+    <span class="hljs-keyword">return</span> r
+}
+</code></pre>
+<p data-nodeid="199549">至此，所有的代码修改工作已经完成，下一步就是启动测试、对结果验证了。</p>
+<h4 data-nodeid="199550">3. 结果验证</h4>
+<p data-nodeid="199551">我们可以访问 http://localhost:9090/string-service/op/Diff/abc/bcd，查看字符串服务的请求结果，如下图所示：</p>
+<p data-nodeid="199552"><img src="https://s0.lgstatic.com/i/image/M00/5E/75/Ciqc1F-GvvSAdvD2AAJxdVYATAU644.png" alt="Drawing 1.png" data-nodeid="199599"></p>
+<div data-nodeid="199553"><p style="text-align:center">结果验证截图</p></div>
+<p data-nodeid="199554">可以看到，通过网关，我们可以正常访问字符串服务提供的接口。下面我们通过 Zipkin UI 来查看本次链路调用的信息，如下图所示：</p>
+<p data-nodeid="199555"><img src="https://s0.lgstatic.com/i/image/M00/5E/80/CgqCHl-GvvqAccZPAAPASa8eLYA067.png" alt="Drawing 2.png" data-nodeid="199603"></p>
+<div data-nodeid="199556"><p style="text-align:center">Zipkin UI 查看链路调用的信息截图</p></div>
+<p data-nodeid="199557">在浏览器请求之后，可以在 Zipkin UI 中看到发送的请求记录（单击上方“Try Lens UI”切换成了 Lens UI，效果还不错），点击查看详细的链路调用情况，如下图所示：</p>
+<p data-nodeid="199558"><img src="https://s0.lgstatic.com/i/image/M00/5E/75/Ciqc1F-GvwOAO5wJAANEaW1O3C4296.png" alt="Drawing 3.png" data-nodeid="199607"></p>
+<div data-nodeid="199559"><p style="text-align:center">Lens UI 截图</p></div>
+<p data-nodeid="199560">从调用链中可以看到，本次请求涉及两个服务：gateway-service 和 string-service。</p>
+<p data-nodeid="199561">整个链路有 3 个 Span：gateway、HTTP-transport 和 string-endpoint，确实如我们所定义的一样。这里我们主要看一下网关中的 Gateway Span 详情，如下图所示：</p>
+<p data-nodeid="199562"><img src="https://s0.lgstatic.com/i/image/M00/5E/80/CgqCHl-GvwuASVfGAAcZvmOB0Kc881.png" alt="Drawing 4.png" data-nodeid="199612"></p>
+<div data-nodeid="199563"><p style="text-align:center">Gateway Span 详情截图</p></div>
+<p data-nodeid="199564">Gateway 访问字符串服务的时候，其实是作为一个客户端建立连接并发起调用，然后等待 Server 写回响应结果，最后结束客户端的调用。通过上图的展开，我们清楚地了解这次调用（Span）打的标签（tag），包括 method、path 等。</p>
+<h3 data-nodeid="199565">gRPC 调用方式的链路追踪</h3>
+<p data-nodeid="199566">上面我们分析了微服务中 HTTP 调用方式的链路追踪，Go-kit 中的 transport 层可以方便地切换 RPC 调用方式，所以下面我们就来介绍下基于 gRPC 调用方式的链路追踪。本案例的实现是在前面HTTP 调用的代码基础上进行修改，并增加测试的调用客户端。</p>
+<h4 data-nodeid="199567">1. 定义 protobuf 文件</h4>
+<p data-nodeid="199568">我们首先来定义 protobuf 文件及生成对应的 Go 文件。</p>
+<pre class="lang-js hljs" data-nodeid="200820"><code data-language="js">syntax = <span class="hljs-string">"proto3"</span>;
+
+package pb;
+
+service StringService{
+    rpc Diff(StringRequest) returns (StringResponse){}
+}
+
+message StringRequest {
+    string request_type = <span class="hljs-number">1</span>;
+    string a = <span class="hljs-number">2</span>;
+    string b = <span class="hljs-number">3</span>;
+}
+
+message StringResponse {
+    string result = <span class="hljs-number">1</span>;
+    string err = <span class="hljs-number">2</span>;
+}
+</code></pre>
+<p data-nodeid="201404">这里提供了字符串服务中的 Diff 方法，客户端通过 gRPC 调用字符串服务。使用 proto 工具生成对应的 Go 语言文件：</p>
+
+
+
+<pre class="lang-js hljs" data-nodeid="210042"><code data-language="js">protoc string.proto --go_out=plugins=grpc:.
+</code></pre>
+<p data-nodeid="210043">生成的 string.pb.go 可以参见<a href="https://github.com/longjoy/micro-go-course/blob/dev/section35/zipkin-kit/pb/string.pb.go" data-nodeid="210066">源码</a>，此处不再展开。</p>
+<h4 data-nodeid="210044">2. 定义 gRPC Server</h4>
+<p data-nodeid="210045">在字符串服务中增加 gRPC server 的实现，并织入 gRPC 链路追踪的相关代码。</p>
+<pre class="lang-js hljs" data-nodeid="211223"><code data-language="js">	<span class="hljs-comment">//grpc server</span>
+	go func() {
+		fmt.Println(<span class="hljs-string">"grpc Server start at port"</span> + *grpcAddr)
+		listener, <span class="hljs-attr">err</span> := net.Listen(<span class="hljs-string">"tcp"</span>, *grpcAddr)
+		<span class="hljs-keyword">if</span> err != nil {
+			errChan &lt;- err
+			<span class="hljs-keyword">return</span>
+		}
+		<span class="hljs-attr">serverTracer</span> := kitzipkin.GRPCServerTrace(zipkinTracer, kitzipkin.Name(<span class="hljs-string">"string-grpc-transport"</span>))
+
+		<span class="hljs-attr">handler</span> := NewGRPCServer(ctx, endpts, serverTracer)
+		<span class="hljs-attr">gRPCServer</span> := grpc.NewServer()
+		pb.RegisterStringServiceServer(gRPCServer, handler)
+		errChan &lt;- gRPCServer.Serve(listener)
+	}()
+</code></pre>
+<p data-nodeid="212780">要增加 Trace 的中间件，其实就是在 gRPC 的 ServerOption 中追加 GRPCServerTrace。我们增加的通用 Span 名为：string-grpc-transport。接下来就是在 endpoint 中，增加暴露接口的 gRPC 实现，代码如下：</p>
+<pre class="lang-js hljs" data-nodeid="213934"><code data-language="js">func (se StringEndpoints) Diff(ctx context.Context, a, b string) (string, error) {
+	resp, <span class="hljs-attr">err</span> := se.StringEndpoint(ctx, StringRequest{
+		<span class="hljs-attr">RequestType</span>: <span class="hljs-string">"Diff"</span>,
+		<span class="hljs-attr">A</span>:           a,
+		<span class="hljs-attr">B</span>:           b,
+	})
+	<span class="hljs-attr">response</span> := resp.(StringResponse)
+	<span class="hljs-keyword">return</span> response.Result, err
+}
+</code></pre>
+<p data-nodeid="213935">在构造 StringRequest 时，我们根据调用的 Diff 方法，指定了请求参数为“Diff”，下面即可定义 RPC 调用的客户端。</p>
+<h4 data-nodeid="213936">3. 定义服务 gRPC 调用的客户端</h4>
+<p data-nodeid="213937">字符串服务提供对外的客户端调用，定义方法名为 StringDiff，返回 StringEndpoint，代码如下：</p>
+<pre class="lang-js hljs" data-nodeid="215072"><code data-language="js"><span class="hljs-keyword">import</span> (
+	grpctransport <span class="hljs-string">"github.com/go-kit/kit/transport/grpc"</span>
+	kitgrpc <span class="hljs-string">"github.com/go-kit/kit/transport/grpc"</span>
+	<span class="hljs-string">"github.com/longjoy/micro-go-course/section35/zipkin-kit/pb"</span>
+	endpts <span class="hljs-string">"github.com/longjoy/micro-go-course/section35/zipkin-kit/string-service/endpoint"</span>
+	<span class="hljs-string">"github.com/longjoy/micro-go-course/section35/zipkin-kit/string-service/service"</span>
+	<span class="hljs-string">"google.golang.org/grpc"</span>
+)
+
+func StringDiff(conn *grpc.ClientConn, clientTracer kitgrpc.ClientOption) service.Service {
+
+	<span class="hljs-keyword">var</span> ep = grpctransport.NewClient(conn,
+		<span class="hljs-string">"pb.StringService"</span>,
+		<span class="hljs-string">"Diff"</span>,
+		EncodeGRPCStringRequest, <span class="hljs-comment">// 请求的编码</span>
+		DecodeGRPCStringResponse, <span class="hljs-comment">// 响应的解码</span>
+		pb.StringResponse{}, <span class="hljs-comment">//定义返回的对象</span>
+		clientTracer, <span class="hljs-comment">//客户端的 GRPCClientTrace</span>
+	).Endpoint()
+
+	<span class="hljs-attr">StringEp</span> := endpts.StringEndpoints{
+		<span class="hljs-attr">StringEndpoint</span>: ep,
+	}
+	<span class="hljs-keyword">return</span> StringEp
+}
+</code></pre>
+<p data-nodeid="215437" class="">从客户端调用的定义可以看到，传入的是 grpc 连接和客户端的 trace 上下文。这里需要注意的是 GRPCClientTrace 的初始化，测试 gRPC 调用的客户端时将会传入该参数。</p>
+<h4 data-nodeid="215438">4. 测试 gRPC 调用的客户端</h4>
+<p data-nodeid="215627">编写 client_test.go，调用我们在前面已经定义的 client.StringDiff 方法，代码如下：</p>
+<pre class="lang-js hljs" data-nodeid="216904"><code data-language="js">	<span class="hljs-comment">//... zipkinTracer 的构造省略</span>
+	<span class="hljs-attr">tr</span> := zipkinTracer
+	<span class="hljs-comment">// 设定根 Span 的名称</span>
+	<span class="hljs-attr">parentSpan</span> := tr.StartSpan(<span class="hljs-string">"test"</span>)
+	defer parentSpan.Flush() <span class="hljs-comment">// 写入上下文</span>
+
+	<span class="hljs-attr">ctx</span> := zipkin.NewContext(context.Background(), parentSpan)
+	<span class="hljs-comment">//初始化 GRPCClientTrace</span>
+	<span class="hljs-attr">clientTracer</span> := kitzipkin.GRPCClientTrace(tr) 
+	conn, <span class="hljs-attr">err</span> := grpc.Dial(*grpcAddr, grpc.WithInsecure(), grpc.WithTimeout (<span class="hljs-number">1</span>*time.Second))
+	<span class="hljs-keyword">if</span> err != nil {
+		fmt.Println(<span class="hljs-string">"gRPC dial err:"</span>, err)
+	}
+	defer conn.Close()
+	<span class="hljs-comment">// 获取 rpc 调用的 endpoint，发起调用</span>
+	<span class="hljs-attr">svr</span> := client.StringDiff(conn, clientTracer)
+	result, <span class="hljs-attr">err</span> := svr.Diff(ctx, <span class="hljs-string">"Add"</span>, <span class="hljs-string">"ppsdd"</span>)
+	<span class="hljs-keyword">if</span> err != nil {
+		fmt.Println(<span class="hljs-string">"Diff error"</span>, err.Error())
+
+	}
+
+	fmt.Println(<span class="hljs-string">"result ="</span>, result)
+</code></pre>
+<p data-nodeid="216905">客户端在调用之前，我们构建了要传入的 GRPCClientTrace，作为获取 rpc 调用的 endpoint 的参数，设定调用的父 Span 名称，这个上下文信息会传入 Zipkin 服务端。调用输出的结果如下：</p>
+<pre class="lang-js hljs" data-nodeid="220369"><code data-language="js">ts=<span class="hljs-number">2020</span><span class="hljs-number">-9</span><span class="hljs-number">-24</span>T15:<span class="hljs-number">27</span>:<span class="hljs-number">06.817056</span>Z caller=client_test.go:<span class="hljs-number">51</span> tracer=Zipkin type=Native URL=http:<span class="hljs-comment">//localhost:9411/api/v2/spans</span>
+result = dd
+</code></pre>
+<p data-nodeid="220370">测试用例的调用结果正确，我们来看一下 Zipkin 中记录的调用链信息。点击查看详情，可以看到本次请求涉及两个服务：test-service 和 string-service。如图所示：</p>
+<p data-nodeid="220371"><img src="https://s0.lgstatic.com/i/image/M00/5E/81/CgqCHl-GvzeAWzGRAASmhMb8V3c466.png" alt="Drawing 5.png" data-nodeid="220375"></p></div>
+
+</body></html>

@@ -1,0 +1,919 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>06 | 集群配置：如何动态重配置 etcd 集群？</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>06 | 集群配置：如何动态重配置 etcd 集群？</h1><p data-nodeid="1161" class="">今天我和你分享的主题与 etcd 集群动态调整相关。</p>
+<p data-nodeid="1162">etcd 集群部署之后，动态调整集群是经常发生的情况，比如增加 etcd 节点、移除某个 etcd 节点，或者是更新 etcd 节点的信息。这些情况都需要我们动态调整 etcd 集群。</p>
+<p data-nodeid="1163">这一讲我将介绍 etcd 如何进行常见的集群运行时重配置操作，etcd 运行时重配置命令的设计以及需要注意的内容。</p>
+<p data-nodeid="1164">这部分内容官方文档有所提及，我在写这篇内容时也和编辑有过沟通，但我认为还是有必要再讲一下的，因为集群运行时重配置是一个风险比较高的操作，仅仅阅读官方文档恐怕难以完全理解如何实践操作。通过这一讲你可以学习到集群运行时重配置的详细实战及讲解，这也是官方文档不能带给你的。</p>
+<h3 data-nodeid="1165">集群运行时重配置</h3>
+<p data-nodeid="1166">集群运行时重配置的前提条件是<strong data-nodeid="1271">只有在大多数集群成员都在正常运行时，etcd 集群才能处理重配置请求</strong>。</p>
+<p data-nodeid="1167">从两个成员的集群中删除一个成员是不安全的，因为两个成员的集群中的大多数也是两个，如果在删除过程中出现故障，集群就可能无法运行，需要从多数故障中重新启动。因此 etcd 官方建议：<strong data-nodeid="1277">生产环境的集群大小始终大于两个节点</strong>。</p>
+<h4 data-nodeid="1168">使用场景介绍</h4>
+<p data-nodeid="1169">集群的动态重新配置一般的使用场景，如下图所示：</p>
+<p data-nodeid="1449" class=""><img src="https://s0.lgstatic.com/i/image6/M00/04/32/CioPOWAj2buAf6NbAAC7ppF3Jpo775.png" alt="2021210-1301.png" data-nodeid="1453"></p>
+<div data-nodeid="1450"><p style="text-align:center">集群动态调整的场景图</p></div>
+
+
+<p data-nodeid="1172">如上所述场景中的大多数，都会涉及添加或移除成员。这些操作一般都会使用到 etcd 自带的 etcdctl 命令行工具，命令如下所示：</p>
+<pre class="lang-java" data-nodeid="1173"><code data-language="java">member add          已有集群中增加成员
+member remove       移除已有集群中的成员
+member update       更新集群中的成员
+member list         集群成员列表
+</code></pre>
+<p data-nodeid="1174"><strong data-nodeid="1288">除了使用 etcdctl 修改成员，还可以使用 etcd v3 gRPC members API</strong>。</p>
+<p data-nodeid="1175">下面我基于 etcdctl 具体介绍 etcd 集群如何进行更新成员、删除成员和增加新成员等运维操作。</p>
+<h4 data-nodeid="1176">更新成员</h4>
+<p data-nodeid="1177">首先我们来看更新成员的实践。<strong data-nodeid="1300">更新成员有两种情况：client URLs</strong>和<strong data-nodeid="1301">peer URLs</strong>。</p>
+<p data-nodeid="1178">我们回想下这两个配置的功能：</p>
+<ul data-nodeid="1179">
+<li data-nodeid="1180">
+<p data-nodeid="1181">client URLs 用于客户端的 URL，也就是对外服务的 URL；</p>
+</li>
+<li data-nodeid="1182">
+<p data-nodeid="1183">peer URLs 用作监听 URL，用于与其他节点通讯。</p>
+</li>
+</ul>
+<p data-nodeid="1184"><strong data-nodeid="1308">更新 client URLs</strong></p>
+<p data-nodeid="1185">为了更新成员的 client URLs，只需要使用更新后的 client URL 标记（即 --advertise-client-urls）或者环境变量来重启这个成员（ETCD_ADVERTISE_CLIENT_URLS）。重启后的成员将自行发布更新后的 URL，错误更新的 client URL 将不会影响 etcd 集群的健康。</p>
+<p data-nodeid="1186"><strong data-nodeid="1319">更新 peer URLs</strong></p>
+<p data-nodeid="1187">要更新成员的 peer URLs，首先通过成员命令更新它，然后重启成员，因为更新 peer URL 修改了集群范围配置并能影响 etcd 集群的健康。</p>
+<p data-nodeid="1188">当我们要更新某个成员的 peer URL，需要找到该目标成员的 ID，使用 etcdctl 列出所有成员：</p>
+<pre class="lang-powershell" data-nodeid="1189"><code data-language="powershell">//设置环境变量
+<span class="hljs-variable">$</span> ENDPOINTS=http://localhost:<span class="hljs-number">22379</span>
+// 查询所有的集群成员
+<span class="hljs-variable">$</span> etcdctl  -<span class="hljs-literal">-endpoints</span>=<span class="hljs-variable">$ENDPOINTS</span>  member list <span class="hljs-literal">-w</span> table
++------------------+---------+--------+------------------------+------------------------+------------+
+|        ID        | STATUS  |  NAME  |       PEER ADDRS       |      CLIENT ADDRS      | IS LEARNER |
++------------------+---------+--------+------------------------+------------------------+------------+
+| <span class="hljs-number">8211</span>f1d0f64f3269 | started | infra1 | http://<span class="hljs-number">127.0</span>.<span class="hljs-number">0.1</span>:<span class="hljs-number">12380</span> | http://<span class="hljs-number">127.0</span>.<span class="hljs-number">0.1</span>:<span class="hljs-number">12379</span> |      false |
+| <span class="hljs-number">91</span>bc3c398fb3c146 | started | infra2 | http://<span class="hljs-number">127.0</span>.<span class="hljs-number">0.1</span>:<span class="hljs-number">22380</span> | http://<span class="hljs-number">127.0</span>.<span class="hljs-number">0.1</span>:<span class="hljs-number">22379</span> |      false |
+| fd422379fda50e48 | started | infra3 | http://<span class="hljs-number">127.0</span>.<span class="hljs-number">0.1</span>:<span class="hljs-number">32380</span> | http://<span class="hljs-number">127.0</span>.<span class="hljs-number">0.1</span>:<span class="hljs-number">32379</span> |      false |
++------------------+---------+--------+------------------------+------------------------+------------+
+</code></pre>
+<p data-nodeid="1190">在这个例子中，我们启动了三个节点的 etcd 集群。更新 8211f1d0f64f3269 成员 ID 并修改它的 peer URLs 值为 http://127.0.0.1:2380。</p>
+<pre class="lang-java" data-nodeid="1191"><code data-language="java">$ etcdctl   --endpoints=http:<span class="hljs-comment">//localhost:12379    member update 8211f1d0f64f3269  --peer-urls=http://127.0.0.1:2380</span>
+
+Member <span class="hljs-number">8211f</span>1d0f64f3269 updated in cluster ef37ad9dc622a7c4
+</code></pre>
+<p data-nodeid="1192">可以看到，集群中 8211f1d0f64f3269 对应的成员信息更新成功。更新之后，集群的成员列表如下所示：</p>
+<p data-nodeid="3192" class=""><img src="https://s0.lgstatic.com/i/image6/M01/04/32/CioPOWAj2daAQyjcAAh4QtGADWE453.png" alt="2021210-125947.png" data-nodeid="3196"></p>
+<div data-nodeid="3193"><p style="text-align:center">集群列表</p></div>
+
+
+
+
+
+
+<p data-nodeid="1195">随后使用新的配置重启 infra 1，即可完成 etcd 集群成员的 peer URLs 更新。</p>
+<h4 data-nodeid="1196">删除成员</h4>
+<p data-nodeid="1197">基于上面三个节点的集群，假设我们要删除 ID 为 8211f1d0f64f3269 的成员，可使用 remove 命令来执行成员的删除：</p>
+<pre class="lang-java" data-nodeid="1198"><code data-language="java">$ etcdctl --endpoints=$ENDPOINTS member remove <span class="hljs-number">8211f</span>1d0f64f3269
+Member <span class="hljs-number">8211f</span>1d0f64f3269 removed from cluster ef37ad9dc622a7c4
+</code></pre>
+<p data-nodeid="1199">可以看到已经成功执行移除集群中 8211f1d0f64f3269 对应的成员 etcd 1，检查下成员列表进行确认：</p>
+<p data-nodeid="4933" class=""><img src="https://s0.lgstatic.com/i/image6/M01/04/32/CioPOWAj2eGAVIJOAAc1D_EsRi0212.png" alt="2021210-125951.png" data-nodeid="4936"></p>
+
+
+
+<p data-nodeid="5513" class=""><img src="https://s0.lgstatic.com/i/image6/M00/04/36/Cgp9HWAj2fOAKx88ABM2Yq8hOvg079.png" alt="2021210-125953.png" data-nodeid="5516"></p>
+
+<p data-nodeid="1202">此时目标成员将会自行关闭服务，并在日志中打印出移除信息：</p>
+<pre class="lang-java" data-nodeid="1203"><code data-language="java"><span class="hljs-number">13</span>:<span class="hljs-number">14</span>:<span class="hljs-number">54</span> etcd1 | {<span class="hljs-string">"level"</span>:<span class="hljs-string">"warn"</span>,<span class="hljs-string">"ts"</span>:<span class="hljs-string">"2020-10-18T13:14:54.368+0800"</span>,<span class="hljs-string">"caller"</span>:<span class="hljs-string">"rafthttp/peer_status.go:68"</span>,<span class="hljs-string">"msg"</span>:<span class="hljs-string">"peer became inactive (message send to peer failed)"</span>,<span class="hljs-string">"peer-id"</span>:<span class="hljs-string">"fd422379fda50e48"</span>,<span class="hljs-string">"error"</span>:<span class="hljs-string">"failed to dial fd422379fda50e48 on stream Message (the member has been permanently removed from the cluster)"</span>}
+<span class="hljs-number">13</span>:<span class="hljs-number">14</span>:<span class="hljs-number">54</span> etcd1 | {<span class="hljs-string">"level"</span>:<span class="hljs-string">"warn"</span>,<span class="hljs-string">"ts"</span>:<span class="hljs-string">"2020-10-18T13:14:54.368+0800"</span>,<span class="hljs-string">"caller"</span>:<span class="hljs-string">"etcdserver/server.go:1084"</span>,<span class="hljs-string">"msg"</span>:<span class="hljs-string">"server error"</span>,<span class="hljs-string">"error"</span>:<span class="hljs-string">"the member has been permanently removed from the cluster"</span>}
+</code></pre>
+<p data-nodeid="1204">这种方式可以安全地移除 leader 和其他成员。<strong data-nodeid="1343">如果是移除 leader 的场景，新 leader 被选举时集群将处于不活动状态（inactive），且持续时间通常由选举超时时间和投票过程决定</strong>。</p>
+<h4 data-nodeid="1205">添加新成员</h4>
+<p data-nodeid="1206">当我们新起节点时，需要加入现有的 etcd 集群中。添加新成员的过程有如下两个步骤：</p>
+<ol data-nodeid="1207">
+<li data-nodeid="1208">
+<p data-nodeid="1209">通过 HTTP members API 添加新成员到集群，gRPC members API 或者 etcdctl member add 命令；</p>
+</li>
+<li data-nodeid="1210">
+<p data-nodeid="1211">使用新的集群配置启动新成员，包括更新后的成员列表（现有成员加上新成员）：</p>
+</li>
+</ol>
+<pre class="lang-java" data-nodeid="1212"><code data-language="java">$ etcdctl --endpoints=http:<span class="hljs-comment">//localhost:22379 member add infra4 --peer-urls=http://localhost:2380</span>
+Member <span class="hljs-number">574399926694</span>aee9 added to cluster ef37ad9dc622a7c4
+ETCD_NAME=<span class="hljs-string">"infra4"</span>
+ETCD_INITIAL_CLUSTER=<span class="hljs-string">"infra4=http://localhost:2380,infra2=http://127.0.0.1:22380,infra3=http://127.0.0.1:32380"</span>
+ETCD_INITIAL_ADVERTISE_PEER_URLS=<span class="hljs-string">"http://localhost:2380"</span>
+ETCD_INITIAL_CLUSTER_STATE=<span class="hljs-string">"existing"</span>
+</code></pre>
+<p data-nodeid="1213">如上的命令使用 etcdctl 指定 name 和 advertised peer URLs 来添加新的成员到集群。我们新增了名为 infra 4 的节点，其启动标志了 --peer-urls=http://localhost:2380。</p>
+<p data-nodeid="1214">通过命令行的输出，可以看到添加成员执行成功。成员 574399926694aee9 添加到集群 ef37ad9dc622a7c4，并在下方输出了集群现有的信息，这些信息很重要。</p>
+<p data-nodeid="1215">下面步骤就是基于新的集群配置启动刚刚添加的成员，我们主要是直接使用 etcd 启动的方式：</p>
+<pre class="lang-java" data-nodeid="1216"><code data-language="java">etcd --name infra4 --listen-client-urls http:<span class="hljs-comment">//127.0.0.1:2379 --advertise-client-urls http://127.0.0.1:2379 --listen-peer-urls http://127.0.0.1:2380 --initial-advertise-peer-urls http://127.0.0.1:2380 --initial-cluster-token ef37ad9dc622a7c4 --initial-cluster-state existing --initial-cluster 'infra4=http://127.0.0.1:2380,infra2=http://127.0.0.1:22380,infra3=http://127.0.0.1:32380' --enable-pprof --logger=zap --log-outputs=stderr</span>
+</code></pre>
+<p data-nodeid="1217">虽然在启动命令中指定了集群的成员、集群的标志、集群状态等信息，但是会出现如下的报错：</p>
+<pre class="lang-shell" data-nodeid="1218"><code data-language="shell">Members:[&amp;{ID:18d3ac4dcf19552b RaftAttributes:{PeerURLs:[http://localhost:2380] IsLearner:false} Attributes:{Name: ClientURLs:[]}} &amp;{ID:91bc3c398fb3c146 RaftAttributes:{PeerURLs:[http://127.0.0.1:22380] IsLearner:false} Attributes:{Name:infra2 ClientURLs:[http://127.0.0.1:22379]}} &amp;{ID:fd422379fda50e48 RaftAttributes:{PeerURLs:[http://127.0.0.1:32380] IsLearner:false} Attributes:{Name:infra3 ClientURLs:[http://127.0.0.1:32379]}}] RemovedMemberIDs:[]}: unmatched member while checking PeerURLs (\"http://127.0.0.1:32380\"(resolved from \"http://127.0.0.1:32380\") != \"http://127.0.0.1:2380\"(resolved from \"http://127.0.0.1:2380\"))","stacktrace":"go.etcd.io/etcd/etcdmain.startEtcdOrProxyV2\n\t/tmp/etcd-release-3.4.5/etcd/release/etcd/etcdmain/etcd.go:271\ngo.etcd.io/etcd/etcdmain.Main\n\t/tmp/etcd-release-3.4.5/etcd/release/etcd/etcdmain/main.go:46\nmain.main\n\t/tmp/etcd-release-3.4.5/etcd/release/etcd/main.go:28\nruntime.main\n\t/usr/local/go/src/runtime/proc.go:200"}
+</code></pre>
+<p data-nodeid="1219">根据报错可以知道，这种方式使得启动的新节点也是集群的方式，peer URLs 不匹配，导致了启动报错。</p>
+<p data-nodeid="1220">我们需要知道 etcdctl 添加成员时已经给出关于新成员的集群信息，并打印出成功启动它需要的环境变量。因此使用关联的标记为新的成员启动 etcd 进程：</p>
+<pre class="lang-java" data-nodeid="1221"><code data-language="java">$ export ETCD_NAME=<span class="hljs-string">"infra4"</span>
+$ export ETCD_INITIAL_CLUSTER=<span class="hljs-string">"infra4=http://localhost:2380,infra2=http://127.0.0.1:22380,infra3=http://127.0.0.1:32380"</span>
+$ export ETCD_INITIAL_CLUSTER_STATE=existing
+$ etcd --listen-client-urls http:<span class="hljs-comment">//localhost:2379 --advertise-client-urls http://localhost:2379 --listen-peer-urls http://localhost:2380 --initial-advertise-peer-urls http://localhost:2380</span>
+</code></pre>
+<p data-nodeid="1222">如上述的命令执行完成，新成员将作为集群的一部分运行并立即开始同步集群的其他成员。如果添加多个成员，官方推荐的做法是<strong data-nodeid="1359">每次配置单个成员，并在添加更多新成员前验证它正确启动</strong>。</p>
+<p data-nodeid="1223">我们此时查看集群的状态如下：</p>
+<pre class="lang-shell" data-nodeid="1224"><code data-language="shell"><span class="hljs-meta">$</span><span class="bash"> etcdctl --endpoints=http://localhost:22379   member list -w table</span>
++------------------+---------+--------+------------------------+------------------------+------------+
+|        ID        | STATUS  |  NAME  |       PEER ADDRS       |      CLIENT ADDRS      | IS LEARNER |
++------------------+---------+--------+------------------------+------------------------+------------+
+| 18d3ac4dcf19552b | started | infra4 | http://localhost:2380  | http://localhost:2379  |      false |
+| 91bc3c398fb3c146 | started | infra2 | http://127.0.0.1:22380 | http://127.0.0.1:22379 |      false |
+| fd422379fda50e48 | started | infra3 | http://127.0.0.1:32380 | http://127.0.0.1:32379 |      false |
++------------------+---------+--------+------------------------+------------------------+------------+
+</code></pre>
+<p data-nodeid="6093" class=""><img src="https://s0.lgstatic.com/i/image6/M01/04/36/Cgp9HWAj2iCAOMvdAAxRChj8oRs342.png" alt="2021210-125956.png" data-nodeid="6096"></p>
+
+<p data-nodeid="1226">除此之外，<strong data-nodeid="1377">如果添加新成员到一个节点的集群，在新成员启动前集群无法继续工作</strong>，因为它需要两个成员作为 galosh 才能在一致性上达成一致。<strong data-nodeid="1378">这种情况仅会发生</strong>在 etcdctl member add<strong data-nodeid="1379">影响集群和新成员成功建立连接到已有成员的时间内</strong>。</p>
+<h3 data-nodeid="1227">运行时重配置的设计及注意点</h3>
+<p data-nodeid="1228">我上面介绍了 etcd 集群重配置的常见操作。运行时重配置是分布式系统中难点之一，也很容易出错，我们需要了解运行时重配置命令的设计和注意点。</p>
+<h4 data-nodeid="1229">两阶段配置变更设计</h4>
+<p data-nodeid="1230">在 etcd 中，<strong data-nodeid="1388">出于安全考虑，每个 etcd 集群节点进行运行时重配置都必须经历两个阶段：通知集群新配置、加入新成员</strong>。</p>
+<p data-nodeid="1231">上面介绍的几种集群操作都是按照这两个步骤进行的。以添加新成员为例，两阶段描述如下。</p>
+<ul data-nodeid="1232">
+<li data-nodeid="1233">
+<p data-nodeid="1234">阶段一：通知集群新配置</p>
+</li>
+</ul>
+<p data-nodeid="1235">将成员添加到 etcd 集群中，需要通过调用 API 将新成员添加到集群中。当集群同意配置修改时，API 调用返回。</p>
+<ul data-nodeid="1236">
+<li data-nodeid="1237">
+<p data-nodeid="1238">阶段二：加入新成员</p>
+</li>
+</ul>
+<p data-nodeid="1239">要将新的 etcd 成员加入现有集群，需要指定正确的<code data-backticks="1" data-nodeid="1394">initial-cluster</code>并将<code data-backticks="1" data-nodeid="1396">initial-cluster-state</code>设置为 existing。成员启动时，它首先与现有集群通信，并验证当前集群配置是否与<code data-backticks="1" data-nodeid="1398">initial-cluster</code>中指定的预期配置匹配。当新成员成功启动时，集群已达到预期的配置。</p>
+<p data-nodeid="1240">将过程分为两个独立的阶段，运维人员需要了解集群成员身份的变化，这实际上为我们提供了更大的灵活性，也更容易理解这个过程。</p>
+<p data-nodeid="1241">我们通过上面的实践可以发现，进行集群运行重配置时，每一阶段都会确认集群成员的数量和状态，当第一阶段没有问题时才会进行下一阶段的操作。这是为了第一阶段的状态不正常时，我们可以及时进行修正，从而避免因为第一阶段的配置问题，导致集群进入无序和混乱的状态。</p>
+<h4 data-nodeid="1242">集群重配置注意点</h4>
+<p data-nodeid="1243">我们在前面进行了集群运行时重配置的介绍与实践，但有两点你在重配置时要特别注意。</p>
+<ul data-nodeid="1244">
+<li data-nodeid="1245">
+<p data-nodeid="1246"><strong data-nodeid="1408">集群永久失去它的大多数成员，需要从旧数据目录启动新集群来恢复之前的状态</strong>。</p>
+</li>
+</ul>
+<p data-nodeid="1247">集群永久失去它的大多数成员的情况下，完全有可能从现有集群中强制删除发生故障的成员来完成恢复。但是，etcd 不支持该方法，因为它绕过了不安全的常规共识提交阶段。</p>
+<p data-nodeid="1248">如果要删除的成员实际上并没有挂掉或通过同一集群中的不同成员强行删除，etcd 最终会得到具有相同 clusterID 的分散集群。这种方式将会导致后续很难调试和修复。</p>
+<ul data-nodeid="1249">
+<li data-nodeid="1250">
+<p data-nodeid="1251"><strong data-nodeid="1414">运行时重配置禁止使用公用发现服务</strong></p>
+</li>
+</ul>
+<p data-nodeid="1252"><a href="https://etcd.io/docs/v3.4.0/dev-internal/discovery_protocol/" data-nodeid="1417">公共发现服务</a>应该仅用于引导集群。成功引导集群后，成员的 IP 地址都是已知的。<strong data-nodeid="1423">若要将新成员加入现有集群，需使用运行时重新配置 API</strong>。</p>
+<p data-nodeid="1253">如果依靠公共发现服务会存在一些问题，如公共发现服务自身存在的网络问题、公共发现服务后端是否能够支撑访问负载等。</p>
+<p data-nodeid="1254">通过以上的介绍你知道了 etcd 公共发现服务的种种问题。<strong data-nodeid="1430">如果要使用运行时重配置的发现服务，你最好选择构建一个私有服务</strong>。</p>
+<h3 data-nodeid="1255">小结</h3>
+<p data-nodeid="1256">这一讲我主要介绍了 etcd 运行时重配置集群的常见操作以及 etcd 是如何设计运行时重配置、使用的注意点。</p>
+<p data-nodeid="1257">本讲内容如下：</p>
+<p data-nodeid="6673" class="te-preview-highlight"><img src="https://s0.lgstatic.com/i/image6/M00/04/36/Cgp9HWAj2lCAU-h7AAJU3K71dJc800.png" alt="2021210-125958.png" data-nodeid="6676"></p>
+
+<p data-nodeid="1259">分布式系统中，运行时集群重配置是一个难点。<strong data-nodeid="1447">运行时重配置会涉及集群的稳定性和可用性，因此需要慎之又慎，尽可能避免运行时集群重配置。<strong data-nodeid="1446">如果你必须重配置 etcd 集群，你需要遵循</strong>两阶段配置变更的思想</strong>，平稳可靠地进行重配置操作。</p>
+<p data-nodeid="1260" class="">关于动态重配置，你有什么经验和踩坑的经历，欢迎你在留言区和我分享。</p></div>
+
+</body></html>

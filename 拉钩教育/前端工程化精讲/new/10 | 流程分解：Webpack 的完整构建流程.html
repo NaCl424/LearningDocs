@@ -1,0 +1,1386 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>10 | 流程分解：Webpack 的完整构建流程</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>10 | 流程分解：Webpack 的完整构建流程</h1><p data-nodeid="1177">上节课我们聊了过去 20 余年里，前端项目开发时的工程化需求，以及对应产生的工具解决方案，其中最广泛运用的构建工具是 Webpack。这节课我们就来深入分析 Webpack 中的效率优化问题。</p>
+
+
+<p data-nodeid="3">要想全面地分析 Webpack 构建工具的优化方案，首先要先对它的工作流程有一定理解，这样才能针对项目中可能存在的构建问题，进行有目标地分析和优化。</p>
+<h3 data-nodeid="4">Webpack 的基本工作流程</h3>
+<p data-nodeid="5">我们从两方面来了解 Webpack 的基本工作流程：</p>
+<ol data-nodeid="6">
+<li data-nodeid="7">
+<p data-nodeid="8">通过 Webpack 的源码来了解具体函数执行的逻辑。</p>
+</li>
+<li data-nodeid="9">
+<p data-nodeid="10">通过 Webpack 对外暴露的声明周期 Hooks，理解整体流程的阶段划分。</p>
+</li>
+</ol>
+<p data-nodeid="1959" class="">其中会涉及对 Webpack 源代码的分析，源代码取自 Webpack 仓库的 <a href="https://github.com/webpack/webpack/blob/webpack-4" data-nodeid="1963">webpack-4 分支</a>，而最新的 Webpack 5 中的优化我们会在后续课程中单独分析。</p>
+
+<p data-nodeid="12">通常，在项目中有两种运行 Webpack 的方式：基于命令行的方式或基于代码的方式。</p>
+<p data-nodeid="2745" class="">两种示例的代码分别如下（具体示例参照 <a href="https://github.com/fe-efficiency/lessons_fe_efficiency/tree/master/10_webpack_workflow" data-nodeid="2753">10_webpack_workflow</a>）：</p>
+
+<pre class="lang-javascript hljs" data-nodeid="14"><code data-language="javascript"><span class="hljs-comment">//第一种：基于命令行的方式</span>
+webpack --config webpack.config.js
+<span class="hljs-comment">//第二种：基于代码的方式</span>
+<span class="hljs-keyword">var</span> webpack = <span class="hljs-built_in">require</span>(<span class="hljs-string">'webpack'</span>)
+<span class="hljs-keyword">var</span> config = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./webpack.config'</span>)
+webpack(config, <span class="hljs-function">(<span class="hljs-params">err, stats</span>) =&gt;</span> {})
+</code></pre>
+<h4 data-nodeid="15">webpack.js 中的基本流程</h4>
+<p data-nodeid="4321" class="">无论用哪种方式运行 Webpack，本质上都是 <a href="https://github.com/webpack/webpack/blob/webpack-4/lib/webpack.js" data-nodeid="4325">webpack.js</a> 中的 Webpack 函数。</p>
+
+
+<p data-nodeid="17">这一函数的核心逻辑是：根据配置生成编译器实例 compiler，然后处理参数，执行 WebpackOptionsApply().process，根据参数加载不同内部插件。在有回调函数的情况下，根据是否是 watch 模式来决定要执行 compiler.watch 还是 compiler.run。</p>
+<p data-nodeid="18">为了讲解通用的流程，我们以没有 watch 模式的情况进行分析。简化流程后的代码示例如下：</p>
+<pre class="lang-javascript hljs" data-nodeid="19"><code data-language="javascript"><span class="hljs-keyword">const</span> webpack = <span class="hljs-function">(<span class="hljs-params">options, callback</span>) =&gt;</span> {
+  options = ... <span class="hljs-comment">//处理options默认值</span>
+  <span class="hljs-keyword">let</span> compiler = <span class="hljs-keyword">new</span> Compiler(options.context)
+  ... <span class="hljs-comment">//处理参数中的插件等</span>
+  compiler.options = <span class="hljs-keyword">new</span> WebpackOptionsApply().process(options, compiler); <span class="hljs-comment">//分析参数，加载各内部插件</span>
+  ...
+  if (callback) {
+    ... 
+    compiler.run(callback)
+  }
+  <span class="hljs-keyword">return</span> compiler
+}
+</code></pre>
+<h4 data-nodeid="20">Compiler.js 中的基本流程</h4>
+<p data-nodeid="5893" class="">我们再来看下运行编译器实例的内部逻辑，具体源代码在 <a href="https://github.com/webpack/webpack/blob/webpack-4/lib/Compiler.js" data-nodeid="5897">Compiler.js</a> 中。</p>
+
+
+<p data-nodeid="22">compiler.run(callback) 中的执行逻辑较为复杂，我们把它按流程抽象一下。抽象后的执行流程如下：</p>
+<ol data-nodeid="9235">
+<li data-nodeid="9236">
+<p data-nodeid="9237"><strong data-nodeid="9263">readRecords</strong>：读取<a href="https://webpack.js.org/configuration/other-options/#recordspath" data-nodeid="9261">构建记录</a>，用于分包缓存优化，在未设置 recordsPath 时直接返回。</p>
+</li>
+<li data-nodeid="9238">
+<p data-nodeid="9239"><strong data-nodeid="9268">compile 的主要构建过程</strong>，涉及以下几个环节：</p>
+<ol data-nodeid="9240">
+<li data-nodeid="9241" class="">
+<p data-nodeid="9242"><strong data-nodeid="9273">newCompilationParams</strong>：创建 NormalModule 和 ContextModule 的工厂实例，用于创建后续模块实例。</p>
+</li>
+<li data-nodeid="9243">
+<p data-nodeid="9244"><strong data-nodeid="9278">newCompilation</strong>：创建编译过程 Compilation 实例，传入上一步的两个工厂实例作为参数。</p>
+</li>
+<li data-nodeid="9245">
+<p data-nodeid="9246"><strong data-nodeid="9287">compiler.hooks.make.callAsync</strong>：触发 make 的 Hook，执行所有监听 make 的插件（例如 <a href="https://github.com/webpack/webpack/blob/webpack-4/lib/SingleEntryPlugin.js" data-nodeid="9285">SingleEntryPlugin.js</a> 中，会在相应的监听中触发 compilation 的 addEntry 方法）。其中，Hook 的作用，以及其他 Hook 会在下面的小节中再谈到。</p>
+</li>
+<li data-nodeid="9247">
+<p data-nodeid="9248"><strong data-nodeid="9292">compilation.finish</strong>：编译过程实例的 finish 方法，触发相应的 Hook 并报告构建模块的错误和警告。</p>
+</li>
+<li data-nodeid="9249">
+<p data-nodeid="9250"><strong data-nodeid="9297">compilation.seal</strong>：编译过程的 seal 方法，下一节中我会进一步分析。</p>
+</li>
+</ol>
+</li>
+<li data-nodeid="9251">
+<p data-nodeid="9252"><strong data-nodeid="9302">emitAssets</strong>：调用 compilation.getAssets()，将产物内容写入输出文件中。</p>
+</li>
+<li data-nodeid="9253">
+<p data-nodeid="9254"><strong data-nodeid="9307">emitRecords</strong>：对应第一步的 readRecords，用于写入构建记录，在未设置 recordsPath 时直接返回。</p>
+</li>
+</ol>
+
+
+
+
+<p data-nodeid="43">在编译器运行的流程里，核心过程是第二步编译。具体流程在生成的 Compilation 实例中进行，接下来我们再来看下这部分的源码逻辑。</p>
+<h4 data-nodeid="44">Compilation.js 中的基本流程</h4>
+<p data-nodeid="10874" class="">这部分的源码位于 <a href="https://github.com/webpack/webpack/blob/webpack-4/lib/Compilation.js" data-nodeid="10878">Compilation.js</a> 中。其中，在编译执行过程中，我们主要从外部调用的是两个方法：</p>
+
+
+<ol data-nodeid="46">
+<li data-nodeid="47">
+<p data-nodeid="48"><strong data-nodeid="261">addEntry</strong>：从 entry 开始递归添加和构建模块。</p>
+</li>
+<li data-nodeid="49">
+<p data-nodeid="50"><strong data-nodeid="266">seal</strong>：冻结模块，进行一系列优化，以及触发各优化阶段的 Hooks。</p>
+</li>
+</ol>
+<p data-nodeid="51">以上就是执行 Webpack 构建时的基本流程，这里再稍做总结：</p>
+<ol data-nodeid="52">
+<li data-nodeid="53">
+<p data-nodeid="54">创建编译器 Compiler 实例。</p>
+</li>
+<li data-nodeid="55">
+<p data-nodeid="56">根据 Webpack 参数加载参数中的插件，以及程序内置插件。</p>
+</li>
+<li data-nodeid="57">
+<p data-nodeid="58">执行编译流程：创建编译过程 Compilation 实例，从入口递归添加与构建模块，模块构建完成后冻结模块，并进行优化。</p>
+</li>
+<li data-nodeid="59">
+<p data-nodeid="60">构建与优化过程结束后提交产物，将产物内容写到输出文件中。</p>
+</li>
+</ol>
+<p data-nodeid="61">除了了解上面的基本工作流程外，还有两个相关的概念需要理解：Webpack 的生命周期和插件系统。</p>
+<h3 data-nodeid="62">读懂 Webpack 的生命周期</h3>
+<p data-nodeid="63">Webpack 工作流程中最核心的两个模块：Compiler 和 Compilation 都扩展自 Tapable 类，用于实现工作流程中的生命周期划分，以便在不同的生命周期节点上注册和调用<strong data-nodeid="283">插件</strong>。其中所暴露出来的生命周期节点称为<strong data-nodeid="284">Hook</strong>（俗称钩子）。</p>
+<h4 data-nodeid="64">Webpack 中的插件</h4>
+<p data-nodeid="65">Webpack 引擎基于插件系统搭建而成，不同的插件各司其职，在 Webpack 工作流程的某一个或多个时间点上，对构建流程的某个方面进行处理。Webpack 就是通过这样的工作方式，在各生命周期中，经一系列插件将源代码逐步变成最后的产物代码。</p>
+<p data-nodeid="66">一个 Webpack 插件是一个包含 apply 方法的 JavaScript 对象。这个 apply 方法的执行逻辑，通常是注册 Webpack 工作流程中某一生命周期 Hook，并添加对应 Hook 中该插件的实际处理函数。例如下面的代码：</p>
+<pre class="lang-javascript hljs" data-nodeid="67"><code data-language="javascript"><span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">HelloWorldPlugin</span> </span>{
+  apply(compiler) {
+    compiler.hooks.run.tap(<span class="hljs-string">"HelloWorldPlugin"</span>, <span class="hljs-function"><span class="hljs-params">compilation</span> =&gt;</span> {
+      <span class="hljs-built_in">console</span>.log(<span class="hljs-string">'hello world'</span>);
+    })
+  }
+}
+<span class="hljs-built_in">module</span>.exports = HelloWorldPlugin;
+</code></pre>
+<h4 data-nodeid="68">Hook 的使用方式</h4>
+<p data-nodeid="69">Hook 的使用分为四步：</p>
+<ol data-nodeid="70">
+<li data-nodeid="71">
+<p data-nodeid="72">在构造函数中定义 Hook 类型和参数，生成 Hook 对象。</p>
+</li>
+<li data-nodeid="73">
+<p data-nodeid="74">在插件中注册 Hook，添加对应 Hook 触发时的执行函数。</p>
+</li>
+<li data-nodeid="75">
+<p data-nodeid="76">生成插件实例，运行 apply 方法。</p>
+</li>
+<li data-nodeid="77">
+<p data-nodeid="78">在运行到对应生命周期节点时调用 Hook，执行注册过的插件的回调函数。如下面的代码所示：</p>
+</li>
+</ol>
+<pre class="lang-javascript hljs" data-nodeid="79"><code data-language="javascript">lib/Compiler.js
+<span class="hljs-built_in">this</span>.hooks = {
+  ...
+  make: <span class="hljs-keyword">new</span> SyncHook([<span class="hljs-string">'compilation'</span>, <span class="hljs-string">'params'</span>]), <span class="hljs-comment">//1. 定义Hook</span>
+  ...
+}
+...
+this.hooks.compilation.call(compilation, params); <span class="hljs-comment">//4. 调用Hook</span>
+...
+lib/dependencies/CommonJsPlugin.js
+<span class="hljs-comment">//2. 在插件中注册Hook</span>
+compiler.hooks.compilation.tap(<span class="hljs-string">"CommonJSPlugin"</span>, <span class="hljs-function">(<span class="hljs-params">compilation, { contextModuleFactory, normalModuleFactory }</span>) =&gt;</span> {
+  ...
+})
+lib/WebpackOptionsApply.js
+<span class="hljs-comment">//3. 生成插件实例，运行apply方法</span>
+<span class="hljs-keyword">new</span> CommonJsPlugin(options.module).apply(compiler);
+</code></pre>
+<p data-nodeid="80">以上就是 Webpack 中 Hook 的一般使用方式。正是通过这种方式，Webpack 将编译器和编译过程的生命周期节点提供给外部插件，从而搭建起弹性化的工作引擎。</p>
+<p data-nodeid="81">Hook 的类型按照同步或异步、是否接收上一插件的返回值等情况分为 9 种。不同类型的 Hook 接收注册的方法也不同，更多信息可参照<a href="https://github.com/webpack/tapable#tapable" data-nodeid="298">官方文档</a>。下面我们来具体介绍 Compiler 和 Compilation 中的 Hooks。</p>
+<h4 data-nodeid="82">Compiler Hooks</h4>
+<p data-nodeid="83">构建器实例的生命周期可以分为 3 个阶段：初始化阶段、构建过程阶段、产物生成阶段。下面我们就来大致介绍下这些不同阶段的 Hooks ：</p>
+<p data-nodeid="84"><strong data-nodeid="305">初始化阶段</strong></p>
+<ul data-nodeid="85">
+<li data-nodeid="86">
+<p data-nodeid="87">environment、afterEnvironment：在创建完 compiler 实例且执行了配置内定义的插件的 apply 方法后触发。</p>
+</li>
+<li data-nodeid="88">
+<p data-nodeid="89">entryOption、afterPlugins、afterResolvers：在 WebpackOptionsApply.js 中，这 3 个 Hooks 分别在执行 EntryOptions 插件和其他 Webpack 内置插件，以及解析了 resolver 配置后触发。</p>
+</li>
+</ul>
+<p data-nodeid="90"><strong data-nodeid="311">构建过程阶段</strong></p>
+<ul data-nodeid="91">
+<li data-nodeid="92">
+<p data-nodeid="93">normalModuleFactory、contextModuleFactory：在两类模块工厂创建后触发。</p>
+</li>
+<li data-nodeid="94">
+<p data-nodeid="95">beforeRun、run、watchRun、beforeCompile、compile、thisCompilation、compilation、make、afterCompile：在运行构建过程中触发。</p>
+</li>
+</ul>
+<p data-nodeid="96"><strong data-nodeid="317">产物生成阶段</strong></p>
+<ul data-nodeid="97">
+<li data-nodeid="98">
+<p data-nodeid="99">shouldEmit、emit、assetEmitted、afterEmit：在构建完成后，处理产物的过程中触发。</p>
+</li>
+<li data-nodeid="100">
+<p data-nodeid="101">failed、done：在达到最终结果状态时触发。</p>
+</li>
+</ul>
+<h4 data-nodeid="102">Compilation Hooks</h4>
+<p data-nodeid="103">构建过程实例的生命周期我们分为两个阶段：</p>
+<p data-nodeid="104"><strong data-nodeid="325">构建阶段</strong></p>
+<ul data-nodeid="105">
+<li data-nodeid="106">
+<p data-nodeid="107">addEntry、failedEntry、succeedEntry：在添加入口和添加入口结束时触发（Webpack 5 中移除）。</p>
+</li>
+<li data-nodeid="108">
+<p data-nodeid="109">buildModule、rebuildModule、finishRebuildingModule、failedModule、succeedModule：在构建单个模块时触发。</p>
+</li>
+<li data-nodeid="110">
+<p data-nodeid="111">finishModules：在所有模块构建完成后触发。</p>
+</li>
+</ul>
+<p data-nodeid="112"><strong data-nodeid="332">优化阶段</strong></p>
+<p data-nodeid="12424">优化阶段在 seal 函数中共有 12 个主要的处理过程，如下图所示：</p>
+<p data-nodeid="12425" class=""><img src="https://s0.lgstatic.com/i/image/M00/4D/B4/Ciqc1F9bGtqAJo4uAABnYGwsyYs218.png" alt="image (4).png" data-nodeid="12433"></p>
+
+
+
+<p data-nodeid="116">每个过程都暴露了相应的 Hooks，分别如下:</p>
+<ul data-nodeid="13214">
+<li data-nodeid="13215">
+<p data-nodeid="13216">seal、needAdditionalSeal、unseal、afterSeal：分别在 seal 函数的起始和结束的位置触发。</p>
+</li>
+<li data-nodeid="13217">
+<p data-nodeid="13218">optimizeDependencies、afterOptimizeDependencies：触发优化依赖的插件执行，例如FlagDependencyUsagePlugin。</p>
+</li>
+<li data-nodeid="13219">
+<p data-nodeid="13220">beforeChunks、afterChunks：分别在生成 Chunks 的过程的前后触发。</p>
+</li>
+<li data-nodeid="13221">
+<p data-nodeid="13222">optimize：在生成 chunks 之后，开始执行优化处理的阶段触发。</p>
+</li>
+<li data-nodeid="13223">
+<p data-nodeid="13224">optimizeModule、afterOptimizeModule：在优化模块过程的前后触发。</p>
+</li>
+<li data-nodeid="13225">
+<p data-nodeid="13226" class="">optimizeChunks、afterOptimizeChunks：在优化 Chunk 过程的前后触发，用于 <a href="https://webpack.js.org/guides/tree-shaking/" data-nodeid="13253">Tree Shaking</a>。</p>
+</li>
+<li data-nodeid="13227">
+<p data-nodeid="13228">optimizeTree、afterOptimizeTree：在优化模块和 Chunk 树过程的前后触发。</p>
+</li>
+<li data-nodeid="13229">
+<p data-nodeid="13230">optimizeChunkModules、afterOptimizeChunkModules：在优化 ChunkModules 的过程前后触发，例如 ModuleConcatenationPlugin，利用这一 Hook 来做<a href="https://webpack.js.org/plugins/module-concatenation-plugin/#optimization-bailouts" data-nodeid="13259">Scope Hoisting</a>的优化。</p>
+</li>
+<li data-nodeid="13231">
+<p data-nodeid="13232">shouldRecord、recordModules、recordChunks、recordHash：在 shouldRecord 返回为 true 的情况下，依次触发 recordModules、recordChunks、recordHash。</p>
+</li>
+<li data-nodeid="13233">
+<p data-nodeid="13234">reviveModules、beforeModuleIds、moduleIds、optimizeModuleIds、afterOptimizeModuleIds：在生成模块 Id 过程的前后触发。</p>
+</li>
+<li data-nodeid="13235">
+<p data-nodeid="13236">reviveChunks、beforeChunkIds、optimizeChunkIds、afterOptimizeChunkIds：在生成 Chunk id 过程的前后触发。</p>
+</li>
+<li data-nodeid="13237">
+<p data-nodeid="13238">beforeHash、afterHash：在生成模块与 Chunk 的 hash 过程的前后触发。</p>
+</li>
+<li data-nodeid="13239">
+<p data-nodeid="13240">beforeModuleAssets、moduleAsset：在生成模块产物数据过程的前后触发。</p>
+</li>
+<li data-nodeid="13241">
+<p data-nodeid="13242">shouldGenerateChunkAssets、beforeChunkAssets、chunkAsset：在创建 Chunk 产物数据过程的前后触发。</p>
+</li>
+<li data-nodeid="13243">
+<p data-nodeid="13244">additionalAssets、optimizeChunkAssets、afterOptimizeChunkAssets、optimizeAssets、afterOptimizeAssets：在优化产物过程的前后触发，例如在 TerserPlugin 的<a href="https://github.com/webpack-contrib/terser-webpack-plugin/blob/master/src/index.js" data-nodeid="13270">压缩代码</a>插件的执行过程中，就用到了 optimizeChunkAssets。</p>
+</li>
+</ul>
+
+<h3 data-nodeid="148">代码实践：编写一个简单的统计插件</h3>
+<p data-nodeid="149">在了解了 Webpack 的工作流程后，下面我们进行一个简单的实践。</p>
+<p data-nodeid="14052" class="">编写一个统计构建过程生命周期耗时的插件，这类插件会作为后续优化构建效率的准备工作。插件片段示例如下（完整代码参见 <a href="https://github.com/fe-efficiency/lessons_fe_efficiency/tree/master/10_webpack_workflow" data-nodeid="14060">10_webpack_workflow</a>）：</p>
+
+<pre class="lang-java hljs" data-nodeid="17251"><code data-language="java"><span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">SamplePlugin</span> </span>{
+  apply(compiler) {
+    <span class="hljs-keyword">var</span> start = Date.now()
+    <span class="hljs-keyword">var</span> statsHooks = [<span class="hljs-string">'environment'</span>, <span class="hljs-string">'entryOption'</span>, <span class="hljs-string">'afterPlugins'</span>, <span class="hljs-string">'compile'</span>]
+    <span class="hljs-keyword">var</span> statsAsyncHooks = [
+      <span class="hljs-string">'beforeRun'</span>,
+      <span class="hljs-string">'beforeCompile'</span>,
+      <span class="hljs-string">'make'</span>,
+      <span class="hljs-string">'afterCompile'</span>,
+      <span class="hljs-string">'emit'</span>,
+      <span class="hljs-string">'done'</span>,
+    ]
+
+    statsHooks.forEach((hookName) =&gt; {
+      compiler.hooks[hookName].tap(<span class="hljs-string">'Sample Plugin'</span>, () =&gt; {
+        console.log(\`Compiler Hook \${hookName}, Time: \${Date.now() - start}ms\`)
+      })
+    })
+    ...
+  }
+})
+<span class="hljs-keyword">module</span>.<span class="hljs-keyword">exports</span> = SamplePlugin;
+</code></pre>
+<p data-nodeid="18826">执行构建后，可以看到在控制台输出了相应的统计时间结果（这里的时间是从构建起始到各阶段 Hook 触发为止的耗时），如下图所示：</p>
+<p data-nodeid="18827" class=""><img src="https://s0.lgstatic.com/i/image/M00/4D/B4/Ciqc1F9bGvGAFRmpAAGFrvBhTHE475.png" alt="image (5).png" data-nodeid="18835"></p>
+
+
+<p data-nodeid="17254">根据这样的输出结果，我们就可以分析项目里各阶段的耗时情况，再进行针对性地优化。这个统计插件将在后面几课的优化实践中运用。</p>
+<p data-nodeid="17255">除了这类自己编写的统计插件外，Webpack 社区中也有一些较成熟的统计插件，例如<a href="https://github.com/stephencookdev/speed-measure-webpack-plugin" data-nodeid="17268">speed-measure-webpack-plugin</a>等，感兴趣的话，你可以进一步了解。</p>
+<h3 data-nodeid="17256">总结</h3>
+<p data-nodeid="17257">这一课时起，我们进入了 Webpack 构建优化的主题。在这节课中，我主要为你勾画了一个 Webpack 工作流程的轮廓，通过对三个源码文件的分析，让你对执行构建命令后的内部流程有一个基本概念。然后我们讨论了 Compiler 和 Compilation 工作流程中的生命周期 Hooks，以及插件的基本工作方式。最后，我们编写了一个简单的统计插件，用于实践上面所讲的课程内容。</p>
+<p data-nodeid="17258">今天的课后思考题是：在今天介绍的 Compiler 和 Compilation 的各生命周期阶段里，通常耗时最长的分别是哪个阶段呢？可以结合自己所在的项目测试分析一下。</p></div>
+
+</body></html>

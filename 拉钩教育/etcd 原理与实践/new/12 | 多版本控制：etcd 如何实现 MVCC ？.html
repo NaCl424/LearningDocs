@@ -1,0 +1,1281 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>12 | 多版本控制：etcd 如何实现 MVCC ？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>12 | 多版本控制：etcd 如何实现 MVCC ？</h1><p data-nodeid="34091" class="">上一讲我们介绍了 etcd-raft 模块实现分布式一致性的原理。今天我们继续介绍 etcd 的另一个重要特性——MVCC，即多版本控制。</p>
+<p data-nodeid="34092">etcd v2 版本存在<strong data-nodeid="34193">丢弃历史版本数据</strong>的问题，仅保留最新版本的数据。但是这样做引起了一系列问题，比如 watch 机制依赖历史版本数据实现相应功能，因此 etcd v2 又采取了在内存中建立滑动窗口来维护部分历史变更数据的做法，然而在大型的业务场景下还是不足以支撑大量历史变更数据的维护。到了 etcd v3 版本，该功能得到了更新，etcd v3 支持 MVCC，可以保存一个键值对的多个历史版本。</p>
+<p data-nodeid="34093">MVCC 模块是 etcd 的核心模块。MVCC 作为底层模块，为上层提供统一的调用方法。这一讲我们将会重点介绍 etcd 多版本控制的实现。</p>
+<h3 data-nodeid="34094">什么是 MVCC？</h3>
+<p data-nodeid="34095">MVCC（Multi-Version Concurrency Control），即多版本并发控制，它是一种并发控制的方法，可以实现对数据库的并发访问。</p>
+<p data-nodeid="34096">数据库并发场景有三种，分别为读-读、读-写和写-写。第一种读-读没有问题，不需要并发控制；读-写和写-写都存在<strong data-nodeid="34202">线程安全问题</strong>。读-写可能遇到脏读、幻读、不可重复读的问题；写-写可能会存在更新丢失问题。</p>
+<p data-nodeid="34097">并发控制机制用作对并发操作进行正确调度，保证事务的隔离性、数据库的一致性。可能你对并发控制并不陌生，它的主要技术包括悲观锁和乐观锁等。我们简单看一下这两种技术：</p>
+<ul data-nodeid="34098">
+<li data-nodeid="34099">
+<p data-nodeid="34100">悲观锁是一种排它锁，事务在操作数据时把这部分数据锁定，直到操作完毕后再解锁，这种方式容易造成系统吞吐量和性能方面的损失；</p>
+</li>
+<li data-nodeid="34101">
+<p data-nodeid="34102">乐观锁在提交操作时检查是否违反数据完整性，大多数基于版本（Version）机制实现，<strong data-nodeid="34210">MVCC 就是一种乐观锁</strong>。</p>
+</li>
+</ul>
+<p data-nodeid="34103">而在 MySQL 中，快照读实现了 MVCC 的非阻塞读功能。其为事务分配单向增长的时间戳，每次修改保存一个版本，版本与事务时间戳关联，读操作只读该事务开始前的数据库的快照。</p>
+<p data-nodeid="34104">MVCC 在数据库中的实现主要是为了<strong data-nodeid="34217">提高数据库并发性能</strong>，用更好的方式去处理读写冲突，做到即使有读写冲突时，也不用加锁，实现非阻塞并发读。同时还可以解决脏读、幻读、不可重复读等事务隔离问题，但它也存在一个缺点，就是不能解决更新丢失问题。</p>
+<h3 data-nodeid="34105">etcd MVCC 的实现</h3>
+<p data-nodeid="34106">现在，相信你已经初步了解了 MVCC 的概念，接下来我们具体学习 etcd MVCC 的实现。</p>
+<p data-nodeid="34107"><strong data-nodeid="34224">MVCC 模块主要由 BoltDB 和 treeIndex 两部分组成</strong>。MVCC 底层基于 Backend 模块实现键值对存储，Backend 在设计上支持多种存储的实现，目前的具体实现为 BoltDB，BoltDB 是一个基于 B+ 树的 KV 存储数据库；treeIndex 模块基于内存版 BTree 实现键的索引管理，它是基于 Google 开源项目 Btree 实现的一个索引模块，保存了每一个 key 与对应的版本号（Revision）的映射关系等信息。</p>
+<p data-nodeid="34108">与其他的 KV 存储组件使用存放数据的键作为 key 不同，<strong data-nodeid="34230">etcd 存储以数据的 Revision 作为 key</strong>，键值、创建时的版本号、最后修改的版本号等作为 value 保存到数据库。etcd 对于每一个键值对都维护了一个全局的 Revision 版本号，键值对的每一次变化都会被记录。获取某一个 key 对应的值时，需要先获取该 key 对应的 Revision，再通过它找到对应的值。</p>
+<p data-nodeid="34109">etcd 管理和存储一个 key 的多个版本与 treeIndex 模块中的结构体定义有关，下面我们具体来看。</p>
+<p data-nodeid="34110">我们通过下面这样的一个操作过程，来理解 etcd MVCC 产生的作用：</p>
+<pre class="lang-go hljs" data-nodeid="34111"><code data-language="go">$ etcdctl put hello aoho
+OK
+$ etcdctl get hello -w=json
+{<span class="hljs-string">"header"</span>:{<span class="hljs-string">"cluster_id"</span>:<span class="hljs-number">14841639068965178418</span>,<span class="hljs-string">"member_id"</span>:<span class="hljs-number">10276657743932975437</span>,<span class="hljs-string">"revision"</span>:<span class="hljs-number">3</span>,<span class="hljs-string">"raft_term"</span>:<span class="hljs-number">4</span>},<span class="hljs-string">"kvs"</span>:[{<span class="hljs-string">"key"</span>:<span class="hljs-string">"aGVsbG8="</span>,<span class="hljs-string">"create_revision"</span>:<span class="hljs-number">3</span>,<span class="hljs-string">"mod_revision"</span>:<span class="hljs-number">3</span>,<span class="hljs-string">"version"</span>:<span class="hljs-number">1</span>,<span class="hljs-string">"value"</span>:<span class="hljs-string">"YW9obw=="</span>}],<span class="hljs-string">"count"</span>:<span class="hljs-number">1</span>}
+$ etcdctl put hello boho
+OK
+$ etcdctl get hello
+hello
+boho
+$ etcdctl get hello --rev=<span class="hljs-number">3</span>
+hello
+aoho
+</code></pre>
+<p data-nodeid="34112">我来解释一下上面几条命令操作的过程：</p>
+<ul data-nodeid="34113">
+<li data-nodeid="34114">
+<p data-nodeid="34115">首先是写入一条命令；</p>
+</li>
+<li data-nodeid="34116">
+<p data-nodeid="34117">写入成功后读取<code data-backticks="1" data-nodeid="34236">hello</code>对应的值，命令中加上<code data-backticks="1" data-nodeid="34238">-w=json</code>指定输出的格式为 json，可以看到更加详细的信息；</p>
+</li>
+<li data-nodeid="34118">
+<p data-nodeid="34119">接着更新 hello 对应的值为<code data-backticks="1" data-nodeid="34241">boho</code>；</p>
+</li>
+<li data-nodeid="34120">
+<p data-nodeid="34121">更新成功之后，读取<code data-backticks="1" data-nodeid="34244">hello</code>对应的值，可以看到原有的值<code data-backticks="1" data-nodeid="34246">aoho</code>已经变成了我们更新之后的值了，符合预期；</p>
+</li>
+<li data-nodeid="34122">
+<p data-nodeid="34123">最后一条命令用来读取指定版本的键值对，我们在第二条命令查询时获取了先前更新的版本号为 3，因此在查询命令中指定<code data-backticks="1" data-nodeid="34249">--rev=3</code>，可以看到结果返回了版本 3 对应的值<code data-backticks="1" data-nodeid="34251">aoho</code>。</p>
+</li>
+</ul>
+<p data-nodeid="34124">如上的操作过程，其实就是 MVCC 的一个简单的应用，下面我们将具体介绍多版本控制的实现。</p>
+<h3 data-nodeid="34125">MVCC 写过程解析</h3>
+<p data-nodeid="34126">首先我们结合之前写请求实现流程图的内容分析 MVCC 写请求的过程：</p>
+<p data-nodeid="34127"><img src="https://s0.lgstatic.com/i/image6/M01/12/58/Cgp9HWBAvdGAUB34AAJwukqHZTo156.png" alt="图片3.png" data-nodeid="34258"></p>
+<div data-nodeid="34128"><p style="text-align:center">写请求实现流程图</p></div>
+<p data-nodeid="34129">上图为写请求的过程，写请求在底层统一调用 put 方法。treeIndex 中根据查询的 key 从 B-tree 查找得到的是一个 keyIndex 对象，里面包含了 Revision 等全局版本号信息。</p>
+<p data-nodeid="34130">keyIndex 结构体定义如下所示：</p>
+<pre class="lang-go hljs" data-nodeid="34131"><code data-language="go"><span class="hljs-comment">// 位于 mvcc/key_index.go:70</span>
+<span class="hljs-keyword">type</span> keyIndex <span class="hljs-keyword">struct</span> {
+	key         []<span class="hljs-keyword">byte</span>  <span class="hljs-comment">// key 名称</span>
+	modified    revision <span class="hljs-comment">// 最后一次修改的 etcd 版本号</span>
+	generations []generation <span class="hljs-comment">// 保存了 key 多次修改的版本号信息</span>
+}
+</code></pre>
+<p data-nodeid="34132">keyIndex 中保存了 key、modified 和 generations。</p>
+<p data-nodeid="34133">其中 generations 的结构体定义如下：</p>
+<pre class="lang-go hljs" data-nodeid="34134"><code data-language="go"><span class="hljs-comment">// 位于 mvcc/key_index.go:335</span>
+<span class="hljs-keyword">type</span> generation <span class="hljs-keyword">struct</span> {
+	ver     <span class="hljs-keyword">int64</span>
+	created revision <span class="hljs-comment">// generation 创建时的版本</span>
+	revs    []revision
+}
+</code></pre>
+<p data-nodeid="34135">generation 中的 ver 表示当前 generation 包含的修改次数，created 记录创建 generation 时的 Revision 版本，最后的 revs 用于存储所有的版本信息。</p>
+<p data-nodeid="34136">Revision 结构体的定义如下：</p>
+<pre class="lang-go hljs" data-nodeid="34137"><code data-language="go"><span class="hljs-comment">// 位于 mvcc/revision.go:26</span>
+<span class="hljs-keyword">type</span> revision <span class="hljs-keyword">struct</span> {
+  <span class="hljs-comment">// 事务发生时自动生成的主版本号</span>
+	main <span class="hljs-keyword">int64</span>
+	<span class="hljs-comment">// 事务内的子版本号</span>
+	sub <span class="hljs-keyword">int64</span>
+}
+</code></pre>
+<p data-nodeid="34138">Revision 中定义了一个全局递增的主版本号<code data-backticks="1" data-nodeid="34266">main</code>，发生 put、txn、del 操作会递增，一个事务内的 main 版本号是唯一的；事务内的子版本号定义为<code data-backticks="1" data-nodeid="34268">sub</code>，事务发生 put 和 del 操作时，从 0 开始递增。</p>
+<p data-nodeid="34139"><img src="https://s0.lgstatic.com/i/image6/M00/12/55/CioPOWBAva-AC-L1AANi-MAgn_0530.png" alt="图片2.png" data-nodeid="34272"></p>
+<div data-nodeid="34140"><p style="text-align:center">keyIndex、generation 和 revision 之间的关系</p></div>
+<p data-nodeid="34141">由于是第一次写，treeIndex 查询为空。etcd 会根据当前的全局版本号加 1（集群初始化从 1 开始），根据执行的结果，我们这里全局版本号在写之前为 2，自增之后变成 3。因此操作对应的版本号 revision {3,0}，对应写入 BoltDB 的 key。写入的 value 对应 mvccpb.KeyValue 结构体，其由 key、value、create_revision、mod_revision、version、lease 等字段组成，定义如下所示：</p>
+<pre class="lang-go hljs" data-nodeid="34142"><code data-language="go"><span class="hljs-keyword">type</span> KeyValue <span class="hljs-keyword">struct</span> {
+	<span class="hljs-comment">// 键</span>
+	Key []<span class="hljs-keyword">byte</span> <span class="hljs-string">\`protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"\`</span>
+	<span class="hljs-comment">// 创建时的版本号</span>
+	CreateRevision <span class="hljs-keyword">int64</span> <span class="hljs-string">\`protobuf:"varint,2,opt,name=create_revision,json=createRevision,proto3" json:"create_revision,omitempty"\`</span>
+	<span class="hljs-comment">// 最后一次修改的版本号</span>
+	ModRevision <span class="hljs-keyword">int64</span> <span class="hljs-string">\`protobuf:"varint,3,opt,name=mod_revision,json=modRevision,proto3" json:"mod_revision,omitempty"\`</span>
+	<span class="hljs-comment">// 表示 key 的修改次数，删除 key 会重置为 0，key 的更新会导致 version 增加</span>
+	Version <span class="hljs-keyword">int64</span> <span class="hljs-string">\`protobuf:"varint,4,opt,name=version,proto3" json:"version,omitempty"\`</span>
+	<span class="hljs-comment">// 值</span>
+	Value []<span class="hljs-keyword">byte</span> <span class="hljs-string">\`protobuf:"bytes,5,opt,name=value,proto3" json:"value,omitempty"\`</span>
+	<span class="hljs-comment">// 键值对绑定的租约 LeaseId，0 表示未绑定</span>
+	Lease <span class="hljs-keyword">int64</span> <span class="hljs-string">\`protobuf:"varint,6,opt,name=lease,proto3" json:"lease,omitempty"\`</span>
+}
+</code></pre>
+<p data-nodeid="34143">构造好 key 和 value 之后，就可以写入 BoltDB 了。并同步更新 buffer。</p>
+<p data-nodeid="34373" class="te-preview-highlight"><img src="https://s0.lgstatic.com/i/image6/M00/12/59/CioPOWBAv_aAdaSVAABXITH1r1w095.png" alt="图片1.png" data-nodeid="34376"></p>
+
+<p data-nodeid="34157">此外还需将本次修改的版本号与用户 key 的映射关系保存到 treeIndex 模块中，key hello 的 keyIndex。对照着上面介绍的 keyIndex、generation 和 Revision 结构体的定义，写入的 keyIndex 记录如下所示：</p>
+<pre class="lang-go hljs" data-nodeid="34158"><code data-language="go">key:     <span class="hljs-string">"hello"</span>
+modified: &lt;<span class="hljs-number">3</span>,<span class="hljs-number">0</span>&gt;
+generations:
+[{ver:<span class="hljs-number">1</span>,created:&lt;<span class="hljs-number">3</span>,<span class="hljs-number">0</span>&gt;,revs: [&lt;<span class="hljs-number">3</span>,<span class="hljs-number">0</span>&gt;]} ]
+</code></pre>
+<p data-nodeid="34159">modified 为最后一次修改的 etcd 版本号，这里是 &lt;3,0&gt;。generations 数组有一个元素，首次创建 ver 为 1，created 创建时的版本为 &lt;3,0&gt;，revs 数组中也只有一个元素，存储了所有的版本信息。</p>
+<p data-nodeid="34160">至此，put 事务基本结束，之所以说是基本完场，是因为还差最后一步——写入的数据持久化到磁盘。数据持久化的操作由 Backend 的协程来完成，以此提高写的性能和吞吐量。协程通过事务批量提交，将 BoltDB 内存中的数据持久化存储磁盘中。</p>
+<p data-nodeid="34161">这里我们要提一下键值对的删除。与更新一样，键值对的删除也是<strong data-nodeid="34333">异步</strong>完成，每当一个 key 被删除时都会调用 tombstone 方法向当前的 generation 中追加一个空的 generation 对象，其实现如下所示：</p>
+<pre class="lang-go hljs" data-nodeid="34162"><code data-language="go"><span class="hljs-comment">// 位于 mvcc/key_index.go:119</span>
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(ki *keyIndex)</span> <span class="hljs-title">tombstone</span><span class="hljs-params">(lg *zap.Logger, main <span class="hljs-keyword">int64</span>, sub <span class="hljs-keyword">int64</span>)</span> <span class="hljs-title">error</span></span> {
+	<span class="hljs-keyword">if</span> ki.isEmpty() {
+		lg.Panic(
+			<span class="hljs-string">"'tombstone' got an unexpected empty keyIndex"</span>,
+			zap.String(<span class="hljs-string">"key"</span>, <span class="hljs-keyword">string</span>(ki.key)),
+		)
+	}
+	<span class="hljs-keyword">if</span> ki.generations[<span class="hljs-built_in">len</span>(ki.generations)<span class="hljs-number">-1</span>].isEmpty() {
+		<span class="hljs-keyword">return</span> ErrRevisionNotFound
+	}
+	ki.put(lg, main, sub)
+	ki.generations = <span class="hljs-built_in">append</span>(ki.generations, generation{})
+	keysGauge.Dec()
+	<span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>
+}
+</code></pre>
+<p data-nodeid="34163">这个空的 generation 标识说明当前的 key 已经被删除了。除此之外，生成的 BoltDB key 版本号中追加了 t（tombstone），如 &lt;3,0,t&gt;，用于标识删除，而对应的 value 变成了只含 key 属性。</p>
+<p data-nodeid="34164">当查询键值对时，treeIndex 模块查找到 key 对应的 keyIndex，若查询的版本号大于等于被删除时的版本号，则会返回空。而真正删除 treeIndex 中的索引对象以及 BoltDB 中的键值对，则由<strong data-nodeid="34342">compactor 组件</strong>完成。</p>
+<h3 data-nodeid="34165">MVCC 读过程解析</h3>
+<p data-nodeid="34166">我们继续来看读过程中的 MVCC 实现细节。还是使用讲解键值对查询时的流程图：</p>
+<p data-nodeid="34167"><img src="https://s0.lgstatic.com/i/image6/M01/12/58/Cgp9HWBAvXSARvMuAAIh2dCnpU8495.png" alt="图片1.png" data-nodeid="34347"></p>
+<div data-nodeid="34168"><p style="text-align:center">读请求实现流程图</p></div>
+<p data-nodeid="34169">读请求在底层统一调用的是 Range 方法，首先 treeIndex 根据查询的 key 从 BTree 查找对应 keyIndex 对象。从 keyIndex 结构体的定义可知，每一个 keyIndex 结构体中都包含当前键的值以及最后一次修改对应的 Revision 信息，其中还保存了一个 key 的多个 generation，每一个 generation 都会存储当前 key 的所有历史版本。</p>
+<p data-nodeid="34170">treeIndex 模块中提供了 Get 接口获取一个 key 对应 Revision 值：</p>
+<pre class="lang-go hljs" data-nodeid="34171"><code data-language="go"><span class="hljs-comment">// 位于 mvcc/index.go:68</span>
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(ti *treeIndex)</span> <span class="hljs-title">Get</span><span class="hljs-params">(key []<span class="hljs-keyword">byte</span>, atRev <span class="hljs-keyword">int64</span>)</span> <span class="hljs-params">(modified, created revision, ver <span class="hljs-keyword">int64</span>, err error)</span></span> {
+	keyi := &amp;keyIndex{key: key}
+	<span class="hljs-keyword">if</span> keyi = ti.keyIndex(keyi); keyi == <span class="hljs-literal">nil</span> {
+		<span class="hljs-keyword">return</span> revision{}, revision{}, <span class="hljs-number">0</span>, ErrRevisionNotFound
+	}
+	<span class="hljs-keyword">return</span> keyi.get(ti.lg, atRev)
+}
+</code></pre>
+<p data-nodeid="34172">Get 接口的实现通过 keyIndex 函数查找 key 对应的 keyIndex 结构体：</p>
+<pre class="lang-go hljs" data-nodeid="34173"><code data-language="go"><span class="hljs-comment">// 位于 mvcc/index.go:78</span>
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(ti *treeIndex)</span> <span class="hljs-title">keyIndex</span><span class="hljs-params">(keyi *keyIndex)</span> *<span class="hljs-title">keyIndex</span></span> {
+	<span class="hljs-keyword">if</span> item := ti.tree.Get(keyi); item != <span class="hljs-literal">nil</span> {
+		<span class="hljs-keyword">return</span> item.(*keyIndex)
+	}
+	<span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>
+}
+</code></pre>
+<p data-nodeid="34174">可以看到这里的实现非常简单，从 treeIndex 成员 BTree 中查找 keyIndex，将结果转换成 keyIndex 类型后返回；获取 key 对应 Revision 的实现如下：</p>
+<pre class="lang-go hljs" data-nodeid="34175"><code data-language="go"><span class="hljs-comment">// 位于 mvcc/key_index.go:137</span>
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(ki *keyIndex)</span> <span class="hljs-title">get</span><span class="hljs-params">(lg *zap.Logger, atRev <span class="hljs-keyword">int64</span>)</span> <span class="hljs-params">(modified, created revision, ver <span class="hljs-keyword">int64</span>, err error)</span></span> {
+	<span class="hljs-keyword">if</span> ki.isEmpty() {
+		lg.Panic(
+			<span class="hljs-string">"'get' got an unexpected empty keyIndex"</span>,
+			zap.String(<span class="hljs-string">"key"</span>, <span class="hljs-keyword">string</span>(ki.key)),
+		)
+	}
+	g := ki.findGeneration(atRev)
+	<span class="hljs-keyword">if</span> g.isEmpty() {
+		<span class="hljs-keyword">return</span> revision{}, revision{}, <span class="hljs-number">0</span>, ErrRevisionNotFound
+	}
+	n := g.walk(<span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(rev revision)</span> <span class="hljs-title">bool</span></span> { <span class="hljs-keyword">return</span> rev.main &gt; atRev })
+	<span class="hljs-keyword">if</span> n != <span class="hljs-number">-1</span> {
+		<span class="hljs-keyword">return</span> g.revs[n], g.created, g.ver - <span class="hljs-keyword">int64</span>(<span class="hljs-built_in">len</span>(g.revs)-n<span class="hljs-number">-1</span>), <span class="hljs-literal">nil</span>
+	}
+	<span class="hljs-keyword">return</span> revision{}, revision{}, <span class="hljs-number">0</span>, ErrRevisionNotFound
+}
+</code></pre>
+<p data-nodeid="34176">上述实现中，通过遍历 generations 数组来获取 generation，匹配到有效的 generation 后，返回 generation 的 revisions 数组中最后一个版本号，即 &lt;3,0&gt; 给读事务。</p>
+<p data-nodeid="34177">获取到 Revision 信息之后，读事务接口优先从 buffer 中查询，如果命中则直接返回，否则根据 revision &lt;3,0&gt; 作为 key 在 BoltDB 中查询。</p>
+<p data-nodeid="34178">在查询时如果没有指定版本号，默认读取最新的数据。如果指定了版本号，比如我们在上面发起了一个指定历史版本号为 3 的读请求：</p>
+<pre class="lang-go hljs" data-nodeid="34179"><code data-language="go">$ etcdctl get hello --rev=<span class="hljs-number">3</span>
+</code></pre>
+<p data-nodeid="34180">在 treeIndex 模块获取 key 对应的 keyIndex 时，指定了读版本号为 3 的快照数据。keyIndex 会遍历 generation 内的历史版本号，返回小于等于 3 的最大历史版本号作为 BoltDB 的 key，从中查询对应的 value。</p>
+<p data-nodeid="34181">需要注意的是，<strong data-nodeid="34365">并发读写事务不会阻塞在一个 buffer 资源锁上</strong>。并发读创建事务时，会全量拷贝当前未提交的 buffer 数据，以此实现并发读。</p>
+<h3 data-nodeid="34182">小结</h3>
+<p data-nodeid="34183">这一讲我们主要介绍了 etcd 中多版本控制 MVCC 的实现。首先介绍了 MVCC 的概念，多版本并发控制可以维护一个数据的多个历史版本，并且使得读写操作没有冲突。接着通过一个示例介绍了 etcd 中 MVCC 的功能，重点介绍了在读写过程中如何实现多版本控制。键值对的更新和删除都是由异步协程完成的，在保证一致性的同时，也提升了读写的性能以及组件的吞吐量。</p>
+<p data-nodeid="34184">本讲内容总结如下：</p>
+<p data-nodeid="34185"><img src="https://s0.lgstatic.com/i/image6/M01/10/BE/CioPOWA_CKuAUXIhAAFmNO_GQ6w590.png" alt="Drawing 3.png" data-nodeid="34371"></p>
+<p data-nodeid="34186" class="">学习完这一讲，我想给大家留一个问题：既然是批量提交，那么在提交之前出现宕机等事故时，如何保证这部分数据不会丢失的呢？欢迎你在留言区和我交流自己的见解。下一讲，我们将介绍 etcd 事务的实现原理。</p></div>
+
+</body></html>

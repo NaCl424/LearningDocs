@@ -1,0 +1,1477 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第37讲：如何实现追踪服务性能指标</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>第37讲：如何实现追踪服务性能指标</h1><p data-nodeid="1737" class="">在一个微服务架构的应用中，微服务的数量可能很大，尤其是对于复杂的业务系统来说，微服务的数量可能成百上千。面对如此数量的微服务，相关的运维变得很困难，其中，最典型的两个问题是性能调优和错误调试。因此，本课时我们来一起了解 Istio 提供的服务性能指标和调用追踪功能。</p>
+<p data-nodeid="1738"><strong data-nodeid="1951">服务性能指标</strong>指的是记录每个服务在运行时的性能指标数据，包括访问次数和响应时间等；<strong data-nodeid="1952">调用追踪</strong>指的是对于每个请求，记录该请求在不同服务之间的调用关系。一个业务场景通常由多个微服务协作来完成，而即便是在相同的业务场景下，不同的请求所实际调用的服务也可能不同。比如在支付订单时，用户选择用账户余额支付或微信支付，所调用的服务是不同的。</p>
+<p data-nodeid="1739">服务性能指标和调用追踪两个功能相辅相成。在系统的运行过程中，通过监控服务性能指标可以发现系统中的异常情况。比如某个服务的响应时间突然出现了很大的延迟，具体的原因可能来自服务自身，也可能是由于来自调用者的请求变多。这些情况有时候是正常的，比如外部用户的访问量变大，造成整个系统的负载变大；有些情况是异常的，比如由于调用者出现了 Bug，造成了调用请求过多。为了定位问题，就需要查看并比对所有关联服务在同一时间段之内的性能指标。</p>
+<p data-nodeid="16127" class="">服务追踪的一个典型应用场景是客户支持。当接收到用户报告的异常情况时，需要能够查看该用户请求的实际调用流程，来定位问题所在。比如，用户报告没有收到订单的产品，问题可能出在发货服务本身，也可能是上游的服务并没有调用发货服务的 API。通过服务追踪，查看请求的实际调用追踪记录，可以很清楚地知道应该从哪里查找问题。</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h3 data-nodeid="1741">性能指标数据</h3>
+<p data-nodeid="1742">Istio 的服务代理已经提供了一些性能指标数据，其在这基础上添加对 Prometheus 和 Grafana 的集成。Prometheus 用来收集性能指标数据，而 Grafana 用来提供图形化界面进行展示。</p>
+<h4 data-nodeid="1743">预置的 Prometheus 和 Grafana 组件</h4>
+<p data-nodeid="1744">Istio 默认的安装概要文件中已经包含了 Prometheus，而 Grafana 只在概要文件 demo 中启用。通过下面的命令可以确保 Prometheus 和 Grafana 都启用。</p>
+<pre class="lang-java hljs" data-nodeid="1745"><code data-language="java">istioctl install --set addonComponents.prometheus.enabled=<span class="hljs-keyword">true</span> --set addonComponents.grafana.enabled=<span class="hljs-keyword">true</span>
+</code></pre>
+<p data-nodeid="1746">Istio 提供的 Prometheus 和 Grafana 组件已经预先进行了配置，Prometheus 会自动抓取服务代理的性能指标数据。我们可以使用下面的命令打开 Prometheus 的界面。</p>
+<pre class="lang-java hljs" data-nodeid="1747"><code data-language="java">istioctl dashboard prometheus
+</code></pre>
+<p data-nodeid="1748">在打开的 Prometheus 界面的目标页面中，可以看到 Prometheus 收集的数据来源，如下图所示。这些数据来源通过 Kubernetes 上的自动发现机制来查找。</p>
+<p data-nodeid="1749"><img src="https://s0.lgstatic.com/i/image/M00/36/9F/CgqCHl8X4FqAUqD0AAIGlZTiMr0929.png" alt="Drawing 0.png" data-nodeid="1963"></p>
+<p data-nodeid="1750">在这些来源中，Istio 的性能指标数据由 Envoy 来提供，对应与上图中的 envoy-stats 列表，在服务代理的边车容器中，访问 15090 端口上的 /stats/prometheus 路径，可以获取到 Prometheus 格式的数据。</p>
+<p data-nodeid="1751">Istio 的 Grafana 组件预置了一些仪表盘来查看服务网格的状态。通过下面的命令可以打开 Grafana 界面。</p>
+<pre class="lang-java hljs" data-nodeid="1752"><code data-language="java">istioctl dashboard grafana
+</code></pre>
+<h4 data-nodeid="1753">Istio 性能指标</h4>
+<p data-nodeid="1754">除了 Envoy 自身提供的数据之外，Istio 也提供了一些抽象层次比较高的性能指标数据，这些性能指标的名称都以 istio 作为前缀。</p>
+<p data-nodeid="1755">下表给出了与 HTTP、HTTP/2 和 gRPC 相关的性能指标。</p>
+<table data-nodeid="1757">
+<thead data-nodeid="1758">
+<tr data-nodeid="1759">
+<th data-org-content="名称" data-nodeid="1761">名称</th>
+<th data-org-content="类型" data-nodeid="1762">类型</th>
+<th data-org-content="说明" data-nodeid="1763">说明</th>
+</tr>
+</thead>
+<tbody data-nodeid="1767">
+<tr data-nodeid="1768">
+<td data-org-content="istio\_requests\_total" data-nodeid="1769">istio_requests_total</td>
+<td data-org-content="计数器" data-nodeid="1770">计数器</td>
+<td data-org-content="处理的请求数量" data-nodeid="1771">处理的请求数量</td>
+</tr>
+<tr data-nodeid="1772">
+<td data-org-content="istio\_request\_duration\_milliseconds" data-nodeid="1773">istio_request_duration_milliseconds</td>
+<td data-org-content="分布式概要" data-nodeid="1774">分布式概要</td>
+<td data-org-content="请求的处理时间" data-nodeid="1775">请求的处理时间</td>
+</tr>
+<tr data-nodeid="1776">
+<td data-org-content="istio\_request\_bytes" data-nodeid="1777">istio_request_bytes</td>
+<td data-org-content="分布式概要" data-nodeid="1778">分布式概要</td>
+<td data-org-content="请求内容的大小" data-nodeid="1779">请求内容的大小</td>
+</tr>
+<tr data-nodeid="1780">
+<td data-org-content="istio\_response\_bytes" data-nodeid="1781">istio_response_bytes</td>
+<td data-org-content="分布式概要" data-nodeid="1782">分布式概要</td>
+<td data-org-content="响应内容的大小" data-nodeid="1783">响应内容的大小</td>
+</tr>
+</tbody>
+</table>
+<p data-nodeid="1784">下表给出了与 TCP 相关的性能指标。</p>
+<table data-nodeid="1786">
+<thead data-nodeid="1787">
+<tr data-nodeid="1788">
+<th data-org-content="名称" data-nodeid="1790">名称</th>
+<th data-org-content="类型" data-nodeid="1791">类型</th>
+<th data-org-content="说明" data-nodeid="1792">说明</th>
+</tr>
+</thead>
+<tbody data-nodeid="1796">
+<tr data-nodeid="1797">
+<td data-org-content="istio\_tcp\_sent\_bytes\_total" data-nodeid="1798">istio_tcp_sent_bytes_total</td>
+<td data-org-content="计数器" data-nodeid="1799">计数器</td>
+<td data-org-content="发送的字节总数" data-nodeid="1800">发送的字节总数</td>
+</tr>
+<tr data-nodeid="1801">
+<td data-org-content="istio\_tcp\_received\_bytes\_total" data-nodeid="1802">istio_tcp_received_bytes_total</td>
+<td data-org-content="计数器" data-nodeid="1803">计数器</td>
+<td data-org-content="接收的字节总数" data-nodeid="1804">接收的字节总数</td>
+</tr>
+<tr data-nodeid="1805">
+<td data-org-content="istio\_tcp\_connections\_opened\_total" data-nodeid="1806">istio_tcp_connections_opened_total</td>
+<td data-org-content="计数器" data-nodeid="1807">计数器</td>
+<td data-org-content="打开的连接总数" data-nodeid="1808">打开的连接总数</td>
+</tr>
+<tr data-nodeid="1809">
+<td data-org-content="istio\_tcp\_connections\_closed\_total" data-nodeid="1810">istio_tcp_connections_closed_total</td>
+<td data-org-content="计数器" data-nodeid="1811">计数器</td>
+<td data-org-content="关闭的连接总数" data-nodeid="1812">关闭的连接总数</td>
+</tr>
+</tbody>
+</table>
+<p data-nodeid="1813">每个性能指标都包含了一系列的标签，可以对数据进行过滤。下表给出了一些常用标签的说明。</p>
+<table data-nodeid="1815">
+<thead data-nodeid="1816">
+<tr data-nodeid="1817">
+<th data-org-content="标签" data-nodeid="1819">标签</th>
+<th data-org-content="说明" data-nodeid="1820">说明</th>
+</tr>
+</thead>
+<tbody data-nodeid="1823">
+<tr data-nodeid="1824">
+<td data-org-content="source\_canonical\_service" data-nodeid="1825">source_canonical_service</td>
+<td data-org-content="发送请求的服务的名称" data-nodeid="1826">发送请求的服务的名称</td>
+</tr>
+<tr data-nodeid="1827">
+<td data-org-content="destination\_canonical\_service" data-nodeid="1828">destination_canonical_service</td>
+<td data-org-content="接收请求的服务的名称" data-nodeid="1829">接收请求的服务的名称</td>
+</tr>
+<tr data-nodeid="1830">
+<td data-org-content="request\_protocol" data-nodeid="1831">request_protocol</td>
+<td data-org-content="请求的协议" data-nodeid="1832">请求的协议</td>
+</tr>
+<tr data-nodeid="1833">
+<td data-org-content="response\_code" data-nodeid="1834">response_code</td>
+<td data-org-content="响应的状态码" data-nodeid="1835">响应的状态码</td>
+</tr>
+<tr data-nodeid="1836">
+<td data-org-content="source\_principal" data-nodeid="1837">source_principal</td>
+<td data-org-content="发送请求的主体" data-nodeid="1838">发送请求的主体</td>
+</tr>
+</tbody>
+</table>
+<h4 data-nodeid="1839">性能分析</h4>
+<p data-nodeid="1840">下面通过一个示例场景来说明性能指标的用法。乘客界面的 GraphQL API 在获取乘客信息时，需要同时访问乘客管理服务和地址管理服务的 API。当在入口网关检测到 GraphQL 的查询请求延迟过高时，可以通过性能指标 istio_request_duration_milliseconds 来查找问题。</p>
+<p data-nodeid="1841">在下图中，通过 Grafana 显示了从 GraphQL 服务中发送到乘客管理服务和地址管理服务的请求的处理时间。图中的绿线表示的是乘客管理服务的处理时间，而黄线表示的是地址管理服务的处理时间。从图中可以看到，同一时间段内，地址管理服务的处理时间远高于乘客管理服务，说明该服务的内部可能有问题。这个时候可以对地址管理服务进行水平扩展，也可以等待熔断器来触发。</p>
+<p data-nodeid="1842"><img src="https://s0.lgstatic.com/i/image/M00/36/9F/CgqCHl8X4ISACHhnAANIm5WxE3M425.png" alt="Drawing 1.png" data-nodeid="2088"></p>
+<h4 data-nodeid="1843">Envoy 性能指标</h4>
+<p data-nodeid="1844">Istio 自身的性能指标比较有限，一些底层的数据由 Envoy 提供，其所提供的性能指标数据非常多。这些性能指标的名称以英文句点的形式分隔成多个部分，对应于 Envoy 中的不同组件。在 Prometheus 中，Envoy 相关的性能指标都以 envoy_ 开头，可以通过 Prometheus 的界面来查看。</p>
+<p data-nodeid="1845">虽然性能指标在运维中很有价值，但是收集过多的数据也会带来性能上的开销。Istio 默认对 Envoy 进行了配置，只收集部分数据，性能指标是否收集根据字符串匹配来完成。</p>
+<p data-nodeid="1846">对于一个 Pod，可以通过下面的命令来查看性能指标的匹配模式。</p>
+<pre class="lang-java hljs" data-nodeid="1847"><code data-language="java">istioctl proxy-config bootstrap &lt;pod_name&gt; | jq <span class="hljs-string">".bootstrap.statsConfig.statsMatcher.inclusionList"</span>
+</code></pre>
+<p data-nodeid="1848">下面的代码是 Istio 的默认匹配模式，以前缀的形式来匹配。</p>
+<pre class="lang-json hljs" data-nodeid="1849"><code data-language="json">{
+&nbsp; <span class="hljs-attr">"patterns"</span>: [
+&nbsp; &nbsp; {
+&nbsp; &nbsp; &nbsp; <span class="hljs-attr">"prefix"</span>: <span class="hljs-string">"reporter="</span>
+&nbsp; &nbsp; },
+&nbsp; &nbsp; {
+&nbsp; &nbsp; &nbsp; <span class="hljs-attr">"prefix"</span>: <span class="hljs-string">"cluster_manager"</span>
+&nbsp; &nbsp; },
+&nbsp; &nbsp; {
+&nbsp; &nbsp; &nbsp; <span class="hljs-attr">"prefix"</span>: <span class="hljs-string">"listener_manager"</span>
+&nbsp; &nbsp; },
+&nbsp; &nbsp; {
+&nbsp; &nbsp; &nbsp; <span class="hljs-attr">"prefix"</span>: <span class="hljs-string">"http_mixer_filter"</span>
+&nbsp; &nbsp; },
+&nbsp; &nbsp; {
+&nbsp; &nbsp; &nbsp; <span class="hljs-attr">"prefix"</span>: <span class="hljs-string">"tcp_mixer_filter"</span>
+&nbsp; &nbsp; },
+&nbsp; &nbsp; {
+&nbsp; &nbsp; &nbsp; <span class="hljs-attr">"prefix"</span>: <span class="hljs-string">"server"</span>
+&nbsp; &nbsp; },
+&nbsp; &nbsp; {
+&nbsp; &nbsp; &nbsp; <span class="hljs-attr">"prefix"</span>: <span class="hljs-string">"cluster.xds-grpc"</span>
+&nbsp; &nbsp; },
+&nbsp; &nbsp; {
+&nbsp; &nbsp; &nbsp; <span class="hljs-attr">"prefix"</span>: <span class="hljs-string">"wasm"</span>
+&nbsp; &nbsp; },
+&nbsp; &nbsp; {
+&nbsp; &nbsp; &nbsp; <span class="hljs-attr">"prefix"</span>: <span class="hljs-string">"component"</span>
+&nbsp; &nbsp; }
+&nbsp; ]
+}
+</code></pre>
+<p data-nodeid="1850">如果默认的配置不能满足需求，可以进行调整，调整的方式是在 Kubernetes 部署中通过注解 sidecar.istio.io/statsInclusionPrefixes 来指定新的前缀列表。</p>
+<p data-nodeid="1851">如果需要添加应用自定义的性能指标数据，请参考第 28 课时的相关介绍。</p>
+<h3 data-nodeid="1852">服务追踪</h3>
+<p data-nodeid="1853">分布式追踪是分布式系统中的一个常见问题，在微服务架构中也是必不可少的一部分。分布式追踪相关的开源和商用产品非常多，虽然在具体的实现存在一些差异，但基本的概念是相似的。</p>
+<h4 data-nodeid="1854">基本概念</h4>
+<p data-nodeid="1855">分布式追踪中最基本的概念是<strong data-nodeid="2106">痕迹（Trace）和跨度（Span）</strong>。痕迹是操作的历史轨迹，通常与一个业务行为相对应，也可以是任意感兴趣的动作。痕迹由相互嵌套的跨度组成，跨度表示的是痕迹中的单个操作。</p>
+<p data-nodeid="1856">同一个痕迹中的不同跨度之间可能存在引用关系。最典型的引用关系是父子关系，也就是父跨度所对应操作的结果，依赖于子跨度所对应操作的结果。这种父子关系可以与编程语言中的方法调用形成的调用栈进行类比。需要被追踪的方法是整个痕迹的入口。每当这个方法调用其他方法时，会创建新的子跨度。这种方式递归下去，就形成了完整的痕迹。</p>
+<p data-nodeid="1857">为了能够记录完整的痕迹，在记录属于同一痕迹的不同跨度时，需要传递与痕迹相关的上下文对象。该上下文对象的作用是把可能产生在不同系统中的跨度串联起来，组织在同一个痕迹中。该上下文对象的具体格式，与使用的分布式追踪系统相关。</p>
+<p data-nodeid="1858">为了解决不同追踪系统的互操作问题，W3C 发布了痕迹上下文（Trace Context）推荐规范。根据该规范，该上下文对象应该包含下表中的两个字段：</p>
+<table data-nodeid="1860">
+<thead data-nodeid="1861">
+<tr data-nodeid="1862">
+<th data-org-content="名称" data-nodeid="1864">名称</th>
+<th data-org-content="说明" data-nodeid="1865">说明</th>
+</tr>
+</thead>
+<tbody data-nodeid="1868">
+<tr data-nodeid="1869">
+<td data-org-content="traceparent" data-nodeid="1870">traceparent</td>
+<td data-org-content="当前的跨度在整个痕迹中的位置" data-nodeid="1871">当前的跨度在整个痕迹中的位置</td>
+</tr>
+<tr data-nodeid="1872">
+<td data-org-content="tracestate" data-nodeid="1873">tracestate</td>
+<td data-org-content="供应商特有的附加数据，以名值对的方式组织" data-nodeid="1874">供应商特有的附加数据，以名值对的方式组织</td>
+</tr>
+</tbody>
+</table>
+<p data-nodeid="1875">traceparent 字段由下表中的 4 个字段组成：</p>
+<table data-nodeid="1877">
+<thead data-nodeid="1878">
+<tr data-nodeid="1879">
+<th data-org-content="字段" data-nodeid="1881">字段</th>
+<th data-org-content="格式" data-nodeid="1882">格式</th>
+<th data-org-content="说明" data-nodeid="1883">说明</th>
+</tr>
+</thead>
+<tbody data-nodeid="1887">
+<tr data-nodeid="1888">
+<td data-org-content="version" data-nodeid="1889">version</td>
+<td data-org-content="1 字节" data-nodeid="1890">1 字节</td>
+<td data-org-content="版本号" data-nodeid="1891">版本号</td>
+</tr>
+<tr data-nodeid="1892">
+<td data-org-content="trace-id" data-nodeid="1893">trace-id</td>
+<td data-org-content="16 字节" data-nodeid="1894">16 字节</td>
+<td data-org-content="痕迹标识符" data-nodeid="1895">痕迹标识符</td>
+</tr>
+<tr data-nodeid="1896">
+<td data-org-content="parent-id" data-nodeid="1897">parent-id</td>
+<td data-org-content="8 字节" data-nodeid="1898">8 字节</td>
+<td data-org-content="父跨度标识符" data-nodeid="1899">父跨度标识符</td>
+</tr>
+<tr data-nodeid="1900">
+<td data-org-content="trace-flags" data-nodeid="1901">trace-flags</td>
+<td data-org-content="8 比特" data-nodeid="1902">8 比特</td>
+<td data-org-content="痕迹的标志位" data-nodeid="1903">痕迹的标志位</td>
+</tr>
+</tbody>
+</table>
+<p data-nodeid="1904">在进行传输时，traceparent 中的 4 个字段会首先以 16 进制来编码，然后再以“ - ”来连接。</p>
+<p data-nodeid="1905">在 REST API 的请求中，上下文对象中的这两个字段会以 HTTP 头的形式来传递。下面的代码给出了这两个头的值的示例。</p>
+<pre class="lang-plain hljs" data-nodeid="1906"><code data-language="plain">traceparent: 00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01
+tracestate: test=hello
+</code></pre>
+<p data-nodeid="1907">在实际的开发中，可能需要根据分布式追踪实现的不同，来使用不同的上下文对象格式。比如，Zipkin 使用的是以 x-b3 开头的 HTTP 头。这些实现的差异性，可以通过第三方库来屏蔽，大部分时候并不需要了解底层的实现细节。</p>
+<h4 data-nodeid="1908">Istio 服务追踪</h4>
+<p data-nodeid="1909">服务代理可以拦截对服务的调用请求。如果需要追踪服务之间的调用情况，服务代理可以在接收到请求之后，自动创建出相应的跨度，并发送到追踪服务器。Istio 提供了对一些追踪服务的支持，包括 Zipkin、Jaeger 和 Lightstep 等。</p>
+<p data-nodeid="1910">在启用了 tracing 组件之后，Istio 会运行 Jaeger 来作为分布式追踪实现，并配置服务代理来发送追踪数据。通过下面的命令可以打开 Jaeger 的界面。</p>
+<pre class="lang-plain hljs" data-nodeid="1911"><code data-language="plain">istioctl dashboard jaeger
+</code></pre>
+<h4 data-nodeid="1912">应用服务追踪</h4>
+<p data-nodeid="1913">为了启用服务追踪，每个服务本身的代码也需要进行修改。做的修改取决于服务在整个追踪过程中的参与程度。</p>
+<p data-nodeid="1914">第一种参与方式是只进行简单的上下文传播，不添加新的跨度，这种情况下，只需要传递上下文对象即可。接收到的请求中已经包含了与跨度上下文相关的 HTTP 头，当该服务调用其他微服务的 API 时，需要把同样的 HTTP 头传递过去。这样才可以保证追踪痕迹不中断。</p>
+<p data-nodeid="1915">第二种参与方式是添加新的跨度。当需要追踪一个服务内部的处理流程时，可以使用追踪实现的客户端来添加新的跨度。在调用其他微服务的 API 时，需要传递的是新的跨度上下文，其中痕迹的标识符保持不变，但是父跨度标识符会变成新创建的跨度。</p>
+<p data-nodeid="1916">下面以乘客管理的 GraphQL API 为例来分别说明这两种参与方式的用法，使用的 Jaeger 客户端库。</p>
+<p data-nodeid="1917">我们需要添加的是对 GraphQL 查询的追踪。通过乘客界面的 GraphQL API 发送下面代码中的查询到 Istio 的入口网关。</p>
+<pre class="lang-java hljs" data-nodeid="1918"><code data-language="java">query allPassengers {
+&nbsp; passengers {
+&nbsp; &nbsp; id
+&nbsp; &nbsp; name
+&nbsp; &nbsp; email
+&nbsp; &nbsp; userAddresses {
+&nbsp; &nbsp; &nbsp; name
+&nbsp; &nbsp; &nbsp; address {
+&nbsp; &nbsp; &nbsp; &nbsp; addressLine
+&nbsp; &nbsp; &nbsp; &nbsp; lat
+&nbsp; &nbsp; &nbsp; &nbsp; lng
+&nbsp; &nbsp; &nbsp; }
+&nbsp; &nbsp; }
+&nbsp; }
+}
+</code></pre>
+<p data-nodeid="1919">从这个查询中可以看出，该请求所涉及的服务之间的调用关系路径如下图所示。</p>
+<p data-nodeid="1920"><img src="https://s0.lgstatic.com/i/image/M00/36/A9/Ciqc1F8X9WeASYVRAABoS7Kr6lk678.png" alt="5.png" data-nodeid="2147"></p>
+<p data-nodeid="1921">当在 Jaeger 的界面搜索痕迹时，会发现每一个查询请求，实际上对应的是 3 条痕迹，每条痕迹中只包含两个跨度，如下图所示。这是因为 Istio 的服务代理在记录跨度时，只知道当前请求的来源和目的地。在没有跨度上下文把这些服务调用串联起来的情况下，每个服务调用都会被当成独立的痕迹。</p>
+<p data-nodeid="1922"><img src="https://s0.lgstatic.com/i/image/M00/36/94/Ciqc1F8X4KyAIYt5AAG66uhEe1w882.png" alt="Drawing 3.png" data-nodeid="2151"></p>
+<p data-nodeid="1923">如果在 GraphQL API 服务内部不记录额外的跨度时，只需要把 HTTP 请求中与跨度上下文相关的一些头记录下来，在调用乘客管理服务和地址管理服务的 API 时，把这些 HTTP 头添加进去即可。</p>
+<p data-nodeid="1924">从实现上来说，单纯地转发 HTTP 头并不需要第三方库的支持。我们可以在 Servlet 过滤器中把 HTTP 头的值记录下来，在使用 HTTP 客户端调用其他微服务的 REST API 时，把记录下来的这些 HTTP 头添加到 HTTP 请求中即可。这种做法实现起来简单，不过维护性比较差，更好的做法是使用第三方库。示例应用使用的是 OpenTracing 的 API，以及该 API 的 Jaeger 实现。</p>
+<p data-nodeid="1925">完整的实现分成三个部分，分别是跨度上下文的抽取、跨度的创建以及跨度上下文的注入，其中前后两个部分是必须的，中间跨度的创建是可选的。</p>
+<p data-nodeid="1926">第一步部分指的是从 HTTP 请求头中抽取跨度上下文的信息。OpenTracing 库 opentracing-web-servlet-filter 提供了一个 Servlet 过滤器实现来抽取跨度上下文信息，只需要注册该过滤器即可。</p>
+<p data-nodeid="1927">在下面的代码中，使用 Jaeger 客户端库创建了一个新的 OpenTracing API 中的 Tracer 对象，并注册了一个 TracingFilter 类型的过滤器。</p>
+<pre class="lang-java hljs" data-nodeid="1928"><code data-language="java"><span class="hljs-meta">@Configuration</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">TracingConfig</span> </span>{
+&nbsp; <span class="hljs-meta">@Bean</span>
+&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> Tracer <span class="hljs-title">tracer</span><span class="hljs-params">()</span> </span>{
+&nbsp; &nbsp; <span class="hljs-keyword">return</span> io.jaegertracing.Configuration.fromEnv().getTracer();
+&nbsp; }
+&nbsp; <span class="hljs-meta">@Bean</span>
+&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> FilterRegistrationBean&lt;TracingFilter&gt; <span class="hljs-title">tracingFilter</span><span class="hljs-params">(Tracer tracer)</span> </span>{
+&nbsp; &nbsp; <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> FilterRegistrationBean&lt;&gt;(<span class="hljs-keyword">new</span> TracingFilter(tracer));
+&nbsp; }
+}
+</code></pre>
+<p data-nodeid="1929">GraphQL API 服务使用的是从 OpenAPI 文档中自动生成的 Java 客户端来访问另外两个微服务的 API，该 Java 客户端使用 OkHttp 来调用 REST API。为了在发送 REST API 请求时添加追踪相关的 HTTP 头，我们使用 OkHttp 中的拦截器。</p>
+<p data-nodeid="1930" class="">在下面的代码中，ApiTracingInterceptor 用来拦截 OkHttp 客户端发出的 HTTP 请求，并在请求中添加相关的 HTTP 头。在 intercept 方法中，首先使用 Tracer 对象的 activeSpan 方法来获取到当前活动的跨度对象。如果存在活动的跨度对象，则通过 Tracer 对象的 inject 方法来把跨度上下文以 HTTP 头的形式注入 HTTP 请求中。通过这样的方式，所有对外的 HTTP 请求都会自动传播跨度上下文。</p>
+<pre class="lang-java hljs" data-nodeid="1931"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">ApiTracingInterceptor</span> <span class="hljs-keyword">implements</span> <span class="hljs-title">Interceptor</span> </span>{
+&nbsp; <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Tracer tracer;
+&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-title">ApiTracingInterceptor</span><span class="hljs-params">(<span class="hljs-keyword">final</span> Tracer tracer)</span> </span>{
+&nbsp; &nbsp; <span class="hljs-keyword">this</span>.tracer = tracer;
+&nbsp; }
+&nbsp; <span class="hljs-meta">@Override</span>
+&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> Response <span class="hljs-title">intercept</span><span class="hljs-params">(<span class="hljs-keyword">final</span> Chain chain)</span> <span class="hljs-keyword">throws</span> IOException </span>{
+&nbsp; &nbsp; <span class="hljs-keyword">final</span> Builder builder = chain.request().newBuilder();
+&nbsp; &nbsp; <span class="hljs-keyword">if</span> (<span class="hljs-keyword">this</span>.tracer.activeSpan() != <span class="hljs-keyword">null</span>) {
+&nbsp; &nbsp; &nbsp; <span class="hljs-keyword">this</span>.tracer.inject(<span class="hljs-keyword">this</span>.tracer.activeSpan().context(),
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; Format.Builtin.HTTP_HEADERS,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">new</span> InjectOnlyTextMap(builder));
+&nbsp; &nbsp; }
+&nbsp; &nbsp; <span class="hljs-keyword">return</span> chain.proceed(builder.build());
+&nbsp; }
+&nbsp; <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">InjectOnlyTextMap</span> <span class="hljs-keyword">implements</span> <span class="hljs-title">TextMap</span> </span>{
+&nbsp; &nbsp; <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Builder builder;
+&nbsp; &nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-title">InjectOnlyTextMap</span><span class="hljs-params">(<span class="hljs-keyword">final</span> Builder builder)</span> </span>{
+&nbsp; &nbsp; &nbsp; <span class="hljs-keyword">this</span>.builder = builder;
+&nbsp; &nbsp; }
+&nbsp; &nbsp; <span class="hljs-meta">@Override</span>
+&nbsp; &nbsp; <span class="hljs-keyword">public</span> Iterator&lt;Entry&lt;String, String&gt;&gt; iterator() {
+&nbsp; &nbsp; &nbsp; <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> UnsupportedOperationException(<span class="hljs-string">"Only context injection is supported"</span>);
+&nbsp; &nbsp; }
+&nbsp; &nbsp; <span class="hljs-meta">@Override</span>
+&nbsp; &nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title">put</span><span class="hljs-params">(<span class="hljs-keyword">final</span> String key, <span class="hljs-keyword">final</span> String value)</span> </span>{
+&nbsp; &nbsp; &nbsp; <span class="hljs-keyword">this</span>.builder.addHeader(key, value);
+&nbsp; &nbsp; }
+&nbsp; }
+}
+</code></pre>
+<p data-nodeid="1932">下一步我们需要修改 API 客户端使用的 OkHttpClient 对象来启用拦截器。在下面的代码中，updateHttpClient 方法用来获取到更新之后的 OkHttpClient 对象，除了添加 ApiTracingInterceptor 拦截器之外，还配置了 OkHttpClient 使用新的 Dispatcher 对象。该 Dispatcher 对象使用的是 TracedExecutorService 作为 ExecutorService 的实现。这样做的目的是确保在异步调用时，不会丢失跨度上下文，因为跨度上下文保存在 ThreadLocal 对象中。TracedExecutorService 实现来自 opentracing-concurrent 库。</p>
+<pre class="lang-java hljs" data-nodeid="1933"><code data-language="java"><span class="hljs-meta">@Configuration</span>
+<span class="hljs-meta">@EnableConfigurationProperties(ServiceDestinationConfig.class)</span>
+<span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">ApiServiceConfig</span> </span>{
+&nbsp; <span class="hljs-meta">@Autowired</span>
+&nbsp; ServiceDestinationConfig config;
+&nbsp; <span class="hljs-meta">@Bean</span>
+&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> PassengerApi <span class="hljs-title">passengerApi</span><span class="hljs-params">(Tracer tracer)</span> </span>{
+&nbsp; &nbsp; PassengerApi passengerApi = <span class="hljs-keyword">new</span> PassengerApi();
+&nbsp; &nbsp; passengerApi.getApiClient().setHttpClient(
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">this</span>.updateHttpClient(tracer,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; passengerApi.getApiClient().getHttpClient()));
+&nbsp; &nbsp; passengerApi.getApiClient().setBasePath(<span class="hljs-keyword">this</span>.config.getPassenger());
+&nbsp; &nbsp; <span class="hljs-keyword">return</span> passengerApi;
+&nbsp; }
+&nbsp; <span class="hljs-meta">@Bean</span>
+&nbsp; <span class="hljs-function"><span class="hljs-keyword">public</span> AddressApi <span class="hljs-title">addressApi</span><span class="hljs-params">(Tracer tracer)</span> </span>{
+&nbsp; &nbsp; AddressApi addressApi = <span class="hljs-keyword">new</span> AddressApi();
+&nbsp; &nbsp; addressApi.getApiClient().setHttpClient(
+&nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">this</span>.updateHttpClient(tracer,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; addressApi.getApiClient().getHttpClient()));
+&nbsp; &nbsp; addressApi.getApiClient().setBasePath(<span class="hljs-keyword">this</span>.config.getAddress());
+&nbsp; &nbsp; <span class="hljs-keyword">return</span> addressApi;
+&nbsp; }
+&nbsp; <span class="hljs-function"><span class="hljs-keyword">private</span> OkHttpClient <span class="hljs-title">updateHttpClient</span><span class="hljs-params">(Tracer tracer,
+&nbsp; &nbsp; &nbsp; OkHttpClient httpClient)</span> </span>{
+&nbsp; &nbsp; <span class="hljs-keyword">return</span> httpClient.newBuilder()
+&nbsp; &nbsp; &nbsp; &nbsp; .dispatcher(<span class="hljs-keyword">new</span> Dispatcher(
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <span class="hljs-keyword">new</span> TracedExecutorService(httpClient.dispatcher().executorService(),
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; tracer)))
+&nbsp; &nbsp; &nbsp; &nbsp; .addInterceptor(<span class="hljs-keyword">new</span> ApiTracingInterceptor(tracer)).build();
+&nbsp; }
+}
+</code></pre>
+<p data-nodeid="1934">完成上述两步之后，整个痕迹就被串联起来，如下图所示。每个 GraphQL 查询请求只对应于一条痕迹。</p>
+<p data-nodeid="1935"><img src="https://s0.lgstatic.com/i/image/M00/36/94/Ciqc1F8X4RCAPkBkAAI2pgeGv9I243.png" alt="Drawing 4.png" data-nodeid="2163"></p>
+<p data-nodeid="1936">下面介绍如何通过 OpenTracing API 来添加额外的跨度。在下面的代码中，getAddress 方法用来获取到乘客的详细地址信息。在实现中，首先从当前的 GraphQL 执行上下文中获取到 Tracer 对象，然后使用 Tracer 对象的 buildSpan 方法来创建名为 getAddress 的跨度，在创建时可以提供标签来作为附加数据。Tracer 对象的 activateSpan 方法把新创建的 Span 对象作为当前的活动跨度，这就意味着该 Span 对象会作为之后创建的 Span 对象的父跨度。由于获取地址信息是异步操作，我们在返回的 CompletableFuture 对象完成之后，通过 Span 对象的 finish 方法来结束跨度。</p>
+<pre class="lang-java hljs" data-nodeid="1937"><code data-language="java"><span class="hljs-keyword">public</span> <span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">UserAddress</span> </span>{
+  <span class="hljs-keyword">private</span> String id;
+  <span class="hljs-keyword">private</span> String name;
+  <span class="hljs-keyword">private</span> String addressId;
+  <span class="hljs-function"><span class="hljs-keyword">public</span> CompletableFuture&lt;AddressVO&gt; <span class="hljs-title">getAddress</span><span class="hljs-params">(
+      DataFetchingEnvironment environment)</span> </span>{
+    GraphQLServletContext context = environment.getContext();
+    Tracer tracer = (Tracer) context.getHttpServletRequest().getServletContext()
+        .getAttribute(Tracer.class.getName());
+    Span span = tracer.buildSpan("getAddress")
+        .withTag("userAddressId", <span class="hljs-keyword">this</span>.id)
+        .withTag("addressId", <span class="hljs-keyword">this</span>.addressId)
+        .start();
+    <span class="hljs-keyword">try</span> (Scope ignored = tracer.activateSpan(span)) {
+      <span class="hljs-keyword">return</span> context.getDataLoaderRegistry()
+          .map(
+              registry -&gt; registry.
+                  &lt;String, AddressVO&gt;getDataLoader(USER_ADDRESS_DATA_LOADER)
+                  .load(<span class="hljs-keyword">this</span>.addressId))
+          .orElse(CompletableFuture
+              .completedFuture(AddressVO.nullObject(<span class="hljs-keyword">this</span>.addressId)))
+          .whenComplete((addressVO, throwable) -&gt; span.finish());
+    }
+  }
+}
+</code></pre>
+<p data-nodeid="1938">下图展示了添加自定义的跨度之后的痕迹，从中可以看到对 getAddress 方法的调用。</p>
+<p data-nodeid="1939"><img src="https://s0.lgstatic.com/i/image/M00/36/A0/CgqCHl8X4R6APFv-AAMEAMNViJw037.png" alt="Drawing 5.png" data-nodeid="2168"></p>
+<h3 data-nodeid="1940">总结</h3>
+<p data-nodeid="1941" class="">性能指标数据和服务追踪是微服务架构中两个很重要的功能，在开发和运维中都起着重要的作用。通过本课时的学习，你可以了解到如何使用 Istio 提供的 Prometheus 和 Grafana 组件来查看应用的性能指标，还可以了解到如何为应用添加分布式追踪的功能，包括在服务内部添加自定义的追踪信息。</p></div>
+
+</body></html>

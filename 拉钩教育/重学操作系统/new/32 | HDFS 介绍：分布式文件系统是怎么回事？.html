@@ -1,0 +1,1222 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>32 | HDFS 介绍：分布式文件系统是怎么回事？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>32 | HDFS 介绍：分布式文件系统是怎么回事？</h1><p data-nodeid="54792" class="">前面我们学习了单机文件系统、数据库索引的设计，这一讲我们讨论大数据环境下的数据管理——分布式文件系统和分布式数据库。分布式文件系统通过计算机网络连接大量物理节点，将不同机器、不同磁盘、不同逻辑分区的数据组织在一起，提供海量的数据存储（一般是 Petabytes 级别，1PB = 1024TB）。分布式数据库则在分布式文件系统基础上，提供应对具体场景的海量数据解决方案。</p>
+<p data-nodeid="54793">说起大数据，就不得不提历史上在存储领域影响深远的两篇 Paper。</p>
+<ul data-nodeid="54794">
+<li data-nodeid="54795">
+<p data-nodeid="54796">Google File System</p>
+</li>
+<li data-nodeid="54797">
+<p data-nodeid="54798">BigTable：A Distributed Storage System for Structured Data</p>
+</li>
+</ul>
+<p data-nodeid="54799">Google File System 是一个分布式文件系统，构成了今天大数据生态的底层存储，也是我们本讲主角 HDFS 的原型。HDFS（Hadoop Distributed File System）是 Google File System 的一个重要实现。</p>
+<p data-nodeid="54800">后者 BigTable 是一个分布式数据库。BigTable 本身是 Google 内部的项目，建立在 Google File System 之上，为 Google 的搜索引擎提供数据支撑。它是 2005 年公布的第一个版本，而且通过 Paper 公布了实现，在那个大数据还处于萌芽阶段的时代，BigTable 成为了启明星，今天我们常用的 HBase 还沿用着 BigTable 的设计。</p>
+<p data-nodeid="54801">因为两个重量级的 Paper 都是 Google 的产物，所以这一讲，我会结合搜索引擎的设计，带你走进分布式存储和数据库的世界。</p>
+<h3 data-nodeid="54802">存储所有的网页</h3>
+<p data-nodeid="54803">作为搜索引擎最核心的一个能力，就是要存储所有的网页。目前世界上有 20 多亿个网站，每个网站还有大量的页面。搜索引擎不单单要存下这些页面，而且搜索引擎还需要存储这些网页的历史版本。</p>
+<p data-nodeid="54804">这里请你思考下，网站所有页面加起来有多大？举个例子，豆瓣所有页面加起来会有多大？如果把所有的变更都算上，比如一张页面经过 200 次迭代，就存 200 份，那么需要多少空间？Google 要把这些数据都存储下来，肯定是 PB 级别的数据。而且这个庞大的数据还需要提供给 Google 内部的分布式计算引擎等去计算，为网站打分、为用户生成索引，如果没有强大的存储能力是做不到的。</p>
+<h3 data-nodeid="54805">模型的选择</h3>
+<p data-nodeid="54806">我们先来思考应该用何种模型存下这个巨大的网页表。</p>
+<p data-nodeid="54807">网页的历史版本，可以用 URL+ 时间戳进行描述。但是为了检索方便，网页不仅有内容，还有语言、外链等。在存储端可以先不考虑提供复杂的索引，比如说提供全文搜索。但是我们至少应该提供合理的数据读写方式。</p>
+<p data-nodeid="54808">网页除了内容，还有外链，外链就是链接到网页的外部网站。链接到一个网站的外链越多，那就说明这个网站在互联网中扮演的角色越重要。Google 创立之初就在基于外链的质量和数量为网站打分。外链可能是文字链接、图片链接等，因此外链也可以有版本，比如外链文本调整了，图片换了。除了外链还有标题、Logo，也需要存储。其实要存储的内容有很多，我不一一指出了。</p>
+<p data-nodeid="54809">我们先看看行存储，可不可以满足需求。比如每个网页（ URL） 的数据是一行。 看似这个方案可行，可惜列不是固定。比如外链可能有很多个，如下表：</p>
+<p data-nodeid="54810"><img src="https://s0.lgstatic.com/i/image2/M01/04/62/Cip5yF_vGG6AJ1xDAAC7-lhEiss613.png" alt="Lark20210101-204013.png" data-nodeid="54921"></p>
+<p data-nodeid="54811">列不固定，不仅仅是行的大小不好确定，而是表格画不出来。何况每一列内容还可能有很多版本，不同版本是搜索引擎的爬虫在不同时间收录的内容，再加上内容本身也很大，有可能一个磁盘 Block 都存不下。看来行存储困难重重。</p>
+<p data-nodeid="54812">那么列存储行不行呢？ 当然不行，我们都不确定到底有多少列？ 有的网站有几千个外链，有的一个都没有，外链到底用多少列呢？</p>
+<p data-nodeid="54813">所以上表只可以作为我们存储设计的一个逻辑概念——这种逻辑概念在设计系统的时候，还有一个名词，叫作领域语言。领域语言是我们的思考方式，从搜索引擎的职责上讲，数据需要按照上面的结构聚合。况且根据 URL 拿数据，这是必须提供的能力。但是底层如何持久化，还需要进一步思考。</p>
+<p data-nodeid="54814">因为列是不确定的，这种情况下只能考虑用 Key-Value 结构，也就是 Map 存储。Map 是一种抽象的数据结构，本质是 Key-Value 数据的集合。 作为搜索引擎的支撑，Key 可以考虑设计为 &lt;URL, Column，时间戳&gt; 的三元组，值就是对应版本的数据。</p>
+<p data-nodeid="54815">列名（Column）可以考虑分成两段，用<code data-backticks="1" data-nodeid="54929">:</code>分隔开。列名包括列家族（Family) 、列标识（Qualifier）。这样设计是因为有时候多个列描述的是相似的数据，比如说外链（Anchor），就是一个列家族。然后百度、搜狐是外链家族的具体的标识（Qualifier）。比如来自百度页面 a 外链的列名是<code data-backticks="1" data-nodeid="54931">anchor:baidu.com/a</code>。分成家族还有一个好处就是<strong data-nodeid="54937">权限控制</strong>，比如不同部门的内部人员可以访问不同列家族的数据。当然有的列家族可能只有一个列，比如网页语言；有的列家族可能有很多列，比如外链。</p>
+<p data-nodeid="54816"><strong data-nodeid="54942">接下来，我们思考：这个巨大的 Map（Key-Value）的集合应该用什么数据结构呢？——数组？链表？树？哈希表</strong>？</p>
+<p data-nodeid="54817"><em data-nodeid="54946">小提示：Map 只是 Key-Value 的集合。并没有约定具体如何实现，比如 HashMap 就是用哈希表实现 Map，ArrayMap 就是用数组实现 Map。LinkedMap 就是用链表实现 Map。LinkedJumpMap 就是用跳表实现 Map……</em></p>
+<p data-nodeid="54818">考虑到一行的数据并不会太大，我们可以用 URL 作为行的索引。当用户想用 Key 查找 Value 时，先使用 Key 中 URL 帮用户找到完整的行。这里可以考虑使用上一讲学习的 B+ 树去存储所有的 URL，建立一个 URL 到行号的索引。你看看，知识总是被重复利用，再次证明了人类的本质是复读机，其实就是学好基础很重要。通过 B+ 树，这样即便真的有海量的数据，也可以在少数几次、几十次查询内完成找到 URL 对应的数据。况且，我们还可以设计缓存。</p>
+<p data-nodeid="54819">B+ 树需要一种顺序，比较好的做法是 URL 以按照字典序排列。这是因为，相同域名的网页资源同时被用到的概率更高，应该安排从物理上更近，尽量把相同域名的数据放到相邻的存储块中（节省磁盘操作）。</p>
+<p data-nodeid="54820">那么行内的数据应该如何存储呢？可以考虑分列存储。那么行内用什么数据结构呢？如果列非常多，也可以考虑继续用 B+ 树。还有一种设计思路，是先把大表按照行拆分，比如若干行形成一个小片称作 Tablet，然后 Tablet 内部再使用列存储，这个设计我们会在后面一点讨论。</p>
+<h3 data-nodeid="54821">查询和写入</h3>
+<p data-nodeid="54822">当客户端查询的时候，请求参数中会包含 &lt;URL, 列名&gt;，这个时候我们可以通过 B+ 树定位到具体的行（也就是 URL 对应的数据）所在的块，再根据列名找到具体的列。然后，将一列数据导入到内存中，最后在内存中找到对应版本的数据。</p>
+<p data-nodeid="54823">客户端写入时，也是按照行→列的顺序，先找到列，再在这一列最后面追加数据。</p>
+<p data-nodeid="54824">对于修改、删除操作可以考虑不支持，因为所有的变更已经记录下来了。</p>
+<h3 data-nodeid="54825">分片（Tablet）的抽象</h3>
+<p data-nodeid="54826">上面我们提到了可以把若干行组合在一起存储的设计。这个设计比较适合数据在集群中分布。假设存储网页的表有几十个 PB，那么先水平分表，就是通过 行（URL） 分表。URL 按照字典排序，相邻的 URL 数据从物理上也会相近。水平分表的结果，字典序相近的行（URL）数据会形成分片（Tablet），Tablet 这个单词类似药片的含义。</p>
+<p data-nodeid="54827"><img src="https://s0.lgstatic.com/i/image/M00/8C/81/Ciqc1F_vGISACSHvAADSDqVVRVA843.png" alt="Lark20210101-204000.png" data-nodeid="54960"></p>
+<p data-nodeid="54828">如上图所示：每个分片中含有一部分的行，视情况而定。分片（Tablet），可以作为数据分布的最小单位。分片内部可以考虑图上的行存储，也可以考虑内部是一个 B+ 树组织的列存储。</p>
+<p data-nodeid="54829">为了实现分布式存储，每个分片可以对应一个分布式文件系统中的文件。假设这个分布式文件系统接入了 Linux 的虚拟文件系统，使用和操作会同 Linux 本地文件并无二致。其实不一定会这样实现，这只是一个可行的方案。</p>
+<p data-nodeid="54830">为了存储安全，一个分片最少应该有 2 个副本，也就是 3 份数据。3 份数据在其中一份数据不一致后，可以对比其他两份的结果修正数据。这 3 份数据，我们不考虑跨数据中心。因为跨地域成本太高，吞吐量不好保证，假设它们还在同一地域的机房内，只不过在不同的机器、磁盘上。</p>
+<p data-nodeid="54831"><img src="https://s0.lgstatic.com/i/image/M00/8C/8C/CgqCHl_vGIyAfLpIAAFm-x3dyxw509.png" alt="Lark20210101-204003.png" data-nodeid="54966"></p>
+<h3 data-nodeid="54832">块（Chunk）的抽象</h3>
+<p data-nodeid="54833">比分片更小的单位是块（Chunk），这个单词和磁盘的块（Block）区分开。Chunk 是一个比 Block 更大的单位。Google File System 把数据分成了一个个 Chunk，然后每个 Chunk 会对应具体的磁盘块（Block）。</p>
+<p data-nodeid="54834">如下图，Table 是最顶层的结构，它里面含有许多分片（Tablets）。从数据库层面来看，每个分片是一个文件。数据库引擎维护到这个层面即可，至于这个文件如何在分布式系统中工作，就交给底层的文件系统——比如 Google File System 或者 Hadoop Distributed File System。</p>
+<p data-nodeid="54835"><img src="https://s0.lgstatic.com/i/image/M00/8C/8C/CgqCHl_vGJiAVxgcAAEjt38fJYI284.png" alt="Lark20210101-204006.png" data-nodeid="54972"></p>
+<p data-nodeid="54836">分布式文件系统通常会在磁盘的 Block 上再抽象一层 Chunk。一个 Chunk 通常比 Block 大很多，比如 Google File System 是 64KB，而通常磁盘的 Block 大小是 4K；HDFS 则是 128MB。这样的设计是为了减少 I/O 操作的频率，分块太小 I/O 频率就会上升，分块大 I/O 频率就减小。 比如一个 Google 的爬虫积攒了足够多的数据再提交到 GFS 中，就比爬虫频繁提交节省网络资源。</p>
+<h3 data-nodeid="54837">分布式文件的管理</h3>
+<p data-nodeid="54838">接下来，我们来讨论一个完整的分布式系统设计。和单机文件系统一样，一个文件必须知道自己的数据（Chunk）存放在哪里。下图展示了一种最简单的设计，文件中包含了许多 Chunk 的 ID，然后每个 ChunkID 可以从 Chunk 的元数据中找到 Chunk 对应的位置。</p>
+<p data-nodeid="54839"><img src="https://s0.lgstatic.com/i/image2/M01/04/64/CgpVE1_vGSaAOvq7AACExCrj12U682.png" alt="Lark20210101-204414.png" data-nodeid="54978"></p>
+<p data-nodeid="54840">如果 Chunk 比较大，比如说 HDFS 中 Chunk 有 128MB，那么 1PB 的数据需要 8,388,608 个条目。如果每个条目用 64bit 描述，也就是 8 个字节，只需要 64M 就可以描述清楚。考虑到一个 Chunk 必然会有冗余存储，也就是多个位置，实际会比 64M 多几倍，但也不会非常大了。</p>
+<p data-nodeid="54841">因此像 HDFS 和 GFS 等，为了简化设计会把所有文件目录结构信息，加上 Chunk 的信息，保存在一个单点上，通常称为 Master 节点。</p>
+<p data-nodeid="54842"><img src="https://s0.lgstatic.com/i/image/M00/8C/8C/CgqCHl_vGPiABpLOAAKq3EbZ3XQ571.png" alt="Lark20210101-204008.png" data-nodeid="54983"></p>
+<p data-nodeid="54843">下图中，客户端想要读取<code data-backticks="1" data-nodeid="54985">/foo/bar</code>中某个 Chunk 中某段内容（Byterange）的数据，会分成 4 个步骤：</p>
+<ol data-nodeid="54844">
+<li data-nodeid="54845">
+<p data-nodeid="54846">客户端向 Master 发送请求，将想访问的文B件名、Chunk 的序号（可以通过 Chunk 大小和内容位置计算）；</p>
+</li>
+<li data-nodeid="54847">
+<p data-nodeid="54848">Master 响应请求，返回 Chunk 的地址和 Chunk 的句柄（ID）；</p>
+</li>
+<li data-nodeid="54849">
+<p data-nodeid="54850">客户端向 Chunk 所在的地址（一台 ChunkServer）发送请求，并将句柄（ID）和内容范围（Byterange）作为参数；</p>
+</li>
+<li data-nodeid="54851">
+<p data-nodeid="54852">ChunkServer 将数据返回给客户端。</p>
+</li>
+</ol>
+<p data-nodeid="54853"><img src="https://s0.lgstatic.com/i/image/M00/8C/81/Ciqc1F_vGQGAFWGDAAKs3c4PcVw331.png" alt="Lark20210101-204011.png" data-nodeid="54993"></p>
+<p data-nodeid="54854">在上面这个模型中，有 3 个实体。</p>
+<ol data-nodeid="54855">
+<li data-nodeid="54856">
+<p data-nodeid="54857">客户端（Client）或者应用（Application），它们是数据的实际使用方，比如说 BigTable 数据库是 GFS 的 Client。</p>
+</li>
+<li data-nodeid="54858">
+<p data-nodeid="54859">Master 节点，它存储了所有的文件信息、Chunk 信息，权限信息等。</p>
+</li>
+<li data-nodeid="54860">
+<p data-nodeid="54861">ChunkServer 节点，它存储了实际的 Chunk 数据。</p>
+</li>
+</ol>
+<p data-nodeid="54862">Master 只有一台，ChunkServer 可以有很多台。上图中的 namespace 其实就是文件全名（含路径）的集合。Chunk 的 namespace 存储的是含文件全名 + ChunkLocation + ChunkID 的组合。文件的命名空间、Chunk 的命名空间，再加上文件和 Chunk 的对应关系，因为需要频繁使用，可以把它们全部都放到 Master 节点的内存中，并且利用 B 树等在内存中创建索引结构。ChunkServer 会和 Master 保持频繁的联系，将自己的变更告知 Master。这样就构成了一个完整的过程。</p>
+<h4 data-nodeid="54863">读和写</h4>
+<p data-nodeid="54864">读取文件的过程需要两次往返（Round Trip），第一次是客户端和 Master 节点，第二次是客户端和某个 ChunkServer。</p>
+<p data-nodeid="54865">写入某个 Chunk 的时候，因为所有存储了这个 Chunk 的服务器都需要更新，所以需要将数据推送给所有的 ChunkServer。这里 GFS 设计中使用了一个非常巧妙的方案，先由客户端将数据推送给所有 ChunkServer 并缓存，而不马上更新。直到所有 ChunkServer 都收到数据后，再集中更新。这样的做法减少了数据不一致的时间。</p>
+<p data-nodeid="54866">下图是具体的更新步骤：</p>
+<ol data-nodeid="54867">
+<li data-nodeid="54868">
+<p data-nodeid="54869">客户端要和服务器签订租约，得到一个租期（Lease）。其实就是 Chunk 和 Chunk 所有复制品的修改权限。如果一个客户端拿到租期，在租期内，其他客户端能不能修改这个 Chunk。</p>
+</li>
+<li data-nodeid="54870">
+<p data-nodeid="54871">Master 告诉客户端该 Chunk 所有的节点位置。包括 1 台主节点（Primary）和普通节点（Secondary）。当然主节点和普通节点，都是 ChunkServer。主 ChunkServer 的作用是协助更新所有从 ChunkServer 的数据。</p>
+</li>
+<li data-nodeid="54872">
+<p data-nodeid="54873">这一步是设计得最巧妙的地方。客户端接下来将要写入的数据同时推送给所有关联的 ChunkServer。这些 ChunkServer 不会更新数据，而是把数据先缓存起来。</p>
+</li>
+<li data-nodeid="54874">
+<p data-nodeid="54875">图中的所有 ChunkServer 都收到了数据，并且给客户端回复后，客户端向主 ChunkServer 请求写入。</p>
+</li>
+<li data-nodeid="54876">
+<p data-nodeid="54877">主 ChunkServer 通知其他节点写入数据。因为数据已经推送过来了，所以这一步很快完成。</p>
+</li>
+<li data-nodeid="54878">
+<p data-nodeid="54879">写入完数据的节点，所有节点给主 ChunkServer 回复。</p>
+</li>
+<li data-nodeid="54880">
+<p data-nodeid="54881">主 ChunkServer 通知客户端成功。</p>
+</li>
+</ol>
+<p data-nodeid="54882"><img src="https://s0.lgstatic.com/i/image2/M01/04/65/CgpVE1_vNRyABrfXAAC_9WDSitU641.png" alt="图片1.png" data-nodeid="55012"></p>
+<p data-nodeid="54883">以上，就是 GFS 的写入过程。这里有个规律，实现强一致性（所有时刻、所有客户端读取到的数据是一致的）就需要停下所有节点的工作牺牲可用性；或者牺牲分区容错性，减少节点。GFS 和 HDFS 的设计，牺牲的是一致性本身，允许数据在一定时间范围内是不一致的，从而提高吞吐量。</p>
+<h4 data-nodeid="54884">容灾</h4>
+<p data-nodeid="54885">在 HDFS 设计中，Master 节点也被称为 NameNode，用于存储命名空间数据。ChunkServer 也被称为 DataNode，用来存储文件数据。在 HDFS 的设计中，还有一个特殊的节点叫作辅助节点（Secondary Node）。辅助节点本身更像一个客户端，它不断和 NameNode 交流，并把 NameNode 最近的变更写成日志，存放到 DataNode 中。类似日志文件系统，每过一段时间，在 HDFS 中这些日志会形成一个还原点文件，这个机制和上一讲我们提到的日志文件系统类似。如果 Master 节点发生了故障，就可以通过这些还原点进行还原。</p>
+<h4 data-nodeid="54886">其他</h4>
+<p data-nodeid="54887">在分布式文件系统和分布式数据库的设计中，还有很多有趣的知识，比如缓存的设计、空间的回收。如果你感兴趣，你可以进一步阅读我开篇给出的两篇论文。</p>
+<ul data-nodeid="54888">
+<li data-nodeid="54889">
+<p data-nodeid="54890">Google File System</p>
+</li>
+<li data-nodeid="54891">
+<p data-nodeid="54892">BigTable：A Distributed Storage System for Structured Data</p>
+</li>
+</ul>
+<h3 data-nodeid="54893">总结</h3>
+<p data-nodeid="54894">现在，我们已经可以把所有的场景都串联起来。Google 需要的是一个分布式数据库，存储的数据是包括内容、外链、Logo、标题等在内的网页的全部版本和描述信息。为了描述这些信息，一台机器磁盘不够大，吞吐量也不够大。因此 Google 需要将数据分布存储，将这个大表（BigTable）拆分成很多小片（Tablet）。当然，这并不是直接面向用户的架构。给几十亿用户提供高效查询，还需要分布式计算，计算出给用户使用的内容索引。</p>
+<p data-nodeid="54895">Google 团队发现将数据分布出去是一个通用需求。不仅仅是 BigTable 数据库需要，很多其他数据库也可以在这个基础上构造。按照软件设计的原则，每个工具应该尽可能的专注和简单， Google 的架构师意识到需要一个底层的文件系统，就是 Google File System。这样，BigTable 使用 Tablet 的时候，只需要当成文件在使用，具体的分布式读写，就交给了 GFS。</p>
+<p data-nodeid="54896">后来，Hadoop 根据 GFS 设计了 Hadoop 分布式文件系统，用于处理大数据，仍然延续了整个 GFS 的设计。</p>
+<p data-nodeid="54897">以上，是一个完整的，分布式数据库、分布式存储技术的一个入门级探讨。</p>
+<p data-nodeid="54898"><strong data-nodeid="55029">那么通过这节课的学习，你现在可以尝试来回答本节关联的面试题目：分布式文件系统是怎么回事</strong>？</p>
+<p data-nodeid="54899">【<strong data-nodeid="55035">解析</strong>】分布式文件系统通过网络将不同的机器、磁盘、逻辑分区等存储资源利用起来，提供跨平台、跨机器的文件管理。通过这种方式，我们可以把很多相对廉价的服务器组合起来形成巨大的存储力量。</p>
+<h3 data-nodeid="54900">思考题</h3>
+<p data-nodeid="54901"><strong data-nodeid="55041">最后我再给你出一道需要查资料的思考题：Master 节点如果宕机了，影响有多大，如何恢复</strong>？</p>
+<p data-nodeid="55548" class="te-preview-highlight">你可以把你的答案、思路或者课后总结写在留言区，这样可以帮助你产生更多的思考，这也是构建知识体系的一部分。经过长期的积累，相信你会得到意想不到的收获。如果你觉得今天的内容对你有所启发，欢迎分享给身边的朋友。期待看到你的思考！</p></div>
+
+</body></html>

@@ -1,0 +1,1552 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>20 | 如何在微服务框架中集成 etcd ？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>20 | 如何在微服务框架中集成 etcd ？</h1><p data-nodeid="355">上一讲我们介绍了基于 etcd 实现微服务注册与发现的案例。由于服务实例是动态部署的，每个服务实例的地址和服务信息都可能动态变化，势必需要一个中心化的组件对各个服务实例的信息进行管理。该组件管理了各个部署好的服务实例元数据，包括但不限于服务名、IP 地址、端口号、服务描述和服务状态等。</p>
+<p data-nodeid="356">现有的主流微服务框架大都集成了服务注册与发现的功能，这一讲我们就来介绍并实践如何集成 etcd 到主流的 Go 微服务框架中。</p>
+<h3 data-nodeid="357">go-micro 集成 etcd</h3>
+<p data-nodeid="358">在构建微服务时，使用服务发现可以减少配置的复杂性，go-micro 也是 Go 语言中常用的微服务框架。go-micro 的发现机制是可插拔的，支持多种组件，如 etcd 和 ZooKeeper 等，具体详见<a href="https://github.com/micro/go-plugins?fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="481">micro/go-plugins</a>。</p>
+<h4 data-nodeid="359">go-micro 介绍</h4>
+<p data-nodeid="360">首先介绍一下 go-micro 微服务框架。go-micro 是一个<strong data-nodeid="489">可插拔的 RPC 框架</strong>，用于分布式系统的开发，具有以下特性。</p>
+<ul data-nodeid="361">
+<li data-nodeid="362">
+<p data-nodeid="363"><strong data-nodeid="494">服务发现</strong>（Service Discovery）：自动服务注册与名称解析。</p>
+</li>
+<li data-nodeid="364">
+<p data-nodeid="365"><strong data-nodeid="499">负载均衡</strong>（Load Balancing）：在服务发现之上构建了智能的负载均衡机制。</p>
+</li>
+<li data-nodeid="366">
+<p data-nodeid="367"><strong data-nodeid="504">同步通信</strong>（Synchronous Comms）：基于 RPC 的通信，支持双向流。</p>
+</li>
+<li data-nodeid="368">
+<p data-nodeid="369"><strong data-nodeid="509">异步通信</strong>（Asynchronous Comms）：内置发布/订阅的事件驱动架构。</p>
+</li>
+<li data-nodeid="370">
+<p data-nodeid="371"><strong data-nodeid="514">消息编码</strong>（Message Encoding）：基于 Content-Type 的动态编码，支持 ProtoBuf、JSON，开箱即用。</p>
+</li>
+<li data-nodeid="372">
+<p data-nodeid="373"><strong data-nodeid="519">服务接口</strong>（Service Interface）：所有特性都被打包在简单且高级的接口中，方便开发微服务。</p>
+</li>
+</ul>
+<p data-nodeid="374">go-micro 旨在利用接口使微服务架构抽象化，并且提供了一系列默认且完整的开箱即用的插件。</p>
+<h4 data-nodeid="375">定义消息格式</h4>
+<p data-nodeid="376">go-micro 使用 ProtoBuf 定义消息格式。我们创建一个类型为 proto 的文件 hi.proto，其中定义了调用接口的参数以及返回的对象：</p>
+<pre class="lang-go hljs" data-nodeid="377"><code data-language="go">syntax = <span class="hljs-string">"proto3"</span>;
+<span class="hljs-keyword">package</span> hello;
+service Greeter {
+    rpc Hello(HelloRequest) returns (HelloResponse) {}
+}
+
+message HelloRequest {
+    <span class="hljs-keyword">string</span> from = <span class="hljs-number">1</span>;
+    <span class="hljs-keyword">string</span> to = <span class="hljs-number">2</span>;
+    <span class="hljs-keyword">string</span> msg = <span class="hljs-number">3</span>;
+}
+message HelloResponse {
+    <span class="hljs-keyword">string</span> from = <span class="hljs-number">1</span>;
+    <span class="hljs-keyword">string</span> to = <span class="hljs-number">2</span>;
+    <span class="hljs-keyword">string</span> msg = <span class="hljs-number">3</span>;
+}
+</code></pre>
+<p data-nodeid="378">如上的代码定义了 Greeter 的接口，Hello 方法的参数为 HelloRequest ，结果返回了 HelloResponse 对象。</p>
+<p data-nodeid="379">接着生成 API 接口。我们需要使用 protoc 来生成 protobuf 代码文件，以此生成对应的 Go 语言代码。包括如下的三个插件：</p>
+<ul data-nodeid="380">
+<li data-nodeid="381">
+<p data-nodeid="382">protoc</p>
+</li>
+<li data-nodeid="383">
+<p data-nodeid="384">protoc-gen-go</p>
+</li>
+<li data-nodeid="385">
+<p data-nodeid="386">protoc-gen-micro</p>
+</li>
+</ul>
+<p data-nodeid="387">使用如下命令分别安装这几个插件：</p>
+<pre class="lang-java hljs" data-nodeid="388"><code data-language="java">go get github.com/golang/protobuf/{proto,protoc-gen-go}
+go get github.com/micro/protoc-gen-micro
+</code></pre>
+<p data-nodeid="389">接着在当前目录下运行如下的命令，生成两个模板文件：</p>
+<pre class="lang-java hljs" data-nodeid="390"><code data-language="java"> $ protoc  --micro_out=. --go_out=. greeter.proto
+</code></pre>
+<p data-nodeid="391">运行之后，当前目录的结构如下所示：</p>
+<pre class="lang-java hljs" data-nodeid="392"><code data-language="java">$ tree     
+.
+├── hello.pb.go
+├── hello.pb.micro.go
+└── hello.proto
+</code></pre>
+<p data-nodeid="393">可以看到，我们通过工具生成了两个文件，一个是 Go 结构文件，另一个属于 go-micro RPC 的接口文件。基于生成的两个文件，我们可以创建“打招呼”的请求。下面是部分生成的代码：</p>
+<pre class="lang-go hljs" data-nodeid="394"><code data-language="go"><span class="hljs-comment">// Greeter service 客户端的 API</span>
+<span class="hljs-keyword">type</span> GreeterService <span class="hljs-keyword">interface</span> {
+	Hello(ctx context.Context, in *HelloRequest, opts ...client.CallOption) (*HelloResponse, error)
+}
+<span class="hljs-keyword">type</span> greeterService <span class="hljs-keyword">struct</span> {
+	c    client.Client
+	name <span class="hljs-keyword">string</span>
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">NewGreeterService</span><span class="hljs-params">(name <span class="hljs-keyword">string</span>, c client.Client)</span> <span class="hljs-title">GreeterService</span></span> {
+	<span class="hljs-keyword">if</span> c == <span class="hljs-literal">nil</span> {
+		c = client.NewClient()
+	}
+	<span class="hljs-keyword">if</span> <span class="hljs-built_in">len</span>(name) == <span class="hljs-number">0</span> {
+		name = <span class="hljs-string">"hello"</span>
+	}
+	<span class="hljs-keyword">return</span> &amp;greeterService{
+		c:    c,
+		name: name,
+	}
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(c *greeterService)</span> <span class="hljs-title">Hello</span><span class="hljs-params">(ctx context.Context, in *HelloRequest, opts ...client.CallOption)</span> <span class="hljs-params">(*HelloResponse, error)</span></span> {
+	req := c.c.NewRequest(c.name, <span class="hljs-string">"Greeter.Hello"</span>, in)
+	out := <span class="hljs-built_in">new</span>(HelloResponse)
+	err := c.c.Call(ctx, req, out, opts...)
+	<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> {
+		<span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>, err
+	}
+	<span class="hljs-keyword">return</span> out, <span class="hljs-literal">nil</span>
+}
+<span class="hljs-comment">// Greeter service 服务端</span>
+<span class="hljs-keyword">type</span> GreeterHandler <span class="hljs-keyword">interface</span> {
+	Hello(context.Context, *HelloRequest, *HelloResponse) error
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">RegisterGreeterHandler</span><span class="hljs-params">(s server.Server, hdlr GreeterHandler, opts ...server.HandlerOption)</span> <span class="hljs-title">error</span></span> {
+	<span class="hljs-keyword">type</span> greeter <span class="hljs-keyword">interface</span> {
+		Hello(ctx context.Context, in *HelloRequest, out *HelloResponse) error
+	}
+	<span class="hljs-keyword">type</span> Greeter <span class="hljs-keyword">struct</span> {
+		greeter
+	}
+	h := &amp;greeterHandler{hdlr}
+	<span class="hljs-keyword">return</span> s.Handle(s.NewHandler(&amp;Greeter{h}, opts...))
+}
+<span class="hljs-keyword">type</span> greeterHandler <span class="hljs-keyword">struct</span> {
+	GreeterHandler
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(h *greeterHandler)</span> <span class="hljs-title">Hello</span><span class="hljs-params">(ctx context.Context, in *HelloRequest, out *HelloResponse)</span> <span class="hljs-title">error</span></span> {
+	<span class="hljs-keyword">return</span> h.GreeterHandler.Hello(ctx, in, out)
+}
+</code></pre>
+<p data-nodeid="395">gRPC 的调用方法装在生成的 go-micro RPC 的接口文件中。为了演示，我们只定义了一个<code data-backticks="1" data-nodeid="533">Hello</code>接口，可以看到上面的代码实现还是比较简单的。</p>
+<h4 data-nodeid="396">server 服务端</h4>
+<p data-nodeid="397">下面我们开始实现服务端，服务端需要<strong data-nodeid="541">注册 handlers 处理器</strong>，用以对外提供服务并接收请求。服务端的具体实现代码如下所示：</p>
+<pre class="lang-go hljs" data-nodeid="398"><code data-language="go"><span class="hljs-keyword">package</span> main
+<span class="hljs-keyword">import</span> (
+	<span class="hljs-string">"context"</span>
+	hello <span class="hljs-string">"github.com/keets2012/etcd-book-code/ch10/micro/srv/proto"</span>
+	<span class="hljs-string">"log"</span>
+	<span class="hljs-string">"github.com/micro/go-micro"</span>
+	<span class="hljs-string">"github.com/micro/go-micro/registry"</span>
+	<span class="hljs-string">"github.com/micro/go-plugins/registry/etcdv3"</span>
+)
+<span class="hljs-keyword">type</span> Greet <span class="hljs-keyword">struct</span>{}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(s *Greet)</span> <span class="hljs-title">Hello</span><span class="hljs-params">(ctx context.Context, req *hello.HelloRequest, rsp *hello.HelloResponse)</span> <span class="hljs-title">error</span></span> {
+	log.Printf(<span class="hljs-string">"received req %#v \n"</span>, req)
+	rsp.From = <span class="hljs-string">"server"</span>
+	rsp.To = <span class="hljs-string">"client"</span>
+	rsp.Msg = <span class="hljs-string">"ok"</span>
+	<span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>
+}
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span> {
+	reg := etcdv3.NewRegistry(<span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(op *registry.Options)</span></span> {
+		op.Addrs = []<span class="hljs-keyword">string</span>{<span class="hljs-string">"127.0.0.1:2379"</span>,
+		}
+	})
+	service := micro.NewService(
+		micro.Name(<span class="hljs-string">"hello.srv.say"</span>),
+		micro.Registry(reg),
+	)
+	service.Init()
+  <span class="hljs-comment">// 注册 GreeterHandler，传入服务和处理器</span>
+	hello.RegisterGreeterHandler(service.Server(), <span class="hljs-built_in">new</span>(Greet))
+  <span class="hljs-comment">// 运行服务</span>
+	<span class="hljs-keyword">if</span> err := service.Run(); err != <span class="hljs-literal">nil</span> {
+		<span class="hljs-built_in">panic</span>(err)
+	}
+}
+</code></pre>
+<p data-nodeid="399">micro.NewService 用于初始化服务，然后返回一个 Service 接口的实例。</p>
+<p data-nodeid="400">上述实现中，使用 etcd 替换了默认的 Consul 作为服务注册与发现组件。处理器会与服务一起被注册，就像 HTTP 处理器一样，通过调用 server.Run 服务启动，同时绑定代码配置中的地址作为接收请求的地址。服务启动时向注册中心注册自身服务的相关信息，并在接收到关闭信号时注销。</p>
+<h4 data-nodeid="401">client 调用</h4>
+<p data-nodeid="402">下面我们来看客户端如何调用。客户端应用发起到服务端的远程调用请求，实现客户端与服务端“打招呼”的功能，代码如下所示：</p>
+<pre class="lang-go hljs" data-nodeid="403"><code data-language="go"><span class="hljs-keyword">package</span> main
+<span class="hljs-keyword">import</span> (
+	<span class="hljs-string">"context"</span>
+	hello <span class="hljs-string">"github.com/keets2012/etcd-book-code/ch10/micro/srv/proto"</span>
+	<span class="hljs-string">"log"</span>
+	<span class="hljs-string">"github.com/micro/go-micro"</span>
+	<span class="hljs-string">"github.com/micro/go-micro/registry"</span>
+	<span class="hljs-string">"github.com/micro/go-plugins/registry/etcdv3"</span>
+)
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span> {
+	reg := etcdv3.NewRegistry(<span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">(op *registry.Options)</span></span> {
+		op.Addrs = []<span class="hljs-keyword">string</span>{
+			<span class="hljs-string">"127.0.0.1:2379"</span>,
+		}
+	})
+	<span class="hljs-comment">//创建 service</span>
+	service := micro.NewService(
+		micro.Registry(reg),
+	)
+	service.Init()
+	 <span class="hljs-comment">// 创建 greet 客户端，需要传入服务名与服务客户端方法构建的对象</span>
+	greetClient := hello.NewGreeterService(<span class="hljs-string">"hello.srv.say"</span>, service.Client())
+	param := &amp;hello.HelloRequest{
+		From: <span class="hljs-string">"client"</span>,
+		To:   <span class="hljs-string">"server"</span>,
+		Msg:  <span class="hljs-string">"hello aoho"</span>,
+	}
+	rsp, err := greetClient.Hello(context.Background(), param)
+	<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> {
+		<span class="hljs-built_in">panic</span>(err)
+	}
+	log.Println(rsp)
+}
+</code></pre>
+<p data-nodeid="404">proto 生成的 RPC 接口已经将调用方法的流程封装好。<code data-backticks="1" data-nodeid="547">hello.NewGreeterService</code>需要使用服务名与客户端对象来请求指定的接口，即<code data-backticks="1" data-nodeid="549">hello.srv.say</code>，然后调用 Hello 方法。</p>
+<pre class="lang-go hljs" data-nodeid="405"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(c *sayService)</span> <span class="hljs-title">Hello</span><span class="hljs-params">(ctx context.Context, in *SayParam, opts ...client.CallOption)</span> <span class="hljs-params">(*SayResponse, error)</span></span> {
+    req := c.c.NewRequest(c.name, <span class="hljs-string">"Say.Hello"</span>, in)
+    out := <span class="hljs-built_in">new</span>(SayResponse)
+    err := c.c.Call(ctx, req, out, opts...)
+    <span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>, err
+    }
+    <span class="hljs-keyword">return</span> out, <span class="hljs-literal">nil</span>
+}
+</code></pre>
+<p data-nodeid="406">主要的流程都在 c.c.Call 方法里。我们简单梳理一下整个流程，首先得到服务节点的地址，根据该地址查询连接池里是否有连接，如果有则取出来，如果没有则创建。然后进行数据传输，传输完成后把 client 连接放回到连接池内。</p>
+<h4 data-nodeid="407">运行结果</h4>
+<p data-nodeid="408">上述操作实现了客户端与服务端的“打招呼”功能，下面我们分别运行服务端和客户端的应用程序，注意执行的先后顺序，得到的结果如下所示：</p>
+<pre class="lang-java hljs" data-nodeid="409"><code data-language="java"><span class="hljs-comment">// 服务端的控制台输出</span>
+<span class="hljs-number">2021</span>-<span class="hljs-number">03</span>-<span class="hljs-number">16</span> <span class="hljs-number">23</span>:<span class="hljs-number">00</span>:<span class="hljs-number">23.365137</span> I | Transport [http] Listening on [::]:<span class="hljs-number">65331</span>
+<span class="hljs-number">2021</span>-<span class="hljs-number">03</span>-<span class="hljs-number">16</span> <span class="hljs-number">23</span>:<span class="hljs-number">00</span>:<span class="hljs-number">23.365230</span> I | Broker [http] Connected to [::]:<span class="hljs-number">65332</span>
+<span class="hljs-number">2021</span>-<span class="hljs-number">03</span>-<span class="hljs-number">16</span> <span class="hljs-number">23</span>:<span class="hljs-number">00</span>:<span class="hljs-number">23.365474</span> I | Registry [etcd] Registering node: hello.srv.say-<span class="hljs-number">6407</span>b896-<span class="hljs-number">66</span>d4-<span class="hljs-number">4</span>cb1-<span class="hljs-number">81f</span>d-d743ff6a97ec
+<span class="hljs-number">2021</span>-<span class="hljs-number">03</span>-<span class="hljs-number">16</span> <span class="hljs-number">23</span>:<span class="hljs-number">01</span>:<span class="hljs-number">16.946948</span> I | received req &amp;hello.SayRequest{From:<span class="hljs-string">"client"</span>, To:<span class="hljs-string">"server"</span>, Msg:<span class="hljs-string">"hello aoho"</span>, XXX_NoUnkeyedLiteral:struct {}{}, XXX_unrecognized:[]uint8(nil), XXX_sizecache:<span class="hljs-number">0</span>}
+<span class="hljs-comment">//客户端的控制台输出</span>
+<span class="hljs-number">2021</span>-<span class="hljs-number">03</span>-<span class="hljs-number">16</span> <span class="hljs-number">23</span>:<span class="hljs-number">01</span>:<span class="hljs-number">16.947531</span> I | from:<span class="hljs-string">"server"</span> to:<span class="hljs-string">"client"</span> msg:<span class="hljs-string">"ok"</span>
+</code></pre>
+<p data-nodeid="410">依次启动服务端、客户端，客户端发起一个打招呼的请求给服务端，可以看到服务端的控制台输出了收到的请求，并返回了 ok 响应给到客户端，符合我们的实现预期。</p>
+<p data-nodeid="411">至此，我们成功在 go-micro 框架中集成了 etcd 作为服务注册与发现组件。</p>
+<h3 data-nodeid="412">Go-kit 集成 etcd</h3>
+<p data-nodeid="413">介绍完 go-micro 集成 etcd，我们来看另一个流行的 Go 微服务框架 Go-kit 如何集成 etcd。</p>
+<h4 data-nodeid="414">Go-kit 介绍</h4>
+<p data-nodeid="415">Go-kit 提供了用于实现<strong data-nodeid="564">系统监控和弹性模式组件</strong>的库，例如日志记录、跟踪、限流和熔断等，这些库协助工程师提高微服务架构的性能和稳定性。Go-kit 框架分层如下图所示。</p>
+<p data-nodeid="2142" class=""><img src="https://s0.lgstatic.com/i/image6/M00/2C/97/CioPOWBlXcKAU3tWAAC2wBgqaYw872.png" alt="Drawing 0.png" data-nodeid="2146"></p>
+<div data-nodeid="2143"><p style="text-align:center">Go-kit 框架分层图</p></div>
+
+
+
+<p data-nodeid="418">除了用于构建微服务的工具包，Go-kit 还为工程师提供了良好的架构设计原则示范。Go-kit 提倡工程师使用 Alistair Cockburn 提出的 SOLID 设计原则、领域驱动设计（DDD）。所以 Go-kit 不仅仅是微服务工具包，它也非常适合构建优雅的整体结构。</p>
+<p data-nodeid="419">Go-kit 提供了三层模型来解耦业务，这也是我们使用它的主要目的，模型由上到下分别是<code data-backticks="1" data-nodeid="571">transport -&gt; endpoint -&gt; service</code>。</p>
+<ul data-nodeid="420">
+<li data-nodeid="421">
+<p data-nodeid="422">传输层用于网络通信，服务通常使用 HTTP、gRPC 等网络传输方式，或使用 NATS 等发布订阅系统相互通信。除此之外，Go-kit 还支持使用 AMQP 和 Thrift 等多种网络通信模式。</p>
+</li>
+<li data-nodeid="423">
+<p data-nodeid="424">接口层是服务器和客户端的基本构建模块。在 Go-kit 中，每个对外提供的服务接口方法都会定义为一个端点（Endpoint），以便在服务器和客户端之间进行网络通信。每个端点利用传输层通过使用 HTTP 或 gRPC 等具体通信模式对外提供服务。</p>
+</li>
+<li data-nodeid="425">
+<p data-nodeid="426">服务层是具体的业务逻辑实现。服务层的业务逻辑包含核心业务逻辑，即你要实现的主要功能。它不会也不应该进行 HTTP 或 gRPC 等具体网络传输，或者请求和响应消息类型的编码和解码。</p>
+</li>
+</ul>
+<p data-nodeid="427">Go-kit 在性能和扩展性等方面表现优异。下面我们就来介绍如何在 Go-kit 中集成 etcd 作为服务注册与发现组件，以及构建用户登录的场景、用户登录系统之后获取认证的令牌，接着实现 Go-kit 的 gRPC 调用。</p>
+<h4 data-nodeid="428">定义消息格式</h4>
+<p data-nodeid="429">Go-kit 的消息通信也是基于 protobuf 格式。这里我们定义了两个 proto，其中一个定义了登录的 RPC 请求和响应的结构体，另一个则定义了 RPC 请求的方法。分别如下：</p>
+<pre class="lang-java hljs" data-nodeid="430"><code data-language="java"><span class="hljs-comment">// user.proto</span>
+syntax = <span class="hljs-string">"proto3"</span>;
+<span class="hljs-keyword">package</span> pb;
+message Login {
+    string Account = <span class="hljs-number">1</span>;
+    string Password = <span class="hljs-number">2</span>;
+}
+message LoginAck {
+    string Token = <span class="hljs-number">1</span>;
+}
+user.proto 定义了 Login 请求和 LoginAck 应答的结构体
+<span class="hljs-comment">// service.proto</span>
+syntax = <span class="hljs-string">"proto3"</span>;
+<span class="hljs-keyword">package</span> pb;
+<span class="hljs-keyword">import</span> <span class="hljs-string">"user.proto"</span>;
+service User {
+    <span class="hljs-function">rpc <span class="hljs-title">RpcUserLogin</span> <span class="hljs-params">(Login)</span> <span class="hljs-title">returns</span> <span class="hljs-params">(LoginAck)</span> </span>{
+    }
+}
+</code></pre>
+<p data-nodeid="431">service.proto 引用了 user.proto 中定义的结构体，定义了一个方法 RpcUserLogin，请求参数为 Login 对象，响应结果为 LoginAck。</p>
+<p data-nodeid="432">生成对应的 gRPC pb 文件，执行如下的命令：</p>
+<pre class="lang-java hljs" data-nodeid="433"><code data-language="java">$ protoc --go_out=plugins=grpc:. *.proto
+</code></pre>
+<p data-nodeid="434">生成 pb 文件后，目录中增加了两个文件，文件结构如下：</p>
+<pre class="lang-java hljs" data-nodeid="435"><code data-language="java">$ tree
+.
+├── make.sh
+├── service.pb.go
+├── service.proto
+├── user.pb.go
+└── user.proto
+</code></pre>
+<p data-nodeid="436">生成的文件基于 gRPC 调用的标准格式生成，这里就不具体列出了。我们接着看 user 服务的实现。</p>
+<h4 data-nodeid="437">user 服务</h4>
+<p data-nodeid="438">由于 user 服务的实现代码比较多，这里我侧重讲解 Go-kit  集成使用 etcd 部分。我们先来看 user 服务的入口主函数：</p>
+<pre class="lang-go hljs" data-nodeid="439"><code data-language="go"><span class="hljs-keyword">var</span> grpcAddr = flag.String(<span class="hljs-string">"g"</span>, <span class="hljs-string">"127.0.0.1:8881"</span>, <span class="hljs-string">"grpcAddr"</span>)
+<span class="hljs-keyword">var</span> quitChan = <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> error, <span class="hljs-number">1</span>)
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">main</span><span class="hljs-params">()</span></span> {
+	flag.Parse()
+	<span class="hljs-keyword">var</span> (
+		etcdAddrs = []<span class="hljs-keyword">string</span>{<span class="hljs-string">"127.0.0.1:2379"</span>}
+		serName   = <span class="hljs-string">"svc.user.agent"</span>
+		grpcAddr  = *grpcAddr
+		ttl       = <span class="hljs-number">5</span> * time.Second
+	)
+	utils.NewLoggerServer()
+	<span class="hljs-comment">// 初始化 etcd 客户端</span>
+	options := etcdv3.ClientOptions{
+		DialTimeout:   ttl,
+		DialKeepAlive: ttl,
+	}
+	etcdClient, err := etcdv3.NewClient(context.Background(), etcdAddrs, options)
+	<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> {
+		utils.GetLogger().Error(<span class="hljs-string">"[user_agent]  NewClient"</span>, zap.Error(err))
+		<span class="hljs-keyword">return</span>
+	}
+  <span class="hljs-comment">// 基于 etcdClient 初始化 Registar</span>
+	Registar := etcdv3.NewRegistrar(etcdClient, etcdv3.Service{
+		Key:   fmt.Sprintf(<span class="hljs-string">"%s/%s"</span>, serName, grpcAddr),
+		Value: grpcAddr,
+	}, log.NewNopLogger())
+	<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> {
+		golangLimit := rate.NewLimiter(<span class="hljs-number">10</span>, <span class="hljs-number">1</span>)
+		server := src.NewService(utils.GetLogger())
+		endpoints := src.NewEndPointServer(server, golangLimit)
+        <span class="hljs-comment">// 构造 EndPointServer</span>
+		grpcServer := src.NewGRPCServer(endpoints, utils.GetLogger())
+        <span class="hljs-comment">// 监听 tcp 地址和端口</span>
+		grpcListener, err := net.Listen(<span class="hljs-string">"tcp"</span>, grpcAddr)
+		<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> {
+			utils.GetLogger().Warn(<span class="hljs-string">"[user_agent] Listen"</span>, zap.Error(err))
+			quitChan &lt;- err
+			<span class="hljs-keyword">return</span>
+		}
+		Registar.Register()
+		baseServer := grpc.NewServer(grpc.UnaryInterceptor(grpctransport.Interceptor))
+		pb.RegisterUserServer(baseServer, grpcServer)
+		<span class="hljs-keyword">if</span> err = baseServer.Serve(grpcListener); err != <span class="hljs-literal">nil</span> {
+			utils.GetLogger().Warn(<span class="hljs-string">"[user_agent] Serve"</span>, zap.Error(err))
+			quitChan &lt;- err
+			<span class="hljs-keyword">return</span>
+		}
+	}()
+	<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> {
+		c := <span class="hljs-built_in">make</span>(<span class="hljs-keyword">chan</span> os.Signal, <span class="hljs-number">1</span>)
+		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+		quitChan &lt;- fmt.Errorf(<span class="hljs-string">"%s"</span>, &lt;-c)
+	}()
+	utils.GetLogger().Info(<span class="hljs-string">"[user_agent] run "</span> + grpcAddr)
+	err = &lt;-quitChan
+    <span class="hljs-comment">// 注销连接</span>
+	Registar.Deregister()
+	utils.GetLogger().Info(<span class="hljs-string">"[user_agent] quit err"</span>, zap.Error(err))
+}
+</code></pre>
+<p data-nodeid="440">user 服务集成 etcd 的主要步骤如下：</p>
+<ul data-nodeid="441">
+<li data-nodeid="442">
+<p data-nodeid="443">初始化 etcd 客户端；</p>
+</li>
+<li data-nodeid="444">
+<p data-nodeid="445">基于 etcdClient 初始化 Registar；</p>
+</li>
+<li data-nodeid="446">
+<p data-nodeid="447">Registar.Register() 注册 user 服务到 etcd，RegisterService 将服务及其实现注册到 gRPC 服务器，必须在调用服务之前调用 RegisterService；</p>
+</li>
+<li data-nodeid="448">
+<p data-nodeid="449">服务关闭时，注销 etcd 连接。</p>
+</li>
+</ul>
+<h4 data-nodeid="450">客户端调用</h4>
+<p data-nodeid="451">在微服务架构中，用户登录的操作，一般由 user 服务校验其身份信息的合法性，如果合法则为该用法返回认证的令牌。我们的测试客户端就是模拟 auth 认证服务的实现。</p>
+<pre class="lang-go hljs" data-nodeid="452"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">TestNewUserAgentClient</span><span class="hljs-params">(t *testing.T)</span></span> {
+  <span class="hljs-comment">// 初始化 UserAgent，返回的是一个 UserAgent</span>
+	client, err := NewUserAgentClient([]<span class="hljs-keyword">string</span>{<span class="hljs-string">"127.0.0.1:2379"</span>}, logger)
+	<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> {
+		t.Error(err)
+		<span class="hljs-keyword">return</span>
+	}
+  <span class="hljs-comment">// 循环调用，为了测试 user 多实例注册到 etcd，客户端调用的情况</span>
+	<span class="hljs-keyword">for</span> i := <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">6</span>; i++ {
+		time.Sleep(time.Second)
+		userAgent, err := client.UserAgentClient()
+		<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> {
+			t.Error(err)
+			<span class="hljs-keyword">return</span>
+		}
+		ack, err := userAgent.Login(context.Background(), &amp;pb.Login{
+			Account:  <span class="hljs-string">"aoho"</span>,
+			Password: <span class="hljs-string">"123456"</span>,
+		})
+		<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> {
+			t.Error(err)
+			<span class="hljs-keyword">return</span>
+		}
+		t.Log(ack.Token)
+	}
+}
+</code></pre>
+<p data-nodeid="453">上述代码示例是测试的主要代码，首先读取配置，初始化 UserAgent，其实就是得到指定服务的一个 etcdv3 客户端实例。这里获取了 etcd 中键为<code data-backticks="1" data-nodeid="593">svc.user.agent</code>的值。</p>
+<pre class="lang-go hljs" data-nodeid="454"><code data-language="go"><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">NewUserAgentClient</span><span class="hljs-params">(addr []<span class="hljs-keyword">string</span>, logger log.Logger)</span> <span class="hljs-params">(*UserAgent, error)</span></span> {
+	<span class="hljs-keyword">var</span> (
+		etcdAddrs = addr
+		serName   = <span class="hljs-string">"svc.user.agent"</span>
+		ttl       = <span class="hljs-number">5</span> * time.Second
+	)
+	options := etcdv3.ClientOptions{
+		DialTimeout:   ttl,
+		DialKeepAlive: ttl,
+	}
+	etcdClient, err := etcdv3.NewClient(context.Background(), etcdAddrs, options)
+	<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> {
+		<span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>, err
+	}
+	instancerm, err := etcdv3.NewInstancer(etcdClient, serName, logger)
+	<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> {
+		<span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>, err
+	}
+	<span class="hljs-keyword">return</span> &amp;UserAgent{
+		instancerm: instancerm,
+		logger:     logger,
+	}, err
+}
+</code></pre>
+<p data-nodeid="455">在 NewUserAgentClient 的实现中，根据传入的 etcdAddrs 构建 etcdClient，并通过 etcdClient 和 serName 构建 instancerm，指向的类型为 Instancer。</p>
+<pre class="lang-go hljs" data-nodeid="456"><code data-language="go"><span class="hljs-keyword">type</span> Instancer <span class="hljs-keyword">struct</span> {
+	cache  *instance.Cache
+	client Client
+	prefix <span class="hljs-keyword">string</span>
+	logger log.Logger
+	quitc  <span class="hljs-keyword">chan</span> <span class="hljs-keyword">struct</span>{}
+}
+</code></pre>
+<p data-nodeid="457">Instancer 选出存储在 etcd 键空间中的实例。同时将 watch 该键空间中的任何事件类型的更改，这些更改将更新实例器的实例信息。</p>
+<p data-nodeid="458">至此，我们实现了 user 服务和调用 user 服务的客户端测试方法。</p>
+<h4 data-nodeid="459">运行结果</h4>
+<p data-nodeid="460">我们启动 3 个服务地址，分别为：127.0.0.1:8881、127.0.0.1:8882、127.0.0.1:8883。</p>
+<pre class="lang-shell hljs" data-nodeid="461"><code data-language="shell"><span class="hljs-meta">$</span><span class="bash"> ./user_agent -g 127.0.0.1:8881</span>
+2021-03-17 13:31:15     INFO    utils/log_util.go:89    [NewLogger] success
+2021-03-17 13:31:15     INFO    user_agent/main.go:75   [user_agent] run 127.0.0.1:8881
+<span class="hljs-meta">$</span><span class="bash"> ./user_agent -g 127.0.0.1:8882</span>
+2021-03-17 13:31:12     INFO    utils/log_util.go:89    [NewLogger] success
+2021-03-17 13:31:12     INFO    user_agent/main.go:75   [user_agent] run 127.0.0.1:8882
+<span class="hljs-meta">$</span><span class="bash"> ./user_agent -g 127.0.0.1:8883</span>
+2021-03-17 13:31:08     INFO    utils/log_util.go:89    [NewLogger] success
+2021-03-17 13:31:08     INFO    user_agent/main.go:75   [user_agent] run 127.0.0.1:8883
+</code></pre>
+<p data-nodeid="462">依次运行服务端和测试函数，可以得到如下的结果：</p>
+<pre class="lang-shell hljs" data-nodeid="463"><code data-language="shell">=== RUN   TestNewUserAgentClient
+ts=2021-03-17T05:31:22.605559Z caller=instancer.go:32 prefix=svc.user.agent instances=3
+    TestNewUserAgentClient: user_agent_test.go:44: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJOYW1lIjoiYW9obyIsIkRjSWQiOjEsImV4cCI6MTYwMDMyMDcxMywiaWF0IjoxNjAwMzIwNjgzLCJpc3MiOiJraXRfdjQiLCJuYmYiOjE2MDAzMjA2ODMsInN1YiI6ImxvZ2luIn0.Eo-uytDEuAJyPGooXB2mC6uga-C-krVdthEQSYkqG-k
+    ...
+--- PASS: TestNewUserAgentClient (6.11s)
+PASS
+</code></pre>
+<p data-nodeid="464">根据测试函数的运行结果，svc.user.agent 有三个服务实例。客户端 6 次调用 user 服务的登录结果都是成功的，TestNewUserAgentClient 输出了获取到的 JWT Token。同时在启动的三个 user 服务端控制台输出了如下的日志信息：</p>
+<pre class="lang-shell hljs" data-nodeid="465"><code data-language="shell">// 8883
+2021-03-17 13:31:24     DEBUG   src/middleware_server.go:31     [9f4221fd-ec8c-53f2-b2ac-26e9cb4501ba]  {"调用 Login logMiddlewareServer": "Login", "req": "Account:\"aoho\"assword:\"123456\" ", "res": "Token:\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJOYW1lIjoiYW9obyIsIkRjSWQiOjEsImV4cCI6MTYwMDMyMDcxNCwiaWF0IjoxNjAwMzIwNjg0LCJpc3MiOiJraXRfdjQiLCJuYmYiOjE2MDAzMjA2ODQsInN1YiI6ImxvZ2luIn0.atzewyzrwRtBVCCg_4eZo7iiJKXGV6nJs-_BA9JDSLQ\" ", "time": "188.861 µ s", "err": null}
+// 8882
+2021-03-17 13:31:26     DEBUG   src/middleware_server.go:31     [9ece68d5-9e56-515c-a417-77f371b04910]  {"调用 Login logMiddlewareServer": "Login", "req": "Account:\"aoho\"assword:\"123456\" ", "res": "Token:\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJOYW1lIjoiYW9obyIsIkRjSWQiOjEsImV4cCI6MTYwMDMyMDcxNiwiaWF0IjoxNjAwMzIwNjg2LCJpc3MiOiJraXRfdjQiLCJuYmYiOjE2MDAzMjA2ODYsInN1YiI6ImxvZ2luIn0.KLjK_mf11C_ssO_X5sKyzr55ftUEh2D5mfxS5xTKbP4\" ", "time": "195.477 µ s", "err": null}
+2021-03-17 13:31:27     DEBUG   src/middleware_server.go:31     [de1d3e65-d389-5232-9254-33e4cb6c9060]  {"调用 Login logMiddlewareServer": "Login", "req": "Account:\"aoho\"assword:\"123456\" ", "res": "Token:\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJOYW1lIjoiYW9obyIsIkRjSWQiOjEsImV4cCI6MTYwMDMyMDcxNywiaWF0IjoxNjAwMzIwNjg3LCJpc3MiOiJraXRfdjQiLCJuYmYiOjE2MDAzMjA2ODcsInN1YiI6ImxvZ2luIn0.2jkryvYTJVnsrXuNWB_SyYqKxQB-l5dos7bGUP2aLyo\" ", "time": "104.817 µ s", "err": null}
+// 8881
+2021-03-17 13:31:23     DEBUG   src/middleware_server.go:31     [c521bfb2-5a48-58c8-aa74-fdf78adc443f]  {"调用 Login logMiddlewareServer": "Login", "req": "Account:\"aoho\"assword:\"123456\" ", "res": "Token:\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJOYW1lIjoiYW9obyIsIkRjSWQiOjEsImV4cCI6MTYwMDMyMDcxMywiaWF0IjoxNjAwMzIwNjgzLCJpc3MiOiJraXRfdjQiLCJuYmYiOjE2MDAzMjA2ODMsInN1YiI6ImxvZ2luIn0.Eo-uytDEuAJyPGooXB2mC6uga-C-krVdthEQSYkqG-k\" ", "time": "173.146 µ s", "err": null}
+2021-03-17 13:31:25     DEBUG   src/middleware_server.go:31     [9ffc9f63-d925-5999-9b9b-2bf544654010]  {"调用 Login logMiddlewareServer": "Login", "req": "Account:\"aoho\"assword:\"123456\" ", "res": "Token:\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJOYW1lIjoiYW9obyIsIkRjSWQiOjEsImV4cCI6MTYwMDMyMDcxNSwiaWF0IjoxNjAwMzIwNjg1LCJpc3MiOiJraXRfdjQiLCJuYmYiOjE2MDAzMjA2ODUsInN1YiI6ImxvZ2luIn0.OwMi33WbWz4SuIIRsTO0uOzg2d7qx5CDyISetnsbiiE\" ", "time": "174.443 µ s", "err": null}
+2021-03-17 13:31:28     DEBUG   src/middleware_server.go:31     [c5459a23-0999-5861-80d2-fea508815ac5]  {"调用 Login logMiddlewareServer": "Login", "req": "Account:\"aoho\"assword:\"123456\" ", "res": "Token:\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJOYW1lIjoiYW9obyIsIkRjSWQiOjEsImV4cCI6MTYwMDMyMDcxOCwiaWF0IjoxNjAwMzIwNjg4LCJpc3MiOiJraXRfdjQiLCJuYmYiOjE2MDAzMjA2ODgsInN1YiI6ImxvZ2luIn0.TR6gcjlZ7rb2PXQg5XJz1AX0cGJc706UAuT9VyWR1Wg\" ", "time": "68.345 µ s", "err": null}
+</code></pre>
+<p data-nodeid="466">从上面的日志信息可以知道，客户端根据 etcd 中存储的实例信息发起调用，成功实现了负载均衡。如果我们关闭某一个实例，客户端会监测到服务实例的变更，本地的服务实例列表会踢掉该实例，这种机制使得 Go-kit 的负载均衡依然奏效。</p>
+<h3 data-nodeid="467">小结</h3>
+<p data-nodeid="468">这一讲我们主要介绍了在常见的两种微服务框架 go-micro 和 Go-kit 中集成 etcd 作为服务注册与发现组件。go-micro 把分布式系统的各种细节抽象出来，方便我们进行组件切换。go-micro 的新版本工具集弃用了 Consul，建议使用 etcd。Go-kit 是 Go 语言工具包的集合，可以帮助你构建强大、可靠和可维护的微服务，不过 Go 目前还不支持泛型，interface 的定义相对来说也比较烦琐。</p>
+<p data-nodeid="469">本讲内容总结如下：</p>
+<p data-nodeid="2653" class="te-preview-highlight"><img src="https://s0.lgstatic.com/i/image6/M00/2C/97/CioPOWBlXdmAR6ozAAD6gNf9pMQ337.png" alt="Drawing 1.png" data-nodeid="2656"></p>
+
+<p data-nodeid="471">总的来说，两个微服务框架都支持方便地集成 etcd，但是微服务框架本身也有优缺点。通过两个常用的微服务框架集成 etcd 的案例学习，可以帮助你对 etcd 的使用有一个更深的理解，在此基础上自行封装适合业务场景的框架。</p>
+<p data-nodeid="472">最后，我们来做一个互动：你在项目中使用的是哪种服务发现与注册组件，又使用什么样的微服务框架呢？欢迎你在留言区和我分享。下一讲我们将介绍 etcd 在 Kubernetes 中如何保证容器的调度。</p></div>
+
+</body></html>

@@ -1,0 +1,1373 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>10 | 资源限制：如何通过 Cgroups 机制实现资源限制？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>10 | 资源限制：如何通过 Cgroups 机制实现资源限制？</h1><p data-nodeid="305914">上一课时，我们知道使用不同的 Namespace，可以实现容器中的进程看不到别的容器的资源，但是有一个问题你是否注意到？容器内的进程仍然可以任意地使用主机的 CPU 、内存等资源，如果某一个容器使用的主机资源过多，可能导致主机的资源竞争，进而影响业务。那如果我们想限制一个容器资源的使用（如 CPU、内存等）应该如何做呢？</p>
+
+
+
+<p data-nodeid="305215">这里就需要用到 Linux 内核的另一个核心技术cgroups。那么究竟什么是cgroups？我们应该如何使用cgroups？Docker 又是如何使用cgroups的？下面我带你一一解密。</p>
+<p data-nodeid="305216">首先我们来学习下什么是cgroups。</p>
+<h3 data-nodeid="305217">cgroups</h3>
+<p data-nodeid="305218">cgroups（全称：control groups）是 Linux 内核的一个功能，它可以实现限制进程或者进程组的资源（如 CPU、内存、磁盘 IO 等）。</p>
+<blockquote data-nodeid="306376">
+<p data-nodeid="306377" class="">在 2006 年，Google 的工程师（ Rohit Seth 和 Paul Menage 为主要发起人） 发起了这个项目，起初项目名称并不是cgroups，而被称为进程容器（process containers）。在 2007 年cgroups代码计划合入Linux 内核，但是当时在 Linux 内核中，容器（container）这个词被广泛使用，并且拥有不同的含义。为了避免命名混乱和歧义，进程容器被重名为cgroups，并在 2008 年成功合入 Linux 2.6.24 版本中。cgroups目前已经成为 systemd、Docker、Linux Containers（LXC） 等技术的基础。</p>
+</blockquote>
+<h4 data-nodeid="306378">cgroups 功能及核心概念</h4>
+
+
+<p data-nodeid="305223">cgroups 主要提供了如下功能。</p>
+<ul data-nodeid="305224">
+<li data-nodeid="305225">
+<p data-nodeid="305226">资源限制： 限制资源的使用量，例如我们可以通过限制某个业务的内存上限，从而保护主机其他业务的安全运行。</p>
+</li>
+<li data-nodeid="305227">
+<p data-nodeid="305228">优先级控制：不同的组可以有不同的资源（ CPU 、磁盘 IO 等）使用优先级。</p>
+</li>
+<li data-nodeid="305229">
+<p data-nodeid="305230">审计：计算控制组的资源使用情况。</p>
+</li>
+<li data-nodeid="305231">
+<p data-nodeid="305232">控制：控制进程的挂起或恢复。</p>
+</li>
+</ul>
+<p data-nodeid="305233">了解了  cgroups 可以为我们提供什么功能，下面我来看下 cgroups 是如何实现这些功能的。</p>
+<p data-nodeid="305234">cgroups功能的实现依赖于三个核心概念：子系统、控制组、层级树。</p>
+<ul data-nodeid="305235">
+<li data-nodeid="305236">
+<p data-nodeid="305237">子系统（subsystem）：是一个内核的组件，一个子系统代表一类资源调度控制器。例如内存子系统可以限制内存的使用量，CPU 子系统可以限制 CPU 的使用时间。</p>
+</li>
+<li data-nodeid="305238">
+<p data-nodeid="305239">控制组（cgroup）：表示一组进程和一组带有参数的子系统的关联关系。例如，一个进程使用了 CPU 子系统来限制 CPU 的使用时间，则这个进程和 CPU 子系统的关联关系称为控制组。</p>
+</li>
+<li data-nodeid="305240">
+<p data-nodeid="305241">层级树（hierarchy）：是由一系列的控制组按照树状结构排列组成的。这种排列方式可以使得控制组拥有父子关系，子控制组默认拥有父控制组的属性，也就是子控制组会继承于父控制组。比如，系统中定义了一个控制组 c1，限制了 CPU 可以使用 1 核，然后另外一个控制组 c2 想实现既限制 CPU 使用 1 核，同时限制内存使用 2G，那么 c2 就可以直接继承 c1，无须重复定义 CPU 限制。</p>
+</li>
+</ul>
+<p data-nodeid="305242">cgroups 的三个核心概念中，子系统是最核心的概念，因为子系统是真正实现某类资源的限制的基础。</p>
+<h3 data-nodeid="305243">cgroups 子系统实例</h3>
+<p data-nodeid="305244">下面我通过一个实例演示一下在 Linux 上默认都启动了哪些子系统。</p>
+<p data-nodeid="305245">我们先通过 mount 命令查看一下当前系统已经挂载的cgroups信息：</p>
+<pre class="lang-shell hljs" data-nodeid="305246"><code data-language="shell"><span class="hljs-meta">$</span><span class="bash"> sudo mount -t cgroup</span>
+cgroup on /sys/fs/cgroup/systemd type cgroup (rw,nosuid,nodev,noexec,relatime,seclabel,xattr,release_agent=/usr/lib/systemd/systemd-cgroups-agent,name=systemd)
+cgroup on /sys/fs/cgroup/net_cls,net_prio type cgroup (rw,nosuid,nodev,noexec,relatime,seclabel,net_prio,net_cls)
+cgroup on /sys/fs/cgroup/blkio type cgroup (rw,nosuid,nodev,noexec,relatime,seclabel,blkio)
+cgroup on /sys/fs/cgroup/pids type cgroup (rw,nosuid,nodev,noexec,relatime,seclabel,pids)
+cgroup on /sys/fs/cgroup/cpu,cpuacct type cgroup (rw,nosuid,nodev,noexec,relatime,seclabel,cpuacct,cpu)
+cgroup on /sys/fs/cgroup/perf_event type cgroup (rw,nosuid,nodev,noexec,relatime,seclabel,perf_event)
+cgroup on /sys/fs/cgroup/freezer type cgroup (rw,nosuid,nodev,noexec,relatime,seclabel,freezer)
+cgroup on /sys/fs/cgroup/devices type cgroup (rw,nosuid,nodev,noexec,relatime,seclabel,devices)
+cgroup on /sys/fs/cgroup/memory type cgroup (rw,nosuid,nodev,noexec,relatime,seclabel,memory)
+cgroup on /sys/fs/cgroup/cpuset type cgroup (rw,nosuid,nodev,noexec,relatime,seclabel,cpuset)
+cgroup on /sys/fs/cgroup/hugetlb type cgroup (rw,nosuid,nodev,noexec,relatime,seclabel,hugetlb)
+</code></pre>
+<blockquote data-nodeid="305247">
+<p data-nodeid="305248">我的操作系统版本为 CentOS7.8，内核为 3.10.0-1127.el7.x86_64 版本，不同内核版本cgroups子系统和使用方式可能略有差异。如果你对cgroups不是很熟悉，请尽量使用与我相同的内核环境操作。</p>
+</blockquote>
+<p data-nodeid="305249">通过输出，可以看到当前系统已经挂载了我们常用的cgroups子系统，例如 cpu、memory、pids 等我们常用的cgroups子系统。这些子系统中，cpu 和 memory 子系统是容器环境中使用最多的子系统，下面我对这两个子系统做详细介绍。</p>
+<h4 data-nodeid="305250">cpu 子系统</h4>
+<p data-nodeid="305251">我首先以 cpu 子系统为例，演示一下cgroups如何限制进程的 cpu 使用时间。由于cgroups的操作很多需要用到 root 权限，我们在执行命令前要确保已经切换到了 root 用户，以下命令的执行默认都是使用 root 用户。</p>
+<p data-nodeid="305252"><strong data-nodeid="305346">第一步：在 cpu 子系统下创建 cgroup</strong></p>
+<p data-nodeid="305253">cgroups的创建很简单，只需要在相应的子系统下创建目录即可。下面我们到 cpu 子系统下创建测试文件夹：</p>
+<pre class="lang-shell hljs" data-nodeid="305254"><code data-language="shell"><span class="hljs-meta">#</span><span class="bash"> mkdir /sys/fs/cgroup/cpu/mydocker</span>
+</code></pre>
+<p data-nodeid="305255">执行完上述命令后，我们查看一下我们新创建的目录下发生了什么？</p>
+<pre class="lang-shell hljs" data-nodeid="305256"><code data-language="shell"><span class="hljs-meta">#</span><span class="bash"> ls -l /sys/fs/cgroup/cpu/mydocker</span>
+total 0
+-rw-r--r--. 1 root root 0 Sep&nbsp; 5 09:19 cgroup.clone_children
+--w--w--w-. 1 root root 0 Sep&nbsp; 5 09:19 cgroup.event_control
+-rw-r--r--. 1 root root 0 Sep&nbsp; 5 09:19 cgroup.procs
+-rw-r--r--. 1 root root 0 Sep&nbsp; 5 09:19 cpu.cfs_period_us
+-rw-r--r--. 1 root root 0 Sep&nbsp; 5 09:19 cpu.cfs_quota_us
+-rw-r--r--. 1 root root 0 Sep&nbsp; 5 09:19 cpu.rt_period_us
+-rw-r--r--. 1 root root 0 Sep&nbsp; 5 09:19 cpu.rt_runtime_us
+-rw-r--r--. 1 root root 0 Sep&nbsp; 5 09:19 cpu.shares
+-r--r--r--. 1 root root 0 Sep&nbsp; 5 09:19 cpu.stat
+-r--r--r--. 1 root root 0 Sep&nbsp; 5 09:19 cpuacct.stat
+-rw-r--r--. 1 root root 0 Sep&nbsp; 5 09:19 cpuacct.usage
+-r--r--r--. 1 root root 0 Sep&nbsp; 5 09:19 cpuacct.usage_percpu
+-rw-r--r--. 1 root root 0 Sep&nbsp; 5 09:19 notify_on_release
+-rw-r--r--. 1 root root 0 Sep&nbsp; 5 09:19 tasks
+</code></pre>
+<p data-nodeid="305257">由上可以看到我们新建的目录下被自动创建了很多文件，其中 cpu.cfs_quota_us 文件代表在某一个阶段限制的 CPU 时间总量，单位为微秒。例如，我们想限制某个进程最多使用 1 核 CPU，就在这个文件里写入 100000（100000 代表限制 1 个核） ，tasks 文件中写入进程的 ID 即可（如果要限制多个进程 ID，在 tasks 文件中用换行符分隔即可）。</p>
+<p data-nodeid="305258">此时，我们所需要的 cgroup 就创建好了。对，就是这么简单。</p>
+<p data-nodeid="305259"><strong data-nodeid="305358">第二步：创建进程，加入 cgroup</strong></p>
+<p data-nodeid="305260">这里为了方便演示，我先把当前运行的 shell 进程加入 cgroup，然后在当前 shell 运行 cpu 耗时任务（这里利用到了继承，子进程会继承父进程的 cgroup）。</p>
+<p data-nodeid="305261">使用以下命令将 shell 进程加入 cgroup 中：</p>
+<pre class="lang-shell hljs" data-nodeid="305262"><code data-language="shell"><span class="hljs-meta">#</span><span class="bash"> <span class="hljs-built_in">cd</span> /sys/fs/cgroup/cpu/mydocker</span>
+<span class="hljs-meta">#</span><span class="bash"> <span class="hljs-built_in">echo</span> $$ &gt; tasks  </span>
+</code></pre>
+<p data-nodeid="305263">查看一下 tasks 文件内容：</p>
+<pre class="lang-shell hljs" data-nodeid="305264"><code data-language="shell"><span class="hljs-meta">#</span><span class="bash"> cat tasks</span>
+3485
+3543
+</code></pre>
+<p data-nodeid="306839">其中第一个进程 ID 为当前 shell 的主进程，也就是说，当前 shell 主进程为 3485。</p>
+<p data-nodeid="306840"><strong data-nodeid="306845">第三步：执行 CPU 耗时任务，验证 cgroup 是否可以限制 cpu 使用时间</strong></p>
+
+<p data-nodeid="305266">下面，我们使用以下命令制造一个死循环，来提升 cpu 使用率：</p>
+<pre class="lang-shell hljs" data-nodeid="305267"><code data-language="shell"><span class="hljs-meta">#</span><span class="bash"> <span class="hljs-keyword">while</span> <span class="hljs-literal">true</span>;<span class="hljs-keyword">do</span> <span class="hljs-built_in">echo</span>;<span class="hljs-keyword">done</span>;</span>
+</code></pre>
+<p data-nodeid="305268">执行完上述命令后，我们新打开一个 shell 窗口，使用 top -p 命令查看当前 cpu 使用率，-p 参数后面跟进程 ID，我这里是 3485。</p>
+<pre class="lang-shell hljs" data-nodeid="305269"><code data-language="shell"><span class="hljs-meta">$</span><span class="bash"> top -p 3485</span>
+top - 09:51:35 up 3 days, 22:00,&nbsp; 4 users,&nbsp; load average: 1.59, 0.58, 0.27
+Tasks:&nbsp; &nbsp;1 total,&nbsp; &nbsp;0 running,&nbsp; &nbsp;1 sleeping,&nbsp; &nbsp;0 stopped,&nbsp; &nbsp;0 zombie
+<span class="hljs-meta">%</span><span class="bash">Cpu(s):&nbsp; 9.7 us,&nbsp; 2.8 sy,&nbsp; 0.0 ni, 87.4 id,&nbsp; 0.0 wa,&nbsp; 0.0 hi,&nbsp; 0.0 si,&nbsp; 0.0 st</span>
+KiB Mem : 32779616 total, 31009780 free,&nbsp; &nbsp;495988 used,&nbsp; 1273848 buff/cache
+KiB Swap:&nbsp; &nbsp; &nbsp; &nbsp; 0 total,&nbsp; &nbsp; &nbsp; &nbsp; 0 free,&nbsp; &nbsp; &nbsp; &nbsp; 0 used. 31852336 avail Mem
+
+&nbsp; PID USER&nbsp; &nbsp; &nbsp; PR&nbsp; NI&nbsp; &nbsp; VIRT&nbsp; &nbsp; RES&nbsp; &nbsp; SHR S&nbsp; %CPU %MEM&nbsp; &nbsp; &nbsp;TIME+ COMMAND
+3485 root&nbsp; &nbsp; &nbsp; 20&nbsp; &nbsp;0&nbsp; 116336&nbsp; &nbsp;2852&nbsp; &nbsp;1688 S&nbsp; 99.7&nbsp; 0.0&nbsp; &nbsp;2:10.71 bash
+</code></pre>
+<p data-nodeid="305270">通过上面输出可以看到 3485 这个进程被限制到了只能使用 100 % 的 cpu，也就是 1 个核。说明我们使用 cgroup 来限制 cpu 使用时间已经生效。此时，执行 while 循环的命令行窗口可以使用 Ctrl+c 退出循环。</p>
+<p data-nodeid="305271">为了进一步证实 cgroup 限制 cpu 的准确性，我们修改 cpu 限制时间为 0.5 核，命令如下：</p>
+<pre class="lang-shell hljs" data-nodeid="305272"><code data-language="shell"><span class="hljs-meta">#</span><span class="bash"> <span class="hljs-built_in">cd</span> /sys/fs/cgroup/cpu/mydocker</span>
+<span class="hljs-meta">#</span><span class="bash"> <span class="hljs-built_in">echo</span> 50000 &gt; cpu.cfs_quota_us</span>
+</code></pre>
+<p data-nodeid="305273">同样使用上面的命令来制造死循环：</p>
+<pre class="lang-shell hljs" data-nodeid="305274"><code data-language="shell"><span class="hljs-meta">#</span><span class="bash"> <span class="hljs-keyword">while</span> <span class="hljs-literal">true</span>;<span class="hljs-keyword">do</span> <span class="hljs-built_in">echo</span>;<span class="hljs-keyword">done</span>;</span>
+</code></pre>
+<p data-nodeid="305275">保持当前窗口，新打开一个 shell 窗口，使用 top -p 参数查看 cpu 使用率：</p>
+<pre class="lang-shell hljs" data-nodeid="305276"><code data-language="shell"><span class="hljs-meta">$</span><span class="bash"> top -p 3485</span>
+top - 10:05:25 up 3 days, 22:14,&nbsp; 3 users,&nbsp; load average: 1.02, 0.43, 0.40
+Tasks:&nbsp; &nbsp;1 total,&nbsp; &nbsp;1 running,&nbsp; &nbsp;0 sleeping,&nbsp; &nbsp;0 stopped,&nbsp; &nbsp;0 zombie
+<span class="hljs-meta">%</span><span class="bash">Cpu(s):&nbsp; 5.0 us,&nbsp; 1.3 sy,&nbsp; 0.0 ni, 93.7 id,&nbsp; 0.0 wa,&nbsp; 0.0 hi,&nbsp; 0.0 si,&nbsp; 0.0 st</span>
+KiB Mem : 32779616 total, 31055676 free,&nbsp; &nbsp;450224 used,&nbsp; 1273716 buff/cache
+KiB Swap:&nbsp; &nbsp; &nbsp; &nbsp; 0 total,&nbsp; &nbsp; &nbsp; &nbsp; 0 free,&nbsp; &nbsp; &nbsp; &nbsp; 0 used. 31898216 avail Mem
+
+&nbsp; PID USER&nbsp; &nbsp; &nbsp; PR&nbsp; NI&nbsp; &nbsp; VIRT&nbsp; &nbsp; RES&nbsp; &nbsp; SHR S&nbsp; %CPU %MEM&nbsp; &nbsp; &nbsp;TIME+ COMMAND
+&nbsp;3485 root&nbsp; &nbsp; &nbsp; 20&nbsp; &nbsp;0&nbsp; 115544&nbsp; &nbsp;2116&nbsp; &nbsp;1664 R&nbsp; 50.0&nbsp; 0.0&nbsp; &nbsp;0:23.39 bash
+</code></pre>
+<p data-nodeid="305277">通过上面输出可以看到，此时 cpu 使用率已经被限制到了 50%，即 0.5 个核。<br>
+验证完 cgroup 限制 cpu，我们使用相似的方法来验证 cgroup 对内存的限制。</p>
+<h4 data-nodeid="305278">memroy 子系统</h4>
+<p data-nodeid="305279"><strong data-nodeid="305381">第一步：在 memory 子系统下创建 cgroup</strong></p>
+<pre class="lang-shell hljs" data-nodeid="305280"><code data-language="shell"><span class="hljs-meta">#</span><span class="bash"> mkdir /sys/fs/cgroup/memory/mydocker</span>
+</code></pre>
+<p data-nodeid="305281">同样，我们查看一下新创建的目录下发生了什么？</p>
+<pre class="lang-java hljs" data-nodeid="311728"><code data-language="java">total <span class="hljs-number">0</span>
+-rw-r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> cgroup.clone_children
+--w--w--w-. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> cgroup.event_control
+-rw-r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> cgroup.procs
+-rw-r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.failcnt
+--w-------. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.force_empty
+-rw-r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.kmem.failcnt
+-rw-r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.kmem.limit_in_bytes
+-rw-r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.kmem.max_usage_in_bytes
+-r--r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.kmem.slabinfo
+-rw-r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.kmem.tcp.failcnt
+-rw-r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.kmem.tcp.limit_in_bytes
+-rw-r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.kmem.tcp.max_usage_in_bytes
+-r--r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.kmem.tcp.usage_in_bytes
+-r--r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.kmem.usage_in_bytes
+-rw-r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.limit_in_bytes
+-rw-r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.max_usage_in_bytes
+-rw-r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.memsw.failcnt
+-rw-r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.memsw.limit_in_bytes
+-rw-r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.memsw.max_usage_in_bytes
+-r--r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.memsw.usage_in_bytes
+-rw-r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.move_charge_at_immigrate
+-r--r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.numa_stat
+-rw-r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.oom_control
+----------. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.pressure_level
+-rw-r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.soft_limit_in_bytes
+-r--r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.stat
+-rw-r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.swappiness
+-r--r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.usage_in_bytes
+-rw-r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> memory.use_hierarchy
+-rw-r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> notify_on_release
+-rw-r--r--. <span class="hljs-number">1</span> root root <span class="hljs-number">0</span> Sep&nbsp; <span class="hljs-number">5</span> <span class="hljs-number">10</span>:<span class="hljs-number">18</span> tasks
+</code></pre>
+<p data-nodeid="312281">其中 memory.limit_in_bytes 文件代表内存使用总量，单位为 byte。</p>
+<p data-nodeid="312282">例如，这里我希望对内存使用限制为 1G，则向 memory.limit_in_bytes 文件写入 1073741824，命令如下：</p>
+
+<pre class="lang-shell hljs" data-nodeid="311730"><code data-language="shell"><span class="hljs-meta">#</span><span class="bash"> <span class="hljs-built_in">cd</span> /sys/fs/cgroup/memory/mydocker</span>
+<span class="hljs-meta">#</span><span class="bash"> <span class="hljs-built_in">echo</span> 1073741824 &gt; memory.limit_in_bytes</span>
+</code></pre>
+<p data-nodeid="311731"><strong data-nodeid="311776">第二步：创建进程，加入 cgroup</strong><br>
+同样把当前 shell 进程 ID 写入 tasks 文件内：</p>
+<pre class="lang-shell hljs" data-nodeid="311732"><code data-language="shell"><span class="hljs-meta">#</span><span class="bash"> <span class="hljs-built_in">cd</span> /sys/fs/cgroup/memory/mydocker</span>
+<span class="hljs-meta">#</span><span class="bash"> <span class="hljs-built_in">echo</span> $$ &gt; tasks </span>
+</code></pre>
+<p data-nodeid="311733"><strong data-nodeid="311786">第三步，执行内存测试工具，申请内存</strong><br>
+这里我们需要借助一下工具 memtester，memtester 的安装这里不再详细介绍了。具体安装方式可以参考<a href="https://wilhelmguo.cn/blog/post/william/CentOS7-%E5%AE%89%E8%A3%85%E5%86%85%E5%AD%98%E6%B5%8B%E8%AF%95%E5%B7%A5%E5%85%B7-memtester" data-nodeid="311784">这里</a>。</p>
+<p data-nodeid="311734">安装好 memtester 后，我们执行以下命令：</p>
+<pre class="lang-shell hljs" data-nodeid="311735"><code data-language="shell"><span class="hljs-meta">#</span><span class="bash"> memtester 1500M 1</span>
+memtester version 4.2.2 (64-bit)
+Copyright (C) 2010 Charles Cazabon.
+Licensed under the GNU General Public License version 2 (only).
+
+pagesize is 4096
+pagesizemask is 0xfffffffffffff000
+want 1500MB (1572864000 bytes)
+got&nbsp; 1500MB (1572864000 bytes), trying mlock ...Killed
+</code></pre>
+<p data-nodeid="312751">该命令会申请 1500 M 内存，并且做内存测试。由于上面我们对当前 shell 进程内存限制为 1 G，当 memtester 使用的内存达到 1G 时，cgroup 便将 memtester 杀死。</p>
+<p data-nodeid="312752">上面最后一行的输出结果表示 memtester 想要 1500 M 内存，但是由于 cgroup 限制，达到了内存使用上限，被杀死了，与我们的预期一致。</p>
+
+<p data-nodeid="311737">我们可以使用以下命令，降低一下内存申请，将内存申请调整为 500M：</p>
+<pre class="lang-shell hljs" data-nodeid="311738"><code data-language="shell"><span class="hljs-meta">#</span><span class="bash"> memtester 500M 1</span>
+memtester version 4.2.2 (64-bit)
+Copyright (C) 2010 Charles Cazabon.
+Licensed under the GNU General Public License version 2 (only).
+
+pagesize is 4096
+pagesizemask is 0xfffffffffffff000
+want 500MB (524288000 bytes)
+got&nbsp; 500MB (524288000 bytes), trying mlock ...locked.
+Loop 1/1:
+&nbsp; Stuck Address&nbsp; &nbsp; &nbsp; &nbsp;: ok
+&nbsp; Random Value&nbsp; &nbsp; &nbsp; &nbsp; : ok
+&nbsp; Compare XOR&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;: ok
+&nbsp; Compare SUB&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;: ok
+&nbsp; Compare MUL&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;: ok
+&nbsp; Compare DIV&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;: ok
+&nbsp; Compare OR&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; : ok
+&nbsp; Compare AND&nbsp; &nbsp; &nbsp; &nbsp; &nbsp;: ok
+&nbsp; Sequential Increment: ok
+&nbsp; Solid Bits&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; : ok
+&nbsp; Block Sequential&nbsp; &nbsp; : ok
+&nbsp; Checkerboard&nbsp; &nbsp; &nbsp; &nbsp; : ok
+&nbsp; Bit Spread&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; : ok
+&nbsp; Bit Flip&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; : ok
+&nbsp; Walking Ones&nbsp; &nbsp; &nbsp; &nbsp; : ok
+&nbsp; Walking Zeroes&nbsp; &nbsp; &nbsp; : ok
+&nbsp; 8-bit Writes&nbsp; &nbsp; &nbsp; &nbsp; : ok
+&nbsp; 16-bit Writes&nbsp; &nbsp; &nbsp; &nbsp;: ok
+
+Done.
+</code></pre>
+<p data-nodeid="313213" class="">这里可以看到，此时 memtester 已经成功申请到 500M 内存并且正常完成了内存测试。<br>
+到此，我们讲解了cgroups的 cpu 和 memroy 子系统，如果你想了解更多的cgroups的知识和使用，可以参考 <a href="https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/7/html/resource_management_guide/chap-introduction_to_control_groups" data-nodeid="313219">Red Hat 官网</a>。</p>
+
+<h4 data-nodeid="315513" class="">删除 cgroups</h4>
+
+
+
+
+
+<p data-nodeid="311741">上面创建的cgroups如果不想使用了，直接删除创建的文件夹即可。</p>
+<p data-nodeid="311742">例如我想删除内存下的 mydocker 目录，使用以下命令即可：</p>
+<pre class="lang-shell hljs" data-nodeid="311743"><code data-language="shell"><span class="hljs-meta">#</span><span class="bash"> rmdir /sys/fs/cgroup/memory/mydocker/</span>
+</code></pre>
+<p data-nodeid="311744">学习了cgroups的使用方式，下面我带你了解一下 Docker 是如何使用cgroups的。</p>
+<h3 data-nodeid="311745">Docker 是如何使用cgroups的？</h3>
+<p data-nodeid="311746">首先，我们使用以下命令创建一个 nginx 容器：</p>
+<pre class="lang-shell hljs" data-nodeid="311747"><code data-language="shell">docker run -it -m=1g nginx
+</code></pre>
+<p data-nodeid="311748">上述命令创建并启动了一个 nginx 容器，并且限制内存为 1G。然后我们进入cgroups内存子系统的目录，使用 ls 命令查看一下该目录下的内容：</p>
+<pre class="lang-shell hljs" data-nodeid="311749"><code data-language="shell"><span class="hljs-meta">#</span><span class="bash"> ls -l /sys/fs/cgroup/memory</span>
+total 0
+-rw-r--r--.&nbsp; 1 root root 0 Sep&nbsp; 1 11:50 cgroup.clone_children
+--w--w--w-.&nbsp; 1 root root 0 Sep&nbsp; 1 11:50 cgroup.event_control
+-rw-r--r--.&nbsp; 1 root root 0 Sep&nbsp; 1 11:50 cgroup.procs
+-r--r--r--.&nbsp; 1 root root 0 Sep&nbsp; 1 11:50 cgroup.sane_behavior
+drwxr-xr-x.&nbsp; 3 root root 0 Sep&nbsp; 5 10:50 docker
+... 省略部分输出
+</code></pre>
+<p data-nodeid="311750">通过上面输出可以看到，该目录下有一个 docker 目录，该目录正是 Docker 在内存子系统下创建的。我们进入到 docker 目录下查看一下相关内容：</p>
+<pre class="lang-shell hljs" data-nodeid="311751"><code data-language="shell"><span class="hljs-meta">#</span><span class="bash"> <span class="hljs-built_in">cd</span> /sys/fs/cgroup/memory/docker</span>
+<span class="hljs-meta">#</span><span class="bash"> ls -l</span>
+total 0
+drwxr-xr-x. 2 root root 0 Sep&nbsp; 5 10:49 cb5c5391177b44ad87636bf3840ecdda83529e51b76a6406d6742f56a2535d5e
+-rw-r--r--. 1 root root 0 Sep&nbsp; 4 10:40 cgroup.clone_children
+--w--w--w-. 1 root root 0 Sep&nbsp; 4 10:40 cgroup.event_control
+-rw-r--r--. 1 root root 0 Sep&nbsp; 4 10:40 cgroup.procs
+... 省略部分输出
+-rw-r--r--. 1 root root 0 Sep&nbsp; 4 10:40 tasks
+</code></pre>
+<p data-nodeid="311752">可以看到 docker 的目录下有一个一串随机 ID 的目录，该目录即为我们上面创建的 nginx 容器的 ID。然后我们进入该目录，查看一下该容器的 memory.limit_in_bytes 文件的内容。</p>
+<pre class="lang-shell hljs" data-nodeid="311753"><code data-language="shell"><span class="hljs-meta">#</span><span class="bash"> <span class="hljs-built_in">cd</span> cb5c5391177b44ad87636bf3840ecdda83529e51b76a6406d6742f56a2535d5e</span>
+<span class="hljs-meta">#</span><span class="bash"> cat memory.limit_in_bytes</span>
+1073741824
+</code></pre>
+<p data-nodeid="311754">可以看到内存限制值正好为 1G。<br>
+事实上，Docker 创建容器时，Docker  会根据启动容器的参数，在对应的 cgroups 子系统下创建以容器 ID 为名称的目录, 然后根据容器启动时设置的资源限制参数, 修改对应的 cgroups 子系统资源限制文件, 从而达到资源限制的效果。</p>
+<h3 data-nodeid="311755">小结</h3>
+<p data-nodeid="311756">本课时我们讲解了什么是 cgroups，以及 cgroups 可以为我们提供哪些核心功能。其实 cgroups 不仅可以实现资源的限制，还可以为我们统计资源的使用情况，容器监控系统的数据来源也是 cgroups 提供的。</p>
+<p data-nodeid="311757">另外，请注意 cgroups 虽然可以实现资源的限制，但是不能保证资源的使用。例如，cgroups 限制某个容器最多使用 1 核 CPU，但不保证总是能使用到 1 核 CPU，当 CPU 资源发生竞争时，可能会导致实际使用的 CPU 资源产生竞争。</p>
+<p data-nodeid="315967">那么，你知道cgroups还有哪些子系统吗？思考后，把你的想法写在留言区。</p></div>
+
+</body></html>

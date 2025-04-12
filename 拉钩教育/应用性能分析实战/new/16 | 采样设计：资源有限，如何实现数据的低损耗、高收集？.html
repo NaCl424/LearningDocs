@@ -1,0 +1,1238 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>16 | 采样设计：资源有限，如何实现数据的低损耗、高收集？</title>
+<style type="text/css">.hljs{display:block;overflow-x:auto;padding:.5em;color:#383a42;background:#fafafa}.hljs-comment,.hljs-quote{color:#a0a1a7;font-style:italic}.hljs-doctag,.hljs-formula,.hljs-keyword{color:#a626a4}.hljs-deletion,.hljs-name,.hljs-section,.hljs-selector-tag,.hljs-subst{color:#e45649}.hljs-literal{color:#0184bb}.hljs-addition,.hljs-attribute,.hljs-meta-string,.hljs-regexp,.hljs-string{color:#50a14f}.hljs-built_in,.hljs-class .hljs-title{color:#c18401}.hljs-attr,.hljs-number,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-pseudo,.hljs-template-variable,.hljs-type,.hljs-variable{color:#986801}.hljs-bullet,.hljs-link,.hljs-meta,.hljs-selector-id,.hljs-symbol,.hljs-title{color:#4078f2}.hljs-emphasis{font-style:italic}.hljs-strong{font-weight:700}.hljs-link{text-decoration:underline}/*# sourceURL=/Users/young/Documents/Codes/Fun/lagou/public/atom-one-light.min.css*/</style><style type="text/css">/*
+ * Copyright (C) 2018 Drake, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+    --monospace: "JetBrains Mono", HYZhengYuan, "Fira Code", Menlo, "Ubuntu Mono", Consolas; /*code font*/
+    --text-font: var(--monospace); /*default font*/
+    --title-font: var(--monospace); /*title font*/
+
+    --text-color: #333333;
+    --bg-color: #ffffff;
+    --control-text-color: var(--text-color);
+    --meta-content-color: var(--text-color);
+    --active-file-border-color: var(--drake-accent);
+    --rawblock-edit-panel-bd: var(--code-block-bg-color);
+    --item-hover-bg-color: #E5E5E596;
+    --active-file-bg-color: var(--item-hover-bg-color);
+
+    --drake-accent: #e95f59;
+    --drake-highlight: #d63200;
+    --a-color: #036aca;
+    --variable-color: var(--drake-highlight);
+    --outline-active-color: var(--a-color);
+    --code-block-bg-color: #2b2b2b;
+    --code-block-color: #A9B7C6;
+    --title-color: #135ce0;
+    --blockquote-border-color: #b2aec5;
+    --blockquote-color: #595959;
+    --blockquote-bg-color: #fff9f9;
+    --strong-color: var(--title-color);
+    --h2-underline-color: var(--title-color);
+    --horizontal-divider-color: var(--title-color);
+    --height-light-color: var(--drake-highlight);
+    --height-light-border-color: var(--drake-highlight);
+    --yaml-color: #777777;
+    --yaml-bg-color: #f7f7f7;
+    --footnotes-bg-color: #3c3d3e;
+    --footnotes-highlight: #FFD760;
+    --table-border-color: #dfe2e5;
+    --table-header-bg-color: #f6f8fa;
+    --table-bg-color: var(--bg-color);
+    --table-n2-bg-color: #f6f8fa;
+    --input-bg-color: var(--item-hover-bg-color);
+    --btn-hover-bg-color: var(--item-hover-bg-color);
+    --checkbox-checked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M425.984 726.016l384-384-59.99-61.995-324.01 324.011-152.021-152.021L213.973 512zm384-598.016q36.01 0 61.013 25.984T896 213.974v596.01q0 34.005-25.003 59.99t-61.013 25.983h-596.01q-36.011 0-61.014-25.984t-25.003-59.989v-596.01q0-34.006 25.003-59.99T213.973 128h596.011z' fill='%2365b73b'/%3E%3C/svg%3E");
+    --checkbox-unchecked: url("data:image/svg+xml,%3Csvg class='icon' viewBox='0 0 1024 1024' xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cpath d='M810.667 213.333v597.334H213.333V213.333h597.334m0-85.333H213.333C166.4 128 128 166.4 128 213.333v597.334C128 857.6 166.4 896 213.333 896h597.334C857.6 896 896 857.6 896 810.667V213.333C896 166.4 857.6 128 810.667 128z' fill='%23333333'/%3E%3C/svg%3E");
+}
+
+html {
+    font-size: 15px;
+}
+
+body {
+    font-family: var(--text-font) !important;
+    color: var(--text-color);
+    -webkit-font-feature-settings: "liga" on, "calt" on;
+    -webkit-font-smoothing: subpixel-antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: 0;
+    margin: 0;
+    overflow-x: hidden;
+    line-height: 1.8rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+#write {
+    background-image: linear-gradient(
+            90deg
+            ,rgba(60,10,30,.04) 3%,transparent 0),linear-gradient(
+            1turn
+            ,rgba(60,10,30,.04) 3%,transparent 0);
+    background-size: 20px 20px;
+    background-position: 50%;
+}
+
+/*code block*/
+#write .md-fences {
+    font-size: 1rem;
+    padding: 0.5rem !important;
+    border-radius: 2px;
+    word-wrap: normal;
+    background-color: var(--code-block-bg-color);
+    color: var(--code-block-color);
+    border: none;
+}
+
+/*code snippet*/
+#write code, tt {
+    border-radius: 2px;
+    color: var(--drake-highlight);
+}
+
+/*variable*/
+var {
+    color: var(--variable-color);
+    font-weight: bold;
+}
+
+/*raw block*/
+.md-rawblock-control:not(.md-rawblock-tooltip) {
+    border-radius: 2px 0 2px 2px;
+    padding: 0.2rem !important;
+}
+.md-rawblock:hover > .md-rawblock-container {
+    background: none;
+}
+.md-rawblock-input {
+    font-size: 1rem;
+}
+.md-rawblock-tooltip-btn:hover {
+    background: none;
+}
+.md-rawblock:hover > .md-rawblock-tooltip {
+    border-radius: 2px 2px 0 0;
+    margin-bottom: 2px !important;
+}
+.md-rawblock-tooltip.md-rawblock-control {
+    border-radius: 2px 2px 0 0;
+    color: var(--code-block-color);
+}
+.md-rawblock-tooltip-name {
+    color: var(--code-block-color);
+    opacity: 1;
+}
+
+/*quote block*/
+blockquote:before {
+    display: block;
+    position: absolute;
+    content: '';
+    width: 4px;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background-color: var(--blockquote-border-color);
+    border-radius: 2px;
+}
+
+blockquote {
+    color: var(--blockquote-color);
+    border-radius: 2px;
+    padding: 10px 16px;
+    background-color: var(--blockquote-bg-color);
+    position: relative;
+    border-left: none;
+}
+
+#write strong {
+    color: var(--strong-color);
+    font-weight: bold;
+}
+#write blockquote strong {
+    color: var(--blockquote-color);
+}
+
+/*link*/
+#write a {
+    color: var(--a-color);
+    text-decoration: none;
+}
+#write a .md-plain, .md-htmlblock-container a:hover {
+    border-bottom: .1rem solid var(--a-color);
+}
+[md-inline=link] a {
+    margin: 0 .2rem;
+}
+a:any-link {
+    color: var(--a-color);
+}
+
+img {
+    border-left: none;
+    border-right: none;
+    vertical-align: baseline;
+    border-radius: 2px;
+}
+
+#write {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 30px 100px;
+}
+#typora-source .CodeMirror-lines {
+    max-width: 1200px;
+}
+
+#write p {
+    word-spacing: .05rem;
+}
+
+#write > ul:first-child,
+#write > ol:first-child {
+    margin-top: 30px;
+}
+
+body > *:first-child {
+    margin-top: 0 !important;
+}
+
+body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: var(--title-font);
+    position: relative;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    font-weight: bold;
+    cursor: text;
+    color: var(--title-color);
+}
+
+h3.md-focus:before, h4.md-focus:before, h5.md-focus:before, h6.md-focus:before {
+    visibility: hidden;
+}
+
+h1 {
+    font-size: 1.6rem;
+    text-align: center;
+    margin-top: 0;
+}
+
+h2.md-end-block.md-heading {
+    font-size: 1.6rem;
+    display: inline-block;
+}
+
+h2.md-end-block.md-heading:after {
+    display: block;
+    content: '';
+    height: 2px;
+    margin-top: 4px;
+    background-color: var(--h2-underline-color);
+    border-radius: 2px;
+}
+
+h3 {
+    font-size: 1.4rem;
+}
+
+h4 {
+    font-size: 1.2rem;
+}
+
+h5 {
+    font-size: 1rem;
+}
+
+h6 {
+    font-size: 1rem;
+}
+
+h1:hover a.anchor,
+h2:hover a.anchor,
+h3:hover a.anchor,
+h4:hover a.anchor,
+h5:hover a.anchor,
+h6:hover a.anchor {
+    text-decoration: none;
+}
+
+h1 tt,
+h1 code {
+    font-size: inherit !important;
+}
+
+h2 tt,
+h2 code {
+    font-size: inherit !important;
+}
+
+h3 tt,
+h3 code {
+    font-size: inherit !important;
+}
+
+h4 tt,
+h4 code {
+    font-size: inherit !important;
+}
+
+h5 tt,
+h5 code {
+    font-size: inherit !important;
+}
+
+h6 tt,
+h6 code {
+    font-size: inherit !important;
+}
+
+blockquote,
+ul,
+ol,
+dl,
+table {
+    margin: 0.8em 0;
+}
+p {
+    margin: 0;
+}
+
+li > ol,
+li > ul {
+    margin: 0 0;
+}
+
+hr {
+    height: 2px;
+    padding: 0;
+    margin: 16px 0;
+    background-color: var(--horizontal-divider-color);
+    border: 0 none;
+    overflow: hidden;
+    box-sizing: content-box;
+}
+
+body > h2:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h1:first-child + h2 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+body > h3:first-child,
+body > h4:first-child,
+body > h5:first-child,
+body > h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1,
+a:first-child h2,
+a:first-child h3,
+a:first-child h4,
+a:first-child h5,
+a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1 p,
+h2 p,
+h3 p,
+h4 p,
+h5 p,
+h6 p {
+    margin-top: 0;
+}
+
+li p.first {
+    display: inline-block;
+}
+
+ul, ol {
+    padding-inline-start: 2em;
+}
+
+ul:first-child,
+ol:first-child {
+    margin-top: 0;
+}
+
+ul:last-child,
+ol:last-child {
+    margin-bottom: 0;
+}
+
+table {
+    padding: 0;
+    word-break: initial;
+    background-color: var(--table-bg-color);
+}
+table tr {
+    border-top: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 0;
+}
+table th {
+    font-weight: bold;
+    border: .1em solid var(--table-border-color);
+    border-bottom: 0;
+    margin: 0;
+    padding: 6px 13px;
+}
+table td {
+    border: .1em solid var(--table-border-color);
+    margin: 0;
+    padding: 6px 13px;
+}
+table thead {
+    background-color: var(--table-header-bg-color);
+}
+table tr:nth-child(2n) {
+    background-color: var(--table-n2-bg-color);
+}
+table tr th:first-child,
+table tr td:first-child {
+    margin-top: 0;
+}
+table tr th:last-child,
+table tr td:last-child {
+    margin-bottom: 0;
+}
+
+#write em {
+    padding: 0 5px 0 2px;
+}
+
+/* height light */
+#write mark {
+    border: .1em solid var(--height-light-border-color);
+    color: var(--height-light-color);
+    background-color: transparent;
+    padding: .1rem .5rem;
+    border-radius: 2rem;
+    margin: 0 .2rem;
+    font-size: .95rem;
+}
+
+/*shortcut*/
+kbd {
+    border: .1em solid #5b5b5e;
+    background: transparent;
+    color: var(--text-color);
+    margin: 0 .4rem;
+    font-size: .95rem;
+    padding: .3em .4em;
+    border-radius: .4em;
+    vertical-align: top;
+    box-shadow: .1em .1em .2em rgba(0, 0, 0, 0.3);
+}
+
+#write del {
+    padding: 1px 2px;
+}
+
+.md-task-list-item > input {
+    margin-left: -1.3em;
+}
+
+@media print {
+    html {
+        font-size: 12px;
+    }
+
+    table,
+    pre {
+        page-break-inside: avoid;
+    }
+
+    pre {
+        word-wrap: break-word;
+    }
+}
+
+/*YAML*/
+#write pre.md-meta-block {
+    padding: 1rem;
+    font-size: 1rem;
+    background-color: var(--yaml-bg-color);
+    border: 0;
+    border-radius: 2px;
+    color: var(--yaml-color);
+    margin-top: 0 !important;
+}
+
+.mathjax-block > .code-tooltip {
+    bottom: .375rem;
+}
+
+#write > h3.md-focus:before {
+    left: -1.5625rem;
+    top: .375rem;
+}
+
+#write > h4.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h5.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+#write > h6.md-focus:before {
+    left: -1.5625rem;
+    top: .285714286rem;
+}
+
+.md-image > .md-meta {
+    border-radius: 2px;
+    font-family: initial;
+    padding: 2px 0 0 4px;
+    color: inherit;
+}
+
+.md-tag {
+    color: inherit;
+}
+
+.md-toc {
+    margin-top: 20px;
+    padding-bottom: 20px;
+}
+
+.typora-quick-open-item {
+    font-size: 1rem !important;
+    height: 50px;
+    padding-left: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+#typora-quick-open {
+    box-shadow: 0 0 8px #00000045;
+    padding: 0;
+}
+
+.ty-quick-open-category.ty-has-prev .ty-quick-open-category-title {
+    border-top: none;
+}
+
+#typora-quick-open-input {
+    margin: 8px;
+    box-shadow: none;
+    border-radius: 2px;
+}
+
+#typora-quick-open-input input {
+    font-size: 1rem;
+    box-shadow: none;
+    padding-top: 2px;
+    padding-left: 10px;
+    padding-right: 10px;
+    line-height: 32px;
+    max-height: 32px;
+    border: none;
+}
+
+.modal-dialog#typora-quick-open {
+    border-radius: 8px;
+}
+
+.ty-quick-open-category-title {
+    padding-left: 8px;
+    color: #BEBEBE;
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+.typora-quick-open-item-path {
+    font-size: 0.8rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+}
+
+/*search input*/
+.form-control {
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+#md-searchpanel .btn {
+    border-radius: 2px;
+}
+
+#search-panel-replaceall-btn {
+    padding-right: 5px !important;
+    text-align: center !important;
+}
+
+#search-panel-replace-btn {
+    text-align: center !important;
+}
+
+#md-searchpanel input {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+.searchpanel-search-option-btn {
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+}
+
+.searchpanel-search-option-btn.active {
+    background: var(--text-color);
+    color: var(--bg-color);
+}
+
+.form-control:focus {
+    box-shadow: none;
+}
+
+#md-notification:before {
+    top: 10px;
+}
+
+/** focus mode */
+.on-focus-mode blockquote {
+    border-left-color: rgba(85, 85, 85, 0.12);
+}
+
+header,
+.context-menu,
+.megamenu-content,
+footer {
+    font-family: initial;
+}
+
+/*sidebar*/
+.file-node-content:hover .file-node-icon,
+.file-node-content:hover .file-node-open-state {
+    visibility: visible;
+}
+
+#typora-sidebar {
+    font-size: 1.1rem;
+}
+
+.sidebar-tabs {
+    border-bottom: none;
+}
+
+.file-list-item-summary, .file-list-item-parent-loc, .file-list-item-time, .file-list-item-summary {
+    font-size: 0.9rem !important;
+    font-family: var(--text-font);
+}
+
+.file-list-item-file-ext-part {
+    display: none;
+}
+
+.outline-item {
+    font-size: 1rem;
+}
+
+/*footnotes mark*/
+#write .md-footnote {
+    background-color: inherit;
+    color: var(--drake-highlight);
+    font-size: 0.9rem;
+    border-radius: 0.9rem;
+    padding-left: 0;
+}
+
+#write .md-footnote:before {
+    content: "[";
+}
+
+#write .md-footnote:after {
+    content: "]";
+}
+
+/*footnotes content*/
+.md-hover-tip .code-tooltip-content {
+    border-radius: 2px;
+}
+
+/*footnotes title*/
+span.md-def-name {
+    padding-right: 3ch;
+    padding-left: 0;
+    position: relative;
+    font-weight: normal;
+}
+
+/*footnotes desc*/
+.footnotes {
+    font-size: 1rem;
+    font-weight: normal;
+    color: var(--text-color);
+    position: relative;
+}
+
+/*footnotes tooltip text*/
+.code-tooltip-content .md-plain {
+    font-size: 0.9rem;
+    font-family: inherit;
+}
+
+.code-tooltip-content code {
+    padding: 0 2px;
+    font-family: inherit;
+    color: var(--footnotes-highlight);
+    background-color: inherit;
+}
+
+.code-tooltip-content a {
+    color: var(--footnotes-highlight);
+}
+
+div.code-tooltip-content {
+    box-shadow: 0 0 8px #00000045;
+    background: var(--footnotes-bg-color);
+}
+
+.footnotes {
+    opacity: 1;
+}
+
+.md-def-name:after {
+    content: ". ^";
+    color: var(--text-color);
+}
+
+.md-def-footnote .md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-def-name:before {
+    content: "";
+    color: var(--text-color);
+    position: absolute;
+}
+
+.md-content.md-url, .md-def-content.md-def-url.md-auto-disp {
+    text-decoration: none;
+    border-bottom: .1rem solid var(--text-color);
+}
+
+.CodeMirror-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.file-list-item-summary {
+    font-size: 1em;
+}
+
+.pin-outline #outline-content .outline-active strong, .pin-outline .outline-active {
+    font-weight: 500;
+    color: var(--outline-active-color);
+}
+
+.file-list-item.active {
+    border-left: 4px solid var(--drake-accent);
+}
+
+#md-searchpanel .btn:not(.close-btn):hover {
+    box-shadow: none;
+    background: var(--btn-hover-bg-color);
+}
+
+/*checkbox*/
+#write input[type=checkbox] {
+    opacity: 0;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+    margin-top: 0;
+    top: 0;
+}
+
+#write .ul-list li.md-task-list-item.task-list-done::before {
+    content: "";
+    background: var(--checkbox-checked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+#write .ul-list li.md-task-list-item.task-list-not-done::before {
+    content: "";
+    background: var(--checkbox-unchecked) 0 0 no-repeat;
+    background-size: 100%;
+    display: inline-block;
+    position: absolute;
+    height: 1.6rem;
+    width: 1.6rem;
+    margin-left: -2em;
+}
+
+/*insert table*/
+.btn {
+    border-radius: 2px;
+}
+
+.modal-content {
+    border-radius: 8px;
+}
+
+.btn-primary:hover, .btn-primary:active {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--drake-highlight);
+}
+
+.btn-primary {
+    background-color: transparent;
+    color: var(--drake-highlight);
+}
+
+.btn-default {
+    background-color: transparent;
+}
+
+.btn:active {
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.modal-footer {
+    border-top: none;
+}
+
+#table-insert-col, #table-insert-row {
+    background: var(--input-bg-color);
+    border-radius: 2px;
+}
+
+/*preference panel*/
+#megamenu-content {
+    background-image: none !important;
+    background-color: var(--bg-color);
+}
+#top-titlebar {
+    height: inherit;
+    background-color: var(--bg-color);
+}
+#megamenu-menu-sidebar {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+.long-btn {
+    width: inherit;
+    min-width: 300px;
+    border: 1px solid var(--text-color);
+    border-radius: 6px;
+}
+.megamenu-menu-panel h1 {
+    margin-bottom: 3rem;
+    text-align: left;
+}
+.megamenu-menu-panel h1, .megamenu-menu-panel h2 {
+    font-weight: normal;
+}
+#recent-file-panel-search-input {
+    height: 45px;
+    border: none;
+    border-bottom: 1px solid var(--text-color);
+    padding-left: 8px;
+}
+#recent-file-panel-search-input::placeholder {
+    color: var(--text-color);
+    opacity: .5;
+}
+.megamenu-menu-header {
+    border-bottom: none;
+}
+#recent-file-panel-action-btn {
+    background: none;
+    border: none;
+}
+#recent-file-panel-action-btn-container {
+    float: none;
+    display: inline-block;
+}
+#top-titlebar .toolbar-icon.btn.hover, #top-titlebar .toolbar-icon.btn:hover {
+    background-color: var(--btn-hover-bg-color);
+    color: var(--text-color);
+}
+.megamenu-menu-panel .btn:hover {
+    background-color: var(--btn-hover-bg-color) !important;
+    color: var(--text-color);
+}
+#recent-file-panel tbody tr:nth-child(2n-1),
+.megamenu-menu-panel table thead,
+.megamenu-menu-panel table tr {
+    background-color: transparent;
+}
+.megamenu-menu-panel table {
+    font-weight: normal;
+}
+#megamenu-back-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+}
+.megamenu-menu-header #megamenu-menu-header-title {
+    color: var(--text-color);
+}
+header, .context-menu, .megamenu-content, footer {
+    font-family: var(--text-font);
+}
+.ty-preferences select {
+    padding-left: 2px;
+}
+.preference-item-hint {
+    font-size: 14px;
+}
+a.ty-link {
+    color: var(--a-color);
+    margin: 0 .2rem;
+}
+
+/**
+    code render
+    Name: IntelliJ IDEA darcula theme
+    From IntelliJ IDEA by JetBrains
+ */
+.cm-s-inner.CodeMirror {
+    background: var(--code-block-bg-color);
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-meta {
+    color: #BBB529;
+}
+
+.cm-s-inner span.cm-number {
+    color: #6897BB;
+}
+
+.cm-s-inner span.cm-keyword {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-def {
+    color: #FFD760;
+}
+
+.cm-s-inner span.cm-variable {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-2 {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-variable-3 {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-type {
+    color: #AABBCC;
+}
+
+.cm-s-inner span.cm-property {
+    color: #FFC66D;
+}
+
+.cm-s-inner span.cm-operator {
+    color: var(--code-block-color);
+}
+
+.cm-s-inner span.cm-string {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-string-2 {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-comment {
+    color: #787878;
+}
+
+.cm-s-inner span.cm-link {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-atom {
+    color: #CC7832;
+}
+
+.cm-s-inner span.cm-error {
+    color: #BC3F3C;
+}
+
+.cm-s-inner span.cm-tag {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-quote {
+    color: #a6e22e;
+}
+
+.cm-s-inner span.cm-attribute {
+    color: #9876AA;
+}
+
+.cm-s-inner span.cm-qualifier {
+    color: #6A8759;
+}
+
+.cm-s-inner span.cm-bracket {
+    color: #E8BF6A;
+}
+
+.cm-s-inner span.cm-builtin {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-special {
+    color: #FF9E59;
+}
+
+.cm-s-inner span.cm-matchhighlight {
+    color: #FFFFFF;
+    background-color: rgba(50, 89, 48, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner span.cm-searching {
+    color: #FFFFFF;
+    background-color: rgba(61, 115, 59, .7);
+    font-weight: normal;
+}
+
+.cm-s-inner .CodeMirror-gutters {
+    border-right: 1px solid rgba(120, 120, 120, 0.3);
+}
+
+.cm-s-inner .CodeMirror-linenumber {
+    color: #585b5d;
+}
+
+.cm-s-inner .CodeMirror-matchingbracket {
+    background-color: #3B514D;
+    color: #FFEF28 !important;
+}
+
+.cm-s-inner .CodeMirror-selected {
+    background: #214283 !important;
+}
+
+.cm-s-inner .CodeMirror-selectedtext {
+    background: #214283 !important;
+}
+
+.cm-s-typora-default .CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-overlay.CodeMirror-selectedtext {
+    background: var(--select-text-bg-color) !important;
+}
+
+.cm-s-inner div.CodeMirror-cursor {
+    border-left: 1px solid var(--code-block-color);
+}/*# sourceURL=/Users/didi/Documents/Codes/Fun/lagou/public/drake-juejin.css*/</style></head>
+<body>
+  <div id="write"><h1>16 | 采样设计：资源有限，如何实现数据的低损耗、高收集？</h1><p data-nodeid="1">我们都知道，APM 数据是海量的，项目初期很难申请到足够的资源，让监控服务去承接这些海量的监控数据，所以就需要对海量数据进行采样了。</p>
+<p data-nodeid="2">但开启采样后，免不了会带来数据丢失。如果排查故障问题时，发现丢弃的监控数据过多，就会让 APM 建设的口碑越来越差，使用的人越来越少，这样资源就更申请不到了，从而最后导致了 APM 的形同虚设。</p>
+<p data-nodeid="3">那如何平衡采样、数据、资源的关系呢？这时候就需要我们来设计采样策略。今天我会分享以下四种采样策略，通过对课程的学习，让你在建设 APM 的数据时，可以尽最大可能地收集到用户想要的数据。</p>
+<p data-nodeid="835" class=""><img src="https://s0.lgstatic.com/i/image6/M00/40/77/CioPOWCk4VqAXw9tAABoA92m-1M235.png" alt="Drawing 0.png" data-nodeid="838"></p>
+
+<h3 data-nodeid="5">百分比采样策略</h3>
+<p data-nodeid="6">百分比采样策略是最常见的采样策略。高负载项目产生的 APM 数据过多，监控压力过大时，默认的止损策略就会<strong data-nodeid="119">对这些高负载项目开启百分比采样</strong>。</p>
+<p data-nodeid="7">策略的实现也非常简单。明细数据中的分布式链路数据，我们可以根据 TraceId 进行哈希方法的运算，从而得到 hashCode；然后将 hashCode 与 100 取余，获取 0~99 的任意整数。例如，我们的采样百分比为 10%，当生成 TraceId 或是发送监控数据时，通过放行 0~9 的取余数据，即可实现百分比采样策略。</p>
+<p data-nodeid="8">这里需要注意的是采样时机。</p>
+<ul data-nodeid="9">
+<li data-nodeid="10">
+<p data-nodeid="11">如果在生成 TraceId 时进行采样，可能需要线程本地变量将任务线程标识为丢弃的数据。这样不仅可以减低服务端的负载，还可以减轻客户端的负载，但其实现成本相对较高。</p>
+</li>
+<li data-nodeid="12">
+<p data-nodeid="13">另外如果采样的时机在“发送监控数据”时，这样的采样方案只能对 APM 集群进行减负。</p>
+</li>
+</ul>
+<p data-nodeid="14">基于固定的百分比采样策略适用于以下场景。</p>
+<ul data-nodeid="15">
+<li data-nodeid="16">
+<p data-nodeid="17"><strong data-nodeid="132">第一个场景是针对底层的基础服务</strong></p>
+</li>
+</ul>
+<p data-nodeid="18">这些服务属于服务集群的最底层，他们的 APM 监控数据是最多的。通过对底层服务设置百分比采样策略，可以极大减轻监控集群的负载；而且底层服务的监控数据由于采样被丢弃，基本不会影响定位问题的效率。</p>
+<p data-nodeid="19">比如底层服务的链路数据丢失，链路视图只会缺少最底层的链路节点监控数据，不会造成整个分布式链路的“断链”。所以你的监控集群出现负载压力时，建议对底层服务配置百分比采样率为 0%~10%。</p>
+<ul data-nodeid="20">
+<li data-nodeid="21">
+<p data-nodeid="22"><strong data-nodeid="140">第二个场景是上线前的压测报告</strong></p>
+</li>
+</ul>
+<p data-nodeid="23">RD 在上线需求功能前，会进行压测报告的制定。根据对<a href="https://kaiwu.lagou.com/course/courseInfo.htm?courseId=729#/detail/pc?id=7060&amp;fileGuid=xxQTRXtVcqtHK6j8" data-nodeid="144">“11 | 资源节点树：通过 Sentinel 无侵入实现流量链生成规则”</a>的学习，我们得知目前市场上的 APM 系统的侵入度越来越低，以至只有线上和集成环境才会部署 APM 监控，而本地的开发是无感知的。<br>
+所以当我们开发一些高性能功能代码，如使用多线程、事件总线等高阶技术时，我们需要进行不同维度的百分比采样策略的压测方案，以证明 APM 系统对高阶技术的支持情况。</p>
+<blockquote data-nodeid="24">
+<p data-nodeid="25">这里我建议百分比采样的三个维度是 0%、20%、100%。</p>
+</blockquote>
+<ul data-nodeid="26">
+<li data-nodeid="27">
+<p data-nodeid="28"><strong data-nodeid="152">第三个场景是大促场景</strong></p>
+</li>
+</ul>
+<p data-nodeid="29">在春节投放广告、双十一大促等场景，为了尽全力释放出集群的能力，并且屏蔽在极端流量下 APM 系统对应用服务集群可能带来的影响，通过关闭部分监控功能，实现 0% 的百分比采样策略。</p>
+<h3 data-nodeid="30">链路特征采样策略</h3>
+<p data-nodeid="31">百分比采样策略因为有这极强的鲁棒性，所以是配置策略后，很可能造成问题数据无法收集这一问题。为了解决这一问题，我们可以在不了解业务的情况下，针对链路的特征设置采样配置。</p>
+<p data-nodeid="32">关于设计链路的标签，我们可以从几个维度去进行标签的规划。</p>
+<ul data-nodeid="33">
+<li data-nodeid="34">
+<p data-nodeid="35">Span 的耗时时间：通过耗时时间，可以判断应用服务内部是否存在执行时间过长的代码块，进而反映是否存在任务线程执行过长的情况。</p>
+</li>
+<li data-nodeid="36">
+<p data-nodeid="37">Span 的类型和数量：对 Span 的类型和数量打标记。</p>
+</li>
+<li data-nodeid="38">
+<p data-nodeid="39">Span 是否存在异常：顾名思义，就是检查链路中的所有 Span 是否存在异常。</p>
+</li>
+</ul>
+<p data-nodeid="40">通过对以上三个标签策略的组合采样，就可以将百分比采样的效果进行优化。</p>
+<p data-nodeid="41">基于链路特征的采样策略，适用于以下场景。</p>
+<ul data-nodeid="42">
+<li data-nodeid="43">
+<p data-nodeid="44"><strong data-nodeid="165">慢查链路场景</strong></p>
+</li>
+</ul>
+<p data-nodeid="45">通过检查链路中是否存在查询 DB 时间过长的 Span 的采样策略，就可以实现 100% 收集慢查询数据。在数据上报到收集端后，通过 TopN 的采样存储模计算，就可以完成数据的报警和展示。</p>
+<ul data-nodeid="46">
+<li data-nodeid="47">
+<p data-nodeid="48"><strong data-nodeid="170">链路优化场景</strong></p>
+</li>
+</ul>
+<p data-nodeid="49">可以设计一个监控数据的 Span 数量超过一定数量时，就必须上报到后端收集器，比如链路数据中存在超过 200 的调用远端的 Span。因为当一个任务线程存在调用远端的次数非常多时，就需要考虑是否存在循环调用的场景，可以通过批量接口进行优化。</p>
+<ul data-nodeid="50">
+<li data-nodeid="51">
+<p data-nodeid="52"><strong data-nodeid="177">异常链路场景</strong><br>
+通过全部采集链路数据中存在异常的 Span 的监控数据，当数据发送到收集端，就可以完成报警和稳定性数据精准计算。</p>
+</li>
+</ul>
+<h3 data-nodeid="53">业务特征采样策略</h3>
+<p data-nodeid="54">链路特征采样策略乍看起来很不错，不用理解业务，就可以实现问题链路的全量数据采集。但现实远非这么简单，就比如要实现新上线功能的监控数据全部采集，链路特征都是基于应用服务集群中的单个应用设置采样策略，所以无法做到采集新功能的监控设计。</p>
+<p data-nodeid="55">这时就需要设计业务特征采样策略，来解决这些更偏向于业务的监控采样难题了。</p>
+<p data-nodeid="56">业务特征相对于链路特征更加具象化，让原本使用抽象的<strong data-nodeid="190">链路特征</strong>描述监控数据，转化为更具体、更易理解的<strong data-nodeid="191">业务特征</strong>来描述监控数据。</p>
+<p data-nodeid="57">好处显而易见，即最大程度地将采样策略赋能于一线开发人员，让所有采集规则都有兜底策略，这也是企业落地采样策略的关键所在。毕竟企业级产品要解决的是面面俱到的问题，确保当前有限的通用采样策略无法满足时，可以通过业务特征的采样策略保证 APM 监控数据顺利采集。</p>
+<p data-nodeid="58"><strong data-nodeid="196">【如何通过技术框架提取业务特征？】</strong></p>
+<p data-nodeid="59">那如何提取业务特征呢？可以通过驱动业务开展的四大技术框架进行设计和落地。</p>
+<ul data-nodeid="60">
+<li data-nodeid="61">
+<p data-nodeid="62">实现与用户交互需求的<strong data-nodeid="202">HTTP 调用框架</strong></p>
+</li>
+<li data-nodeid="63">
+<p data-nodeid="64">在服务集群中实现应用服务之间实时调用功能的<strong data-nodeid="207">RPC 调用框架</strong></p>
+</li>
+<li data-nodeid="65">
+<p data-nodeid="66">实现发布-订阅功能的<strong data-nodeid="212">消息队列框架</strong></p>
+</li>
+<li data-nodeid="67">
+<p data-nodeid="68">实现定时执行任务功能的<strong data-nodeid="217">任务调度框架</strong></p>
+</li>
+</ul>
+<p data-nodeid="69">基于业务特征的采样策略是根据业务流量的特征进行采样，如我们使用最多的 HTTP 调用框架，业务特征是从用户操作浏览器页面生成的请求信息中获取，筛选特征方式可以是 request.path（用户请求路径）或是 request.header.attribute（请求头中的埋点属性）等。</p>
+<p data-nodeid="70">通过匹配新功能的用户请求路径，如采集用户在交易场景中的下单接口的请求路径。当链路满足以上业务特征时，可以优先全量采集。</p>
+<p data-nodeid="71">其余 RPC 调用框架、消息队列框架、任务调度框架也可以根据以上方案去实现。</p>
+<p data-nodeid="72">需要注意的是，要实现集群维度的全量采集，需要在链路传输上将“强制采用字段”这一设置开启。以 SkyWalking 的链路传输协议为例，协议中的第一个属性为采样标记，将采样标记设置开启后，此任务线程引起下游的所有监控数据都会被最高优先级的采集到后端存储。</p>
+<p data-nodeid="73"><strong data-nodeid="225">基于业务特征采样策略适用于如下场景：</strong></p>
+<ul data-nodeid="74">
+<li data-nodeid="75">
+<p data-nodeid="76">链路特征采样策略无法满足的采样场景；</p>
+</li>
+<li data-nodeid="77">
+<p data-nodeid="78">新功能上线后，建议新功能最下游的应用服务或是面向用户交互的应用服务，开启新功能强制采样 15 天；</p>
+</li>
+<li data-nodeid="79">
+<p data-nodeid="80">老功能重构，初步梳理上游依赖。</p>
+</li>
+</ul>
+<p data-nodeid="81">前面三种最常见的采样策略我们学习完了，你可能会发现一个问题：那就是一旦系统出现问题，已有的采样策略是无法保证，采集到全部记录着问题的 APM 数据的。</p>
+<h3 data-nodeid="82">动态异常采样策略</h3>
+<p data-nodeid="83">这时就需要使用动态异常采样策略，来尽可能收集到全部的异常数据。</p>
+<p data-nodeid="84">如下图所示，我们先看正常的应用服务监控架构。</p>
+<ul data-nodeid="85">
+<li data-nodeid="86">
+<p data-nodeid="87">整体上看，服务集群处理用户请求；</p>
+</li>
+<li data-nodeid="88">
+<p data-nodeid="89">在集群内部，服务 A 负责响应用户请求，然后调用服务 B 来完整地处理用户请求；</p>
+</li>
+<li data-nodeid="90">
+<p data-nodeid="91">服务 A 和服务 B 都接入了 APM 系统，将数据发送给 APM 收集器。</p>
+</li>
+</ul>
+<p data-nodeid="1399" class=""><img src="https://s0.lgstatic.com/i/image6/M00/40/6F/Cgp9HWCk4W6AKsugAAEMl9ObTQQ055.png" alt="Drawing 1.png" data-nodeid="1402"></p>
+
+<p data-nodeid="93">试想如果请求量很大，服务 AB 都开启了采样，这时如果服务 B 在执行过程中出现异常，使用异常收集的链路特征采样策略，确保了服务 B 执行过程中，出现异常可以收集异常的 APM 监控数据；可是服务无法通知下游服务 A 收集相关的数据。</p>
+<p data-nodeid="94">这也是刚讲的前三个采样模型的共同难点，就是上游服务发生异常，无法告知下游服务进行采集相关联的监控数据。</p>
+<p data-nodeid="95">为了解决这个问题，需要是扩展跨语言交互协议和引入 APM 配置中心来解决这个问题。</p>
+<p data-nodeid="1967" class="te-preview-highlight"><img src="https://s0.lgstatic.com/i/image6/M00/40/77/CioPOWCk4XSAHCKJAAFGpT6EXic022.png" alt="Drawing 2.png" data-nodeid="1970"></p>
+
+<p data-nodeid="97">以 SkyWalking 为例，协议中入口服务（entryApplicationInstanceId）和入口服务方法（entryOperationName）属性，当服务 B 发生异常时，将异常关联的入口服务和入口方法上报给 APM 配置中心，配置中心下发配置到各个应用服务节点。</p>
+<p data-nodeid="98">这样一来，此分布式链路请求经过各个服务节点时，就会强制采集了。开启动态异常采用策略，可以极可能少地丢弃与上述问题相关的监控数据。</p>
+<h3 data-nodeid="99">总结与思考</h3>
+<p data-nodeid="100">今天的课程，我带你回顾了四种采样策略。</p>
+<ul data-nodeid="101">
+<li data-nodeid="102">
+<p data-nodeid="103">两种通用的<strong data-nodeid="258">固定</strong>采样策略：<strong data-nodeid="259">百分比采样策略</strong>、<strong data-nodeid="260">链路特征采样策略</strong>，这两个策略可以由复杂 APM 集群建设的 RD 统一配置；</p>
+</li>
+<li data-nodeid="104">
+<p data-nodeid="105">之后讲述了<strong data-nodeid="270">业务特征采样策略</strong>，这是企业级落地过程中的<strong data-nodeid="271">兜底策略</strong>；</p>
+</li>
+<li data-nodeid="106">
+<p data-nodeid="107">最后讲述了<strong data-nodeid="277">动态异常采样策略</strong>，这个策略可以极大地确保整体集群采集异常监控数据的采集率。</p>
+</li>
+</ul>
+<p data-nodeid="108">那你在工作中使用过或是设计过哪些采样策略呢？解决了什么问题？效果怎么样呢？欢迎在评论区写下你的思考，期待与你的讨论。</p></div>
+
+</body></html>
